@@ -10,6 +10,22 @@ page is pointers only. Flags: `mas-lab COMMAND --help`.
 Site map of every CLI and UI: [Command line](index.md). `mas-ctl` is separate:
 [mas-ctl.md](mas-ctl.md).
 
+## Global flags
+
+These go before the command:
+
+```bash
+mas-lab [-v] [--secrets-dir DIR] [--secret-store file|env] COMMAND ...
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-v` | off | Repeatable verbosity. |
+| `--secrets-dir DIR` | workspace `secrets.dir`, else `<workspace>/.mas/secrets` | Directory of the file secret store. |
+| `--secret-store file\|env` | workspace `secrets.store`, else `file` | Secret store. `env` is for development only. |
+
+The flags apply to the command and to the controller jobs it starts. Manage the store with [`mas-ctl secrets`](mas-ctl.md#secrets); see [secrets](../references/secrets.md). A scripted-model fixture needs no secret: its proxy row names `{secret: {name: lab, optional: true}}`, and the loopback fixture ignores the key.
+
 | Group | Owner | Index |
 |-------|-------|--------|
 | `mas-lab` core | lab | [lab/docs/cli/index.md](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/cli/index.md) |
@@ -34,7 +50,7 @@ Pipeline shortcuts (which YAML each command wraps):
 | [`telemetry push`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/push.md) | OTLP collector serialize |
 | [`telemetry dump`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/dump.md) | ClickHouse deserialize |
 | [`telemetry compare`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/compare.md) | Span-file parity |
-| [`telemetry inspect`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/inspect.md) / [`errors`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/errors.md) / [`conversation`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/conversation.md) / [`calls`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/calls.md) / [`kinds`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/kinds.md) / [`list-apps`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/list-apps.md) | Inspection |
+| [`telemetry inspect`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/inspect.md) / [`errors`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/errors.md) / [`conversation`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/conversation.md) / [`calls`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/calls.md) / [`kinds`](https://github.com/ioc-project/mas-lab/blob/main/library-telemetry/docs/cli/kinds.md) | Inspection |
 | [`telemetry show`](https://github.com/ioc-project/mas-lab/blob/main/lab/docs/cli/telemetry-show.md) | Native events.jsonl summary |
 
 ## kg

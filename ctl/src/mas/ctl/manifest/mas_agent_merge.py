@@ -9,7 +9,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.ctl.infra.identities import workflow_peers
 from mas.ctl.overlay.merge import (
     _ops_dict,
@@ -32,8 +31,9 @@ logger = logging.getLogger(__name__)
 def _load_agent_yaml(path: Path) -> dict[str, Any] | None:
     if not path.is_file():
         return None
-    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return doc if isinstance(doc, dict) else None
+    from mas.runtime.secrets import load_checked_document
+
+    return load_checked_document(path)
 
 
 def _tool_ref_key(item: Any) -> str:

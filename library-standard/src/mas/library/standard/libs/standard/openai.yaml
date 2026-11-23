@@ -7,14 +7,14 @@ metadata:
   name: openai-direct
   description: >
     Direct connection to OpenAI API (no proxy).
-    Requires OPENAI_API_KEY environment variable.
+    Requires secret openai in the store (`mas-ctl secrets set openai`).
     Use for development when proxy is unavailable.
 
 spec:
   protocol: openai
   proxy:
-    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openai}
 
   models:
     mappings:

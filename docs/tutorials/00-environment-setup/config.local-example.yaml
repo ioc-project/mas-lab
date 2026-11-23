@@ -7,6 +7,7 @@
 
 mas_ctl:
   flavour: local
+  # non-secret MAS_LLM_* only; API keys: mas-ctl secrets set
   env: .env
   trace: summary
 

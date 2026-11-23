@@ -1,4 +1,4 @@
-"""A batch started without the CLI's environment gives fixtures the process environment."""
+"""A batch started without the CLI's environment gives fixtures the process allowlist."""
 
 from __future__ import annotations
 
@@ -35,7 +35,9 @@ def _registry_env(monkeypatch, tmp_path: Path, **kwargs):
 
 def test_missing_base_env_falls_back_to_process_environment(monkeypatch, tmp_path):
     monkeypatch.setenv("FIXTURE_ENV_PROBE", "yes")
-    assert _registry_env(monkeypatch, tmp_path)["FIXTURE_ENV_PROBE"] == "yes"
+    env = _registry_env(monkeypatch, tmp_path)
+    assert "FIXTURE_ENV_PROBE" not in env
+    assert "PATH" in env
 
 
 def test_given_base_env_is_used_as_is(monkeypatch, tmp_path):

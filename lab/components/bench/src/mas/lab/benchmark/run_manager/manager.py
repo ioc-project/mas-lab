@@ -1,33 +1,46 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 """BenchmarkRunManager — stateful benchmark execution."""
+
+from __future__ import annotations
 
 import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
+import click
 from mas.lab import paths as _paths
-
 from mas.lab.benchmark.metadata import BenchmarkMetadata, BenchmarkStatus
+from mas.lab.benchmark.run_manager.discovery import default_search_roots, iter_metadata_locations
 from mas.lab.benchmark.run_manager.display import format_run_details as _format_run_details
 from mas.lab.benchmark.run_manager.display import format_run_summary as _format_run_summary
 from mas.lab.benchmark.run_manager.models import BenchmarkRunInfo
 from mas.lab.benchmark.run_manager.persistence import load_state as _load_state
 from mas.lab.benchmark.run_manager.persistence import save_state as _save_state
-from mas.lab.benchmark.run_manager.discovery import default_search_roots, iter_metadata_locations
 from mas.lab.benchmark.run_manager.pointer import last_run_write_path, resolve_last_run_file
 from mas.lab.benchmark.state import EnhancedBenchmarkState
+from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
+_NO_WRITABLE_ROOT = "no writable data directory: set MAS_LABS_ROOT or run from a writable workspace"
+
+
+def _default_labs_root() -> Path:
+    """The configured labs root; with no usable home, a directory under the working directory."""
+    resolved = _paths.resolve_path("labs_dir")
+    no_home = not hostenv.get("HOME", "").strip() and not hostenv.get("XDG_DATA_HOME", "").strip()
+    if resolved.source == _paths.DEFAULT_PATH_SOURCE and no_home:
+        return (Path.cwd() / ".mas" / "labs").resolve()
+    return resolved.path
+
+
 class BenchmarkRunManager:
     """Manages benchmark runs with persistent state."""
-    
+
     def __init__(self, benchmarks_root: Optional[Path] = None):
         """Initialize run manager.
 
@@ -37,18 +50,21 @@ class BenchmarkRunManager:
                 also scans :func:`mas.lab.paths.runs_root` when it differs.
         """
         if benchmarks_root is None:
-            benchmarks_root = _paths.labs_root()
+            benchmarks_root = _default_labs_root()
 
         self.benchmarks_root = benchmarks_root
         self._search_roots = default_search_roots(extra=benchmarks_root)
-        self.benchmarks_root.mkdir(parents=True, exist_ok=True)
+        try:
+            self.benchmarks_root.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            raise click.ClickException(_NO_WRITABLE_ROOT) from None
 
         logger.debug("Benchmark run manager initialized: roots=%s", self._search_roots)
 
     def _iter_run_dirs(self):
         """Yield ``(run_dir, metadata_path)`` from all configured search roots."""
         yield from iter_metadata_locations(*self._search_roots)
-    
+
     def create_run(
         self,
         experiment_name: str,
@@ -57,26 +73,27 @@ class BenchmarkRunManager:
         total_scenarios: int,
     ) -> tuple[BenchmarkMetadata, EnhancedBenchmarkState, Path]:
         """Create a new benchmark run.
-        
+
         Args:
             experiment_name: Name of experiment
             experiment_description: Description
             experiment_yaml_path: Path to experiment YAML
             total_scenarios: Total number of scenarios
-            
+
         Returns:
             Tuple of (metadata, state, run_dir)
         """
         # Generate UUID and timestamp
         import uuid as uuid_lib
+
         benchmark_uuid = str(uuid_lib.uuid4())
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        
+
         # Create run directory with timestamp and UUID
         run_dir_name = f"{timestamp}_{benchmark_uuid[:8]}"
         run_dir = self.benchmarks_root / run_dir_name
         run_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create metadata
         metadata = BenchmarkMetadata(
             benchmark_id=benchmark_uuid,
@@ -91,32 +108,32 @@ class BenchmarkRunManager:
             results_file=str(run_dir / "results.csv"),
             plots_dir=str(run_dir / "plots"),
         )
-        
+
         # Save metadata
         metadata_path = run_dir / "metadata.yaml"
         metadata.to_yaml(metadata_path)
-        
+
         # Create initial state (empty, caller will initialize scenarios)
         state = EnhancedBenchmarkState(
             benchmark_id=metadata.benchmark_id,
             total_scenarios=total_scenarios,
         )
-        
+
         logger.info(f"Created benchmark run: {metadata.short_id} in {run_dir}")
-        
+
         return metadata, state, run_dir
-    
+
     def list_runs(
         self,
         status_filter: Optional[BenchmarkStatus] = None,
         limit: Optional[int] = None,
     ) -> List[BenchmarkRunInfo]:
         """List all benchmark runs.
-        
+
         Args:
             status_filter: Filter by status (None = all)
             limit: Maximum number of runs to return (None = all)
-            
+
         Returns:
             List of run info, sorted by timestamp (newest first)
         """
@@ -147,13 +164,13 @@ class BenchmarkRunManager:
                 break
 
         return runs
-    
+
     def get_run(self, benchmark_id: str) -> Optional[tuple[BenchmarkMetadata, Path]]:
         """Get a specific benchmark run.
-        
+
         Args:
             benchmark_id: Full or short (8-char) benchmark ID
-            
+
         Returns:
             Tuple of (metadata, run_dir) or None if not found
         """
@@ -168,7 +185,7 @@ class BenchmarkRunManager:
             except Exception as e:
                 logger.warning("Failed to load metadata from %s: %s", metadata_path, e)
                 continue
-        
+
         # Fallback: check last-run pointer (catches MAS runs outside benchmarks_root)
         return self._check_pointer_for_id(benchmark_id)
 
@@ -187,7 +204,7 @@ class BenchmarkRunManager:
                     meta = BenchmarkMetadata.from_yaml(metadata_path)
                     return meta, run_dir
         except Exception:
-            logger.debug('suppressed', exc_info=True)
+            logger.debug("suppressed", exc_info=True)
         return None
 
     def get_last_run(
@@ -211,6 +228,7 @@ class BenchmarkRunManager:
         if status_filter is None and ptr_path is not None:
             try:
                 import json as _json
+
                 ptr = _json.loads(ptr_path.read_text())
                 run_dir = Path(ptr["run_dir"])
                 metadata_path = run_dir / "metadata.yaml"
@@ -250,13 +268,17 @@ class BenchmarkRunManager:
         try:
             ptr_path = last_run_write_path()
             ptr_path.parent.mkdir(parents=True, exist_ok=True)
-            ptr_path.write_text(json.dumps({
-                "run_dir": str(run_dir),
-                "benchmark_id": str(metadata.benchmark_id),
-                "experiment_name": str(metadata.experiment_name),
-                "experiment_yaml_path": str(Path(yaml_path).resolve()) if yaml_path else "",
-                "timestamp": str(ts),
-            }))
+            ptr_path.write_text(
+                json.dumps(
+                    {
+                        "run_dir": str(run_dir),
+                        "benchmark_id": str(metadata.benchmark_id),
+                        "experiment_name": str(metadata.experiment_name),
+                        "experiment_yaml_path": str(Path(yaml_path).resolve()) if yaml_path else "",
+                        "timestamp": str(ts),
+                    }
+                )
+            )
         except Exception as _e:
             logger.error("Failed to write last-run pointer: %s", _e)
 
@@ -293,7 +315,7 @@ class BenchmarkRunManager:
         if best is None:
             return None
         return best[1], best[2]
-    
+
     def load_state(self, run_dir: Path) -> Optional[EnhancedBenchmarkState]:
         """Load state from run directory.
 
@@ -305,17 +327,17 @@ class BenchmarkRunManager:
     def save_state(self, run_dir: Path, state: EnhancedBenchmarkState) -> None:
         """Save state to run directory."""
         _save_state(run_dir, state)
-    
+
     def save_metadata(self, run_dir: Path, metadata: BenchmarkMetadata) -> None:
         """Save metadata to run directory.
-        
+
         Args:
             run_dir: Run directory
             metadata: Metadata to save
         """
         metadata_path = run_dir / "metadata.yaml"
         metadata.to_yaml(metadata_path)
-    
+
     def update_metadata(
         self,
         benchmark_id: str,
@@ -325,14 +347,14 @@ class BenchmarkRunManager:
         remove_tags: Optional[List[str]] = None,
     ) -> bool:
         """Update benchmark metadata (name and/or tags).
-        
+
         Args:
             benchmark_id: Benchmark ID (full or short)
             name: New name (None = no change)
             tags: Replace all tags with this list (None = no change)
             add_tags: Tags to add (None = no change)
             remove_tags: Tags to remove (None = no change)
-            
+
         Returns:
             True if successful, False if benchmark not found
         """
@@ -340,13 +362,13 @@ class BenchmarkRunManager:
         if not result:
             logger.error(f"Benchmark not found: {benchmark_id}")
             return False
-        
+
         metadata, run_dir = result
-        
+
         # Update name
         if name is not None:
             metadata.name = name
-        
+
         # Update tags
         if tags is not None:
             metadata.tags = tags
@@ -354,139 +376,141 @@ class BenchmarkRunManager:
             # Ensure tags is a list
             if metadata.tags is None:
                 metadata.tags = []
-            
+
             if add_tags:
                 for tag in add_tags:
                     if tag not in metadata.tags:
                         metadata.tags.append(tag)
-            
+
             if remove_tags:
                 metadata.tags = [t for t in metadata.tags if t not in remove_tags]
-        
+
         # Save updated metadata
         self.save_metadata(run_dir, metadata)
         logger.info(f"Updated benchmark {metadata.short_id}")
-        
+
         return True
-    
+
     def can_resume(self, benchmark_id: str) -> bool:
         """Check if a benchmark run can be resumed.
-        
+
         A benchmark can be resumed if:
         - Status is INTERRUPTED, or
         - Status is RUNNING but the process is stale (not actively running)
-        
+
         Args:
             benchmark_id: Benchmark ID
-            
+
         Returns:
             True if can be resumed
         """
         result = self.get_run(benchmark_id)
         if not result:
             return False
-        
+
         metadata, run_dir = result
-        
+
         # Cannot resume completed or failed benchmarks
         if metadata.status not in [BenchmarkStatus.INTERRUPTED, BenchmarkStatus.RUNNING]:
             return False
-        
+
         # If RUNNING, check if it's actually stale (process died)
         if metadata.status == BenchmarkStatus.RUNNING:
             if self.is_actively_running(benchmark_id):
                 # Benchmark is actively running, cannot resume (it's already running!)
                 return False
-        
+
         # Must have state file
         state = self.load_state(run_dir)
         if not state:
             return False
-        
+
         # Must have pending scenarios
         if state.pending_count == 0:
             return False
-        
+
         return True
-    
+
     def is_actively_running(self, benchmark_id: str) -> bool:
         """Check if a benchmark is actively running (has a live process).
-        
+
         Checks multiple indicators:
         1. Benchmark lock file with active process
         2. Process PID in metadata (if available)
-        
+
         Args:
             benchmark_id: Benchmark ID
-            
+
         Returns:
             True if benchmark has an active process
         """
         result = self.get_run(benchmark_id)
         if not result:
             return False
-        
+
         metadata, run_dir = result
-        
+
         # Must be in RUNNING status
         if metadata.status != BenchmarkStatus.RUNNING:
             return False
-        
+
         # Check lock file first (most reliable)
         lock_file = run_dir / ".benchmark.lock"
         if lock_file.exists():
             try:
                 from mas.lab.benchmark.lock import BenchmarkLock
+
                 lock = BenchmarkLock(run_dir)
                 lock_info = lock.read_lock()
                 if lock_info and lock_info.is_alive():
                     return True
             except Exception as e:
                 logger.debug(f"Could not check lock file: {e}")
-        
+
         # Fallback to checking process PID in metadata
         if metadata.process_pid:
             try:
                 import psutil
+
                 process = psutil.Process(metadata.process_pid)
                 return process.is_running()
             except (ImportError, psutil.NoSuchProcess, psutil.AccessDenied):
-                logger.debug('suppressed', exc_info=True)
-        
+                logger.debug("suppressed", exc_info=True)
+
         # No active indicators found
         return False
-    
+
     def find_resumable_run(self) -> Optional[tuple[BenchmarkMetadata, EnhancedBenchmarkState, Path]]:
         """Find the most recent resumable run.
-        
+
         Returns:
             Tuple of (metadata, state, run_dir) or None
         """
         # Look for interrupted or running (crashed) runs
         for status in [BenchmarkStatus.INTERRUPTED, BenchmarkStatus.RUNNING]:
             runs = self.list_runs(status_filter=status, limit=10)
-            
+
             for run_info in runs:
                 result = self.get_run(run_info.benchmark_id)
                 if not result:
                     continue
-                
+
                 metadata, run_dir = result
-                
+
                 # Check if can resume
                 if not self.can_resume(metadata.benchmark_id):
                     continue
-                
+
                 # Load state
                 state = self.load_state(run_dir)
                 if not state:
                     continue
-                
+
                 logger.info(f"Found resumable run: {metadata.short_id}")
                 return metadata, state, run_dir
-        
+
         return None
-    
+
     def format_run_summary(self, run_info: BenchmarkRunInfo) -> str:
         """Format a run summary for display."""
         return _format_run_summary(run_info)

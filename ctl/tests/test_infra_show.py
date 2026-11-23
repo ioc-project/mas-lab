@@ -119,6 +119,66 @@ def test_infra_show_payload_does_not_invent_a_tool_destination() -> None:
     assert payload["llm"][0]["name"] == "arm"
 
 
+def test_infra_show_describes_a_secret_ref_on_any_key() -> None:
+    from mas.ctl.compose.models import ResolvedInfra
+    from mas.ctl.infra.show import infra_show_payload
+    from secret_fakes import bound_secrets
+
+    with bound_secrets({"openai": "sk-not-shown"}):
+        payload = infra_show_payload(
+            ResolvedInfra(
+                llm_proxy={"pipeline": []},
+                llm_proxies={
+                    "arm": {
+                        "api_base": "https://arm.example/v1",
+                        "embed_token": {"secret": "openai"},
+                    }
+                },
+                tool_server_registry={},
+                tool_pipeline=[],
+            )
+        )
+        row = payload["llm"][0]
+        blob = json.dumps(row)
+    assert "sk-not-shown" not in blob
+    assert "secret:openai/value" in row["embed_token"]
+    assert "present=" in row["embed_token"]
+
+
+def test_infra_show_redacts_step_params_and_a_schemeless_url() -> None:
+    from mas.ctl.compose.models import ResolvedInfra
+    from mas.ctl.infra.show import infra_show_payload, render_infra_show
+
+    canary = "s3cr3t-canary-9f3a"
+    infra = ResolvedInfra(
+        llm_proxy={"pipeline": []},
+        llm_proxies={
+            "arm": {
+                "api_base": f"llm.example/v1?api_key={canary}-base",
+                "pipeline": [
+                    {
+                        "layer": "retry",
+                        "params": {
+                            "api_key": f"{canary}-param",
+                            "hook": f"https://h.example/x?token={canary}-url",
+                            "hooks": [f"https://u:{canary}-list@h.example/y"],
+                        },
+                    }
+                ],
+            }
+        },
+        tool_server_registry={},
+        tool_pipeline=[],
+    )
+    payload = infra_show_payload(infra, agents=[], sections=("llm",), connections=True, pipeline=True)
+    assert canary not in render_infra_show(payload) + json.dumps(payload)
+    params = payload["llm"][0]["steps"][0]["params"]
+    assert params["api_key"] == "<not a SecretRef>"
+    assert params["hook"] == "https://h.example/x"
+    assert params["hooks"] == ["https://h.example/y"]
+    assert payload["llm"][0]["api_base"] == "llm.example/v1"
+
+
 def test_infra_show_unnamed_agent_does_not_invent_an_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_user_and_workspace(tmp_path, monkeypatch)
     agent = tmp_path / "anon.yaml"
@@ -238,7 +298,7 @@ def test_infra_resolved_json_lists_destination_chains(tmp_path: Path, monkeypatc
         "metadata: {name: arm}\n"
         "spec:\n"
         "  protocol: openai\n"
-        "  proxy: {api_base: https://arm.example/v1, api_key_env: ARM_KEY}\n"
+        "  proxy: {api_base: https://arm.example/v1, api_key: {secret: arm}}\n"
         "  models: {allowed: [m]}\n",
         encoding="utf-8",
     )
@@ -269,7 +329,7 @@ def _write_proxy(tmp_path: Path, *, extra: str = "") -> Path:
         "metadata: {name: arm}\n"
         "spec:\n"
         "  protocol: openai\n"
-        "  proxy: {api_base: https://arm.example/v1, api_key_env: ARM_KEY}\n"
+        "  proxy: {api_base: https://arm.example/v1, api_key: {secret: arm}}\n"
         "  models: {allowed: [m]}\n"
         f"{extra}",
         encoding="utf-8",
@@ -412,7 +472,7 @@ def test_infra_show_text_names_the_leaf(tmp_path: Path, monkeypatch: pytest.Monk
         "metadata: {name: arm}\n"
         "spec:\n"
         "  protocol: openai\n"
-        "  proxy: {api_base: https://arm.example/v1, api_key_env: ARM_KEY}\n"
+        "  proxy: {api_base: https://arm.example/v1, api_key: {secret: arm}}\n"
         "  models: {allowed: [m]}\n",
         encoding="utf-8",
     )
@@ -452,7 +512,7 @@ def test_infra_show_prints_the_library_default_link_not_mas_agent_comm(
     assert "(none)" not in text.output
 
 
-def test_infra_show_strips_url_userinfo_and_query(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_infra_show_prints_secretref_not_a_value(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _isolate_user_and_workspace(tmp_path, monkeypatch)
     proxy = tmp_path / "arm.yaml"
     proxy.write_text(
@@ -462,8 +522,8 @@ def test_infra_show_strips_url_userinfo_and_query(tmp_path: Path, monkeypatch: p
         "spec:\n"
         "  protocol: openai\n"
         "  proxy:\n"
-        "    api_base: https://u:x@h.example/v1?api_key=y\n"
-        "    api_key_env: ARM_KEY\n"
+        "    api_base: https://h.example/v1\n"
+        "    api_key: {secret: arm}\n"
         "  models: {allowed: [m]}\n",
         encoding="utf-8",
     )
@@ -476,20 +536,27 @@ def test_infra_show_strips_url_userinfo_and_query(tmp_path: Path, monkeypatch: p
         "  tool_servers:\n"
         "    - id: mcp\n"
         "      protocol: mcp\n"
-        "      url: https://h.example/mcp?token=z\n",
+        "      url: https://h.example/mcp\n",
         encoding="utf-8",
     )
     runner = CliRunner()
-    result = runner.invoke(
+    text = runner.invoke(
         app,
         ["infra", "resolved", "--infra-ref", str(proxy), "--infra-ref", str(tools)],
     )
-    assert result.exit_code == 0, result.output
-    assert "u:x" not in result.output
-    assert "api_key=y" not in result.output
-    assert "token=z" not in result.output
-    assert "https://h.example/v1" in result.output
-    assert "https://h.example/mcp" in result.output
+    assert text.exit_code == 0, text.output
+    assert "https://h.example/v1" in text.output
+    assert "https://h.example/mcp" in text.output
+    payload = _json_payload(
+        runner.invoke(
+            app,
+            ["infra", "resolved", "--json", "--infra-ref", str(proxy), "--infra-ref", str(tools)],
+        )
+    )
+    shown = json.dumps(payload)
+    assert "secret:arm/value" in shown
+    assert "present=" in shown
+    assert "sk-" not in shown
 
 
 def _desk(tmp_path: Path) -> tuple[Path, Path, Path]:
@@ -503,8 +570,10 @@ def _desk(tmp_path: Path) -> tuple[Path, Path, Path]:
     )
     rows = tmp_path / "rows.yaml"
     rows.write_text(
-        "apiVersion: infra/v1\nkind: Application\nmetadata: {name: desk}\nspec:\n  endpoints:\n"
-        "    desk-node: {protocol: slim, url: 'http://127.0.0.1:46357', identity: acme/lab/desk, secret_env: S,\n"
+        "apiVersion: infra/v1\nkind: Application\nmetadata: {name: desk}\nspec:\n"
+        "  endpoints:\n"
+        "    desk-node: {protocol: slim, url: 'http://127.0.0.1:46357',\n"
+        "                identity: acme/lab/desk, secret: {secret: slim},\n"
         "                usage: [connect, listen]}\n"
         "    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}\n",
         encoding="utf-8",

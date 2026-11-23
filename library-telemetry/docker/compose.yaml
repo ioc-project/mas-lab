@@ -2,8 +2,8 @@
 #  SPDX-License-Identifier: Apache-2.0
 #
 # Local OTel collector + ClickHouse. No passwords in this file — ClickHouse
-# listens as the built-in `default` user. Set CLICKHOUSE_PASSWORD in the
-# environment if you lock the instance down.
+# listens as the built-in `default` user. If you lock the instance down,
+# `echo PASS | mas-ctl secrets set clickhouse`.
 #
 #   docker compose -f library-telemetry/docker/compose.yaml up -d
 #   export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318

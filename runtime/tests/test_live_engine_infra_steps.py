@@ -228,5 +228,5 @@ async def test_piped_provider_accepts_provider_without_kind() -> None:
     )
     assert piped.kind == ""
     assert piped.api_base == ""
-    assert piped.api_key_env == ""
+    assert piped.api_key == ""
     assert (await piped.achat_completion(model="m", messages=[]))["content"] == "ok"

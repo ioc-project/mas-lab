@@ -59,7 +59,7 @@ def test_converse_maps_messages_tools_and_usage() -> None:
     )
     provider = BedrockLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9", "api_key": "secret"},
+        {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}},
     )
     out = _chat(
         provider,
@@ -105,9 +105,12 @@ def test_protocol_layers_is_http_then_bedrock() -> None:
     assert issubclass(BedrockLLMProvider, HttpLlmProtocol)
 
 
+@pytest.mark.no_secrets
 def test_missing_key_is_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AWS_BEARER_TOKEN_BEDROCK", "from-env")
-    provider = BedrockLLMProvider.wrap(_Transport(), {"api_base": "http://127.0.0.1:9"})
+    provider = BedrockLLMProvider.wrap(
+        _Transport(), {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}}
+    )
     with pytest.raises(RuntimeError, match="Missing API key"):
         _chat(provider, model="m", messages=[{"role": "user", "content": "q"}])
 
@@ -117,7 +120,7 @@ def test_stream_emits_the_full_converse_text() -> None:
     transport = _Transport()
     provider = BedrockLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9", "api_key": "secret", "stream": True},
+        {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}, "stream": True},
     )
     out = _chat(
         provider,
@@ -133,7 +136,7 @@ def test_stream_emits_the_full_converse_text() -> None:
 def test_converse_alternates_roles_drops_blanks_and_honours_tool_choice_none() -> None:
     transport = _Transport()
     provider = BedrockLLMProvider.wrap(
-        transport, {"api_base": "http://127.0.0.1:9", "api_key": "k", "api_key_env": "K"}, call_kinds=("llm",)
+        transport, {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}}, call_kinds=("llm",)
     )
     _chat(
         provider,
@@ -162,7 +165,7 @@ def test_converse_alternates_roles_drops_blanks_and_honours_tool_choice_none() -
 def test_tool_choice_none_without_tool_history_omits_the_tools() -> None:
     transport = _Transport()
     provider = BedrockLLMProvider.wrap(
-        transport, {"api_base": "http://127.0.0.1:9", "api_key": "k", "api_key_env": "K"}, call_kinds=("llm",)
+        transport, {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}}, call_kinds=("llm",)
     )
     _chat(
         provider,

@@ -18,9 +18,10 @@ mas-lab benchmark import-hf [OPTIONS] PATH_IN_REPO
 
 Download a benchmark archive from a Hugging Face dataset repo and restore it
 locally through the same flow as `benchmark import`.
-Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
-environment). `--dry-run` still uses `HF_TOKEN` when it is set, and
-does not require a token when it is not.
+Pass `--token` or `--token-file`, or store the token as secret `hf`
+(`mas-ctl secrets set hf`). `HF_TOKEN` is not read; `mas-ctl secrets import-env`
+copies it into the store as `hf`. `--dry-run` uses a token when one resolves
+and does not require one when none does.
 
 Pin the import for a reproducible result: `--revision` takes a commit SHA
 (as printed by `publish-hf`), and `--sha256` checks the downloaded tarball
@@ -39,7 +40,7 @@ checked, and without `--revision` the repo's default branch is used.
 | `--output-dir` | Directory to restore the benchmark output into. |
 | `--trace-cache` | Directory to restore trace-cache entries into. |
 | `--dry-run` | Show the download/import plan without writing outputs. |
-| `--token` | Hugging Face access token. Overrides `--token-file` and `HF_TOKEN`. |
+| `--token` | Hugging Face access token. Overrides `--token-file` and secret `hf`. |
 | `--token-file` | Read the access token from a file. |
 
 ## SEE ALSO

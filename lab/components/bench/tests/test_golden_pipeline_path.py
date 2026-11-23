@@ -37,8 +37,8 @@ def smoke_env(tmp_path, monkeypatch):
     xdg_cache = tmp_path / "xdg-cache"
     xdg_state = tmp_path / "xdg-state"
     for d in (xdg_config, xdg_data, xdg_cache, xdg_state):
-        d.mkdir(parents=True)
-    (xdg_config / "mas").mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
+    (xdg_config / "mas").mkdir(parents=True, exist_ok=True)
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()

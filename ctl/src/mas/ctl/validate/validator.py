@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.validate.providers import check_provider_tool_claims
 from mas.ctl.validate.refs import check_refs, resolve_refs_enabled
@@ -17,6 +16,9 @@ from mas.ctl.validate.schema_errors import humanize_schema_error
 from mas.ctl.validate.schemas import declared_kind, lab_schema_registry, load_schema, schema_path_for_kind
 from mas.ctl.validate.separation import check_separation
 from mas.runtime import hostenv
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.manifest import check_manifest
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load
 
 
 def _path_sort_key(path: Iterable[str | int]) -> tuple[tuple[int, str | int], ...]:
@@ -325,6 +327,12 @@ def validate_data(
         strict = strict_mode()
     resolved_kind = kind or declared_kind(data)
     result = ValidationResult(ok=True, kind=resolved_kind, source=source)
+    try:
+        check_manifest(data)
+    except SecretRefError as exc:  # a literal secret or an oversized document: before any recursive check
+        result.issues.append(ValidationIssue("error", str(exc)))
+        result.ok = False
+        return result
 
     if resolved_kind is None:
         result.issues.append(
@@ -489,11 +497,12 @@ def validate_file(
     strict: bool | None = None,
     resolve_refs: bool | None = None,
 ) -> ValidationResult:
+    text = path.read_text(encoding="utf-8")
     try:
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
+        raw = safe_yaml_load(text)
+    except YamlLoadError as exc:
         msg = str(exc)
-        if "!append" in msg:
+        if "!append" in text:
             msg = "unsupported YAML tag '!append'; use $op.add in overlays"
         return ValidationResult(
             ok=False,

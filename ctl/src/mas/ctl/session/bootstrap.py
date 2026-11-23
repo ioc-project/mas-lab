@@ -133,22 +133,13 @@ def _enforce_hardening(options: InstantiationOptions, spec: dict) -> dict:
     With it, the report goes to the ``gov_hardening_profile`` plugin when the Control declares it.
     """
     from mas.ctl.hardening import apply_posture
-    from mas.ctl.hardening.collect import from_session, raw_infra_documents
+    from mas.ctl.hardening.collect import from_session
     from mas.ctl.hardening.posture import with_report
     from mas.ctl.session.manifest_config import agent_id_from_manifest
 
     agent_id = agent_id_from_manifest(options.agent_manifest)
 
-    def build():
-        infra = options.resolved_infra
-        refs = list(infra.refs) if infra is not None else []
-        anchor = Path(options.manifest_dir) if options.manifest_dir else Path.cwd()
-        documents = raw_infra_documents(refs, anchor)
-        if isinstance(options.agent_manifest, dict):
-            documents += ((f"agent {agent_id!r}", options.agent_manifest),)
-        return from_session({agent_id: spec}, infra, raw_documents=documents)
-
-    report = apply_posture(options.flavour_spec, build)
+    report = apply_posture(options.flavour_spec, lambda: from_session({agent_id: spec}, options.resolved_infra))
     return spec if report is None else with_report(spec, report)
 
 
@@ -159,6 +150,15 @@ def hitl_contract_for_mode(mode: str) -> object | None:
     from mas.runtime.registry import get_registry
 
     return get_registry().instantiate_by_type("hitl_contract", "auto_resolve")
+
+
+def _infra_anchor(options: InstantiationOptions, ws: WorkspaceConfig) -> Path | None:
+    """Anchor for infra refs; a resume with no manifest and no workspace root uses the checkpoint's directory."""
+    if options.manifest_dir is not None or ws.root:
+        return options.manifest_dir
+    if options.checkpoint_path:
+        return Path(options.checkpoint_path).expanduser().resolve().parent
+    return None
 
 
 def instantiate_runtime(
@@ -328,7 +328,7 @@ def instantiate_runtime(
             options.resolved_infra,
             pattern_plugin_id=options.pattern_plugin_id,
             workspace_default_model=ws.default_model,
-            anchor=resolution_anchor(options.manifest_dir, ws),
+            anchor=resolution_anchor(_infra_anchor(options, ws), ws),
             workspace=ws,
             kernel_config=_kernel_cfg,
             cache_read_override=options.cache_read_override,

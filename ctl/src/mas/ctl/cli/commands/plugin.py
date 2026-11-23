@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 import click
-import yaml
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 
 def _registry():
@@ -78,12 +78,23 @@ def enable_cmd(urn: str, dry_run: bool) -> None:
     if dry_run:
         return
 
-    subprocess.run(cmd, check=True)
+    from mas.runtime.secrets import child_env
+
+    subprocess.run(cmd, check=True, env=child_env(_index_urls(), lab=True))
     importlib.invalidate_caches()
     still_missing = info.missing_requires()
     if still_missing:
         raise click.ClickException(f"{entry.urn} still missing after install: {', '.join(still_missing)}")
     click.echo(f"{entry.urn} is now available.")
+
+
+def _index_urls() -> dict[str, str]:
+    """The installer's index URLs, which hostenv keeps apart (one may carry a token). ``uv`` gets them on top
+    of the lab child allowlist (target environment, uv settings, trust anchors, proxies), no other host secret."""
+    from mas.runtime import hostenv
+
+    indexes = {name: hostenv.private(name) for name in hostenv.PRIVATE_KEYS}
+    return {name: value for name, value in indexes.items() if value is not None}
 
 
 @plugin_group.command("doctor")
@@ -134,7 +145,7 @@ def _entries_referenced_by(reg, manifests: tuple[Path, ...]):
     """Plugin entries bound under a ``spec.<key>`` slot in any of *manifests*."""
     urns: set[str] = set()
     for path in manifests:
-        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        data = safe_yaml_load(Path(path).read_text(encoding="utf-8"), source=str(path)) or {}
         spec = data.get("spec") or {}
         for spec_key in reg.runtime_spec_keys():
             binding = spec.get(spec_key)

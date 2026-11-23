@@ -478,3 +478,32 @@ async def test_a_none_answer_with_an_unimplemented_legacy_execute_is_empty():
     provider = LocalToolProvider()
     provider._add_instance(_NoneThenUnimplementedExecute(), None)
     assert await provider.acall_tool("legacy", {}) == ""
+
+
+_CANARY = "sk-S3CR3T-tool-ref-canary"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"api_key": _CANARY}, {"url": f"https://u:{_CANARY}@tools.example/x"}],
+    ids=["literal_api_key", "credentialed_url"],
+)
+def test_a_tool_ref_with_a_secret_is_refused(tmp_path: Path, params: dict) -> None:
+    tool_dir = tmp_path / "tools"
+    tool_dir.mkdir()
+    ref = tool_dir / "calculator.tool.yaml"
+    ref.write_text(
+        yaml.safe_dump(
+            {
+                "kind": "Tool",
+                "metadata": {"name": "calculator"},
+                "spec": {"impl": {"module_path": "./calculator.py"}, "params": params},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestToolLoadError) as caught:
+        build_manifest_tool_provider([{"ref": "tools/calculator.tool.yaml"}], tmp_path)
+    assert "calculator.tool.yaml" in str(caught.value)
+    assert "SecretRef" in str(caught.value) or "credentials" in str(caught.value)
+    assert _CANARY not in str(caught.value)

@@ -171,7 +171,8 @@ mas-lab benchmark publish-hf RUN.tar.gz --repo-id ORG/REPO [OPTIONS]
 ```
 
 Uploads an existing benchmark archive tarball to a Hugging Face **dataset**
-repository. Pass `--token` or `--token-file`, or set `HF_TOKEN`. The repo is
+repository. Pass `--token` or `--token-file`, or store the token as secret `hf`
+(`mas-ctl secrets set hf`). `HF_TOKEN` is not read. The repo is
 created if missing. By default it is private and the upload opens a review PR
 rather than writing to the default branch. The command prints the commit SHA.
 
@@ -199,8 +200,9 @@ mas-lab benchmark import-hf PATH_IN_REPO --repo-id ORG/REPO [OPTIONS]
 
 Downloads a benchmark archive tarball from a Hugging Face **dataset** repo,
 then forwards it into the regular `benchmark import` restore flow.
-Pass `--token` or `--token-file`, or set `HF_TOKEN`. `--dry-run` still
-uses `HF_TOKEN` when it is set, and does not require a token when it is not.
+Pass `--token` or `--token-file`, or store the token as secret `hf`
+(`mas-ctl secrets set hf`). `HF_TOKEN` is not read. `--dry-run` uses a token
+when one resolves and does not require one when none does.
 
 | Flag | Default | Description |
 | ------ | --------- | ------------- |

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -22,6 +23,7 @@ from mas.ctl.session.flavour import FlavourError, resolve_flavour
 from mas.ctl.validate import validate_file
 from mas.ctl.workspace.config import WorkspaceConfig
 from mas.library.standard.plugins.system_tools.send import SendTool
+from mas.runtime.secrets import SecretRef, prepare_manifest
 
 FakeWorld = slim_fake.FakeWorld
 _SECRET = "e4aaecb9ae0b23b82086bb8a8633e01fba16ae8d9c1379a613c00838"
@@ -30,7 +32,7 @@ _NODE = {
     "protocol": "slim",
     "url": "http://127.0.0.1:46357",
     "identity": "acme/lab/desk",
-    "secret_env": "SLIM_SECRET",
+    "secret": {"secret": "slim"},
     "usage": _BOTH,
 }
 _NODE_A2A = {**_NODE, "identity": "acme/lab/desk-a2a"}
@@ -51,7 +53,8 @@ def _write(path: Path, doc: dict) -> Path:
 
 
 def _rows(**extra: dict) -> dict:
-    return {**{name: dict(row) for name, row in _ROWS.items()}, **extra}
+    """Application rows as the infra loader hands them on: checked, ``{secret: ...}`` hydrated."""
+    return prepare_manifest({**{name: dict(row) for name, row in _ROWS.items()}, **extra})
 
 
 def _bind(bind: dict, *, agents: list[str] | None = None, rows: dict | None = None) -> ResolvedInfra:
@@ -70,7 +73,7 @@ def test_the_default_chain_links_every_agent_and_infra_keeps_no_endpoint_row() -
     assert chain[0]["params"] == {
         "url": "http://127.0.0.1:46357",
         "identity": "acme/lab/desk",
-        "secret_env": "SLIM_SECRET",
+        "secret": SecretRef(name="slim"),
     }
     assert chain[0]["usage"] == _BOTH
     assert set(resolved.agent_chains) == set(_DESK)
@@ -377,22 +380,19 @@ def test_a_one_row_chain_on_an_a2a_server_is_the_released_direct_path() -> None:
             "bind.agents.billing.params names 'desk-a2a', which is not a row of the agent's chain",
         ),
         (
-            {"agent_comm": ["desk-node"], "agents": {"billing": {"params": {"desk-node": {"identity": "{team}"}}}}},
+            {
+                "agent_comm": ["desk-node"],
+                "agents": {"billing": {"params": {"desk-node": {"identity": "{team}", "secret": {"secret": "slim"}}}}},
+            },
             None,
             "identity holds \\{team\\}; the only placeholder is \\{agent\\}",
         ),
         (
-            {"agent_comm": ["desk-node"], "agents": {"billing": {"params": {"desk-node": {"secret": "x"}}}}},
+            {"agent_comm": ["desk-node"], "agents": {"billing": {"params": {"desk-node": {"id": 1, "secret": "x"}}}}},
             None,
-            "params: \\['secret'\\] would hold a secret",
+            "a secret field must be a SecretRef",
         ),
         ({"agents": {"billing": {"params": {"desk-node": {"x": 1}}}}}, None, "has usage or params but no chain"),
-        ({"agent_comm": ["desk-node"]}, _rows(**{"desk-node": {**_NODE, "secret": "x" * 40}}), "would hold a secret"),
-        (
-            {"agent_comm": ["desk-node"]},
-            _rows(**{"desk-node": {**_NODE, "headers": {"Authorization": "b"}}}),
-            "would hold a secret",
-        ),
         ({"agent_comm": ["bogus"]}, _rows(bogus={"protocol": "nope"}), "unknown layer 'nope'"),
         ({"agent_comm": ["desk-a2a"]}, None, "the first layer must be a transport; 'a2a-framing' needs a layer below"),
         ({"agent_comm": ["outage-server"]}, None, "'outage-server' is a link to one agent's own url"),
@@ -515,10 +515,53 @@ def test_a_template_row_serves_each_agent_at_its_own_url_and_params_override_it(
     templated = _bind(
         {
             "agent_comm": ["desk-node"],
-            "agents": {"billing": {"params": {"desk-node": {"identity": "acme/{agent}/desk"}}}},
+            "agents": {
+                "billing": {"params": {"desk-node": {"identity": "acme/{agent}/desk", "secret": {"secret": "slim"}}}}
+            },
         }
     )
     assert templated.agent_chains["billing"][0]["params"]["identity"] == "acme/billing/desk"
+
+
+_BEARER = {"Authorization": {"secret": {"name": "a2a", "prefix": "Bearer "}}}
+_PEER = {"url": "http://127.0.0.1:9003", "headers": _BEARER}
+_MOVED = {"url": "http://127.0.0.1:9999"}
+
+
+def _lay_over_peer(tmp_path: Path, via: str, change: dict) -> dict:
+    """*change* laid over the ``peer`` row by a Flavour bind override, a later infra row or a CLI override."""
+    if via == "flavour":
+        rows = _rows(peer={**_PEER, "protocol": "a2a", "usage": "connect"})
+        bind = {"agents": {"outage": {"agent_comm": ["peer"], "params": {"peer": change}}}}
+        return _bind(bind, rows=rows).applications["outage"]
+    doc = {"apiVersion": "infra/v1", "kind": "ToolServerRegistry", "metadata": {"name": "t"}}
+    first = _write(tmp_path / "a.yaml", {**doc, "spec": {"tool_servers": [{"id": "peer", "protocol": "mcp", **_PEER}]}})
+    if via == "merge":
+        second = _write(tmp_path / "b.yaml", {**doc, "spec": {"tool_servers": [{"id": "peer", **change}]}})
+        return resolve_infra_refs([str(first), str(second)], anchor=tmp_path).tool_server_registry["peer"]
+    overrides = tuple(f"infra:spec.tool_servers[id=peer].{key}={json.dumps(value)}" for key, value in change.items())
+    return resolve_infra_refs([str(first)], anchor=tmp_path, overrides=overrides).tool_server_registry["peer"]
+
+
+@pytest.mark.parametrize("via", ["flavour", "merge", "cli"])
+@pytest.mark.parametrize(
+    "change,refused",
+    [
+        (_MOVED, True),
+        ({"verify_ssl": False}, True),
+        ({**_MOVED, "headers": {"Authorization": {"secret": "other"}}}, False),
+        ({"timeout": 5}, False),
+    ],
+)
+def test_moving_a_row_with_secret_credentials_must_restate_them(
+    tmp_path: Path, via: str, change: dict, refused: bool
+) -> None:
+    # kills: an override sending a row's SecretRef credentials to an endpoint the row did not name
+    if refused:
+        with pytest.raises((ValueError, RuntimeError), match=r"changes \w+ of a row that holds SecretRef credentials"):
+            _lay_over_peer(tmp_path, via, change)
+        return
+    assert _lay_over_peer(tmp_path, via, change)["url"] == change.get("url", _PEER["url"])
 
 
 def test_endpoint_rows_validate_against_the_infra_schema_and_a_row_still_needs_protocol(tmp_path: Path) -> None:
@@ -552,61 +595,12 @@ def test_a_flavour_file_is_read_validated_and_patched(tmp_path: Path) -> None:
     assert resolve_flavour("local") == {}  # a bundled name still works
 
 
-def test_a_row_holding_a_secret_is_refused_even_when_no_agent_rides_it() -> None:
-    rows = _rows(**{"desk-node": {**_NODE, "secret": "x" * 40}})
-    with pytest.raises(BindError, match=r"Application 'desk-node': \['secret'\] would hold a secret; name its env var"):
-        bind_flavour(ResolvedInfra(applications=rows), {"bind": {"agent_comm": ["desk-node"]}}, agent_ids=[])
-
-
-_SECRET_NAMES = [
-    "X-Api-Key",
-    "Authorization",
-    "access_token",
-    "Set-Cookie",
-    "accessToken",
-    "authToken",
-    "clientSecret",
-    "sessionToken",
-    "private_key",
-    "passphrase",
-    "credentials",
-    "client-secret",
-    "auth_password",
-    "apiKey",
-    "TOKEN",
-]
-_PLAIN_NAMES = ["secret_env", "max_tokens", "timeout", "identity", "tokenizer", "author", "content-type", "api_key_env"]
-
-
-@pytest.mark.parametrize("key", _SECRET_NAMES)
-def test_a_header_or_param_that_ends_in_a_secret_word_is_refused(key: str) -> None:
-    rows = _rows(**{"desk-node": {**_NODE, "headers": {key: "v"}}})
-    with pytest.raises(BindError, match="would hold a secret"):
-        bind_flavour(ResolvedInfra(applications=rows), {"bind": {"agent_comm": ["desk-node"]}}, agent_ids=[])
-
-
-@pytest.mark.parametrize("key", _PLAIN_NAMES)
-def test_a_key_that_only_contains_a_secret_word_is_kept(key: str) -> None:
-    from mas.ctl.infra.bind import secret_keys
-
-    assert secret_keys({key: "v"}) == []
-
-
-def test_the_schema_and_ctl_refuse_the_same_secret_keys() -> None:
-    import jsonschema
-    import yaml
-    from mas.ctl.infra.bind import SECRET_KEY, secret_keys
-
-    path = Path(__file__).resolve().parents[2] / "docs/schemas/runtime/fragments/application-endpoint.schema.yaml"
-    schema = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert schema["propertyNames"]["not"]["pattern"] == SECRET_KEY.pattern
-    assert schema["properties"]["headers"]["propertyNames"] == schema["propertyNames"]
-    validator = jsonschema.Draft7Validator(schema)
-    for key in _SECRET_NAMES + _PLAIN_NAMES:
-        refused_by_ctl = bool(secret_keys({"headers": {key: "v"}}))
-        refused_by_schema = not validator.is_valid({"protocol": "http", "headers": {key: "v"}})
-        refused_as_param = not jsonschema.Draft7Validator({"propertyNames": schema["propertyNames"]}).is_valid({key: 1})
-        assert refused_by_ctl == refused_by_schema == refused_as_param == (key in _SECRET_NAMES), key
+def test_secret_ref_on_an_application_row_is_kept() -> None:
+    rows = _rows(**{"desk-node": {**_NODE, "secret": SecretRef(name="slim")}})
+    bound = bind_flavour(
+        ResolvedInfra(applications=rows), {"bind": {"agent_comm": ["desk-node"]}}, agent_ids=["triage"]
+    )
+    assert bound.agent_chains["triage"][0]["params"]["secret"] == SecretRef(name="slim")
 
 
 def test_a_bad_flavour_file_is_a_flavour_error(tmp_path: Path) -> None:
@@ -827,17 +821,17 @@ def test_an_unreachable_node_is_a_chain_start_error_and_closes_the_chains(
     monkeypatch.setattr(slim_fake.FakeService, "connect_async", unreachable)
     resolved = _bind({"agent_comm": ["desk-node"]}, agents=["triage", "billing"])
     materialized = _materialized(["triage", "billing"], tmp_path, resolved)
-    with pytest.raises(ChainStartError, match="bind.agent_comm 'desk-node': agent '.*': .*node unreachable") as err:
+    with pytest.raises(ChainStartError, match="bind.agent_comm 'desk-node': agent '.*': slim binding error") as err:
         _wire(materialized)
     assert materialized.stack_handles == {}
     assert _SECRET not in str(err.value)
 
 
-def test_a_missing_secret_names_the_row_and_nothing_starts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("SLIM_SECRET", raising=False)
+@pytest.mark.no_secrets
+def test_a_missing_secret_names_the_row_and_nothing_starts(tmp_path: Path) -> None:
     resolved = _bind({"agent_comm": ["desk-node"], "usage": ["connect", "listen"]}, agents=["triage"])
     materialized = _materialized(["triage"], tmp_path, resolved, [{"id": "triage"}])
-    with pytest.raises(RuntimeError, match="Application 'desk-node': missing secret in environment variable"):
+    with pytest.raises(RuntimeError, match="secret:slim"):
         _wire(materialized)
     assert materialized.stack_handles == {}
 
@@ -985,12 +979,10 @@ def test_run_mas_with_a_bad_bind_exits_one(tmp_path: Path, caplog: pytest.LogCap
     assert any("bind.agents names 'billng', which is no agent" in rec.message for rec in caplog.records)
 
 
-def test_run_mas_with_a_chain_that_cannot_start_exits_one(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
+@pytest.mark.no_secrets
+def test_run_mas_with_a_chain_that_cannot_start_exits_one(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     from mas.ctl.executor.run_mas import execute_run_mas
 
-    monkeypatch.delenv("SLIM_SECRET", raising=False)
     mas, rows, flavour = _desk_files(tmp_path, bind={"agent_comm": ["desk-node"], "usage": ["connect", "listen"]})
     caplog.set_level("ERROR")
     with patch("mas.ctl.session.bootstrap.build_engine", return_value=_simulated()):
@@ -1002,9 +994,7 @@ def test_run_mas_with_a_chain_that_cannot_start_exits_one(
             flavour_spec=resolve_flavour(str(flavour)),
         )
     assert rc == 1
-    assert any(
-        "Application 'desk-node': missing secret in environment variable" in rec.message for rec in caplog.records
-    )
+    assert any("secret:slim" in rec.message for rec in caplog.records)
 
 
 def test_run_mas_closes_the_chain_when_wiring_the_peers_cannot_start(
@@ -1310,12 +1300,10 @@ def test_a_benchmark_run_with_a_bad_bind_fails_with_the_reason(tmp_path: Path) -
     assert "names 'nowhere', which is no Application row" in result.error
 
 
-def test_a_benchmark_run_whose_chain_cannot_start_fails_with_the_reason(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+@pytest.mark.no_secrets
+def test_a_benchmark_run_whose_chain_cannot_start_fails_with_the_reason(tmp_path: Path) -> None:
     from mas.ctl.benchmark.runner import MasBenchRunner
 
-    monkeypatch.delenv("SLIM_SECRET", raising=False)
     agent, rows, _flavour_path = _solo(tmp_path)
     with patch("mas.ctl.benchmark.runner.instantiate_runtime", return_value=(MagicMock(), None)):
         result = MasBenchRunner().run(
@@ -1327,7 +1315,7 @@ def test_a_benchmark_run_whose_chain_cannot_start_fails_with_the_reason(
             flavour={"spec": {"bind": {"agent_comm": ["desk-node"], "usage": ["connect", "listen"]}}},
         )
     assert result.status == "error"
-    assert "Application 'desk-node': missing secret in environment variable" in result.error
+    assert "secret:slim" in result.error
 
 
 def test_a_mas_benchmark_run_links_its_agents_and_closes_the_chain(tmp_path: Path) -> None:
@@ -1644,17 +1632,12 @@ def test_a_bundled_flavour_name_is_never_a_file_in_the_current_directory(
         resolve_flavour("./desk")  # a path separator makes it a path
 
 
-@pytest.mark.parametrize(
-    "url",
-    ["https://user:pw@hub.example.test/a2a", "https://hub.example.test/a2a?api_key=abc", "https://h.test/?Token=1"],
-)
-def test_a_url_that_carries_a_secret_is_refused_and_the_secret_is_not_shown(url: str) -> None:
-    rows = _rows(web={"protocol": "http", "url": url, "usage": "connect"})
-    with pytest.raises(BindError, match="would hold a secret") as err:
-        _bind({"agent_comm": ["web"], "agents": {a: {"usage": "connect"} for a in _DESK}}, rows=rows)
-    assert "pw" not in str(err.value) and "abc" not in str(err.value)
-    plain = _rows(web={"protocol": "http", "url": "https://hub.example.test/a2a?page=2", "usage": "connect"})
-    _bind({"agent_comm": ["web"], "agents": {a: {"usage": "connect"} for a in _DESK}}, rows=plain)
+def test_a_flavour_override_with_url_userinfo_is_refused_and_the_secret_is_not_shown() -> None:
+    # Application rows are checked by the infra loader; a Flavour override is checked by bind_flavour.
+    override = {"desk-node": {"url": "https://user:pw@hub.example.test/a2a"}}
+    with pytest.raises(BindError, match="url") as err:
+        _bind({"agent_comm": ["desk-node"], "agents": {"billing": {"params": override}}})
+    assert "pw" not in str(err.value)
 
 
 async def test_a_waiter_that_is_cancelled_does_not_leave_the_turn_guard_held() -> None:

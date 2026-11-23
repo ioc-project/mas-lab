@@ -88,7 +88,7 @@ class AgentSeparationValidator(SeparationValidator):
 
 class MASSeparationValidator(SeparationValidator):
     kind = "mas"
-    _ACCESS_KEYS: ClassVar[frozenset[str]] = frozenset({"api_base", "api_key_env"})
+    _ACCESS_KEYS: ClassVar[frozenset[str]] = frozenset({"api_base", "api_key"})
 
     @classmethod
     def _collect_violations(cls, data: dict[str, Any]) -> list[str]:

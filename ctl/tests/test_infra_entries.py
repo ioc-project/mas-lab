@@ -186,6 +186,7 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
         anchor=tmp_path,
         overrides=(
             'infra:spec.proxy.api_base="http://localhost:9100/v1"',
+            "infra:spec.proxy.api_key={secret: openai}",
             "infra:spec.pipeline[layer=llm_cache].params.allow_write=true",
             "infra:spec.pipeline[layer=llm_cache].params.raise_on_miss=false",
             'infra:spec.tool_servers[id=tools].url="http://localhost:9101/mcp"',
@@ -220,7 +221,7 @@ def test_infra_overrides_reach_llm_mcp_a2a_and_runtime(tmp_path: Path):
 )
 def test_resolved_infra_rejects_invalid_override_types(tmp_path: Path, assignment: str):
     source = Path(__file__).parents[2] / "docs/schemas/examples/infra/override-stack.yaml"
-    with pytest.raises(ValueError):
+    with pytest.raises(InfraResolveError, match="CLI overrides"):
         resolve_infra_refs([str(source)], anchor=tmp_path, overrides=(assignment,))
 
 
@@ -318,7 +319,7 @@ def test_resolve_infra_uses_workspace_root_when_anchor_omitted():
     assert ws.found and ws.root
     infra = resolve_infra_refs(["standard:openai"], workspace=ws)
     assert infra.refs == ["standard:openai"]
-    assert infra.llm_proxy.get("api_key_env")
+    assert infra.llm_proxy.get("api_key") is not None
 
 
 def test_workspace_infra_refs_resolve_from_subdirectory():

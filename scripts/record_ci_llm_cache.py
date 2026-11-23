@@ -8,9 +8,13 @@ cache-rerun, tutorial HITL chat), then recaptures golden events under
 strict replay. Does not run skip-gated pytest — an empty fixture would
 never fill that way.
 
-Usage (repo root, live provider key set):
+Usage (repo root; the provider key is the ``openai`` secret of the file store):
 
-    python scripts/record_ci_llm_cache.py
+    printf %s "$KEY" | mas-ctl secrets set openai
+    python scripts/record_ci_llm_cache.py [--secrets-dir DIR]
+
+The store defaults to the repository's ``.mas/secrets``; the recording runs read it, never
+an environment variable.
 
 ``MAS_RECORD_PROVIDER`` overrides the inner LLM bundle (default: user
 ``~/.config/mas/infra/llm-proxy.yaml`` if present, else ``standard:openai``).
@@ -44,6 +48,7 @@ _MANIFESTS = (
 
 
 def _load_dotenv(root: Path) -> None:
+    """Load the ``MAS_*`` settings of ``root/.env`` (``MAS_RECORD_PROVIDER``, ...); never a key."""
     env_path = root / ".env"
     if not env_path.is_file():
         return
@@ -57,8 +62,15 @@ def _load_dotenv(root: Path) -> None:
         key, _, val = line.partition("=")
         key = key.strip()
         val = val.strip().strip("\"'")
-        if key and key not in os.environ:
+        if key.startswith("MAS_") and not key.startswith("MAS_SECRET_") and key not in os.environ:
             os.environ[key] = val
+
+
+def _openai_secret_present(directory: Path) -> bool:
+    from mas.ctl.secrets import build_resolver
+    from mas.runtime.secrets import SecretRef
+
+    return build_resolver(directory=directory).describe(SecretRef(name="openai")).present
 
 
 def _provider() -> str:
@@ -105,7 +117,7 @@ def _isolate(tmp: Path, *, refs: str) -> dict[str, str]:
     return env
 
 
-def _run_experiment(experiment: Path, out: Path, traces: Path, env: dict[str, str]) -> int:
+def _run_experiment(experiment: Path, out: Path, traces: Path, env: dict[str, str], secrets_dir: Path) -> int:
     traces.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [
@@ -113,6 +125,8 @@ def _run_experiment(experiment: Path, out: Path, traces: Path, env: dict[str, st
             "-c",
             (
                 "import sys; from pathlib import Path; "
+                "from mas.lab.secret_host import SecretHostSettings; "
+                "SecretHostSettings(directory=sys.argv[4]).install_process(); "
                 "from mas.lab.benchmark.worker import run_benchmark_sync; "
                 "ok = run_benchmark_sync(Path(sys.argv[1]), force=True, single_run=True, "
                 "max_runs=1, output_dir=Path(sys.argv[2]), trace_cache_dir=Path(sys.argv[3])); "
@@ -121,6 +135,7 @@ def _run_experiment(experiment: Path, out: Path, traces: Path, env: dict[str, st
             str(experiment),
             str(out),
             str(traces),
+            str(secrets_dir),
         ],
         cwd=REPO,
         env=env,
@@ -152,6 +167,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Record tutorial HITL chat only; implies --append and skips benches.",
     )
     parser.add_argument(
+        "--secrets-dir",
+        type=Path,
+        default=REPO / ".mas" / "secrets",
+        help="File secret store holding the `openai` secret (default: the repository's .mas/secrets).",
+    )
+    parser.add_argument(
         "--skip-goldens",
         action="store_true",
         help="Do not recapture golden events after recording.",
@@ -165,9 +186,13 @@ def main(argv: list[str] | None = None) -> int:
     provider = _provider()
     write_refs = f"{provider},{WRITE.resolve()}"
     replay_refs = f"standard:openai,{REPLAY.resolve()}"
-    key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not key:
-        print("OPENAI_API_KEY is unset — cannot record a live fixture", file=sys.stderr)
+    secrets_dir = args.secrets_dir.expanduser().resolve()
+    if not _openai_secret_present(secrets_dir):
+        print(
+            f"secret openai is not in {secrets_dir}: cannot record a live fixture "
+            "(printf %s KEY | mas-ctl secrets set openai, or pass --secrets-dir)",
+            file=sys.stderr,
+        )
         return 1
 
     append = args.append or args.hitl_only
@@ -193,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
             for attempt in range(1, 3):
                 if attempt > 1:
                     print(f"  retry {label} ({attempt}/2)", flush=True)
-                rc = _run_experiment(experiment, out, traces, env)
+                rc = _run_experiment(experiment, out, traces, env, secrets_dir)
                 if rc == 0:
                     break
             if rc != 0:
@@ -207,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
         chat = subprocess.run(
             [
                 str(mas_ctl),
+                "--secrets-dir",
+                str(secrets_dir),
                 "chat",
                 "agent.yaml",
                 "-q",

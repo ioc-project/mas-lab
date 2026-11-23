@@ -5,8 +5,6 @@
 from __future__ import annotations
 
 import json
-import sys
-import types
 
 import click
 from click.testing import CliRunner  # noqa: E402
@@ -130,33 +128,11 @@ def test_convert_realtime(tmp_path, events_path):
     assert any(_json.loads(line)["event_name"].startswith("topology.node.") for line in events if line.strip())
 
 
-def test_dump_and_list_apps(tmp_path, monkeypatch):
-    # Fake clickhouse_connect so dump/list-apps run without a real ClickHouse.
-    class _Rows:
-        column_names = ["ServiceName", "spans"]
-        result_rows = [["app-a", 3]]
-
-    class _Client:
-        def query(self, q):
-            return _Rows()
-
-    mod = types.ModuleType("clickhouse_connect")
-    mod.get_client = lambda **kw: _Client()
-    monkeypatch.setitem(sys.modules, "clickhouse_connect", mod)
-
-    r1 = runner.invoke(telemetry_group, ["list-apps"])
-    assert r1.exit_code == 0 and "app-a" in r1.output
-    r2 = runner.invoke(telemetry_group, ["dump", "sess-1", "-o", str(tmp_path / "d.jsonl")])
-    assert r2.exit_code == 0
-    assert json.loads(r2.output)["spans"] == 1
-
-
 def test_component_register():
     grp = click.Group("mas-lab")
     name = TelemetryCliComponent().register(grp)
     assert name == "telemetry"
-    assert "telemetry" in grp.commands
-    assert "otel" in grp.commands  # legacy alias
+    assert list(grp.commands) == ["telemetry"]
     # idempotent
     assert TelemetryCliComponent().register(grp) is None
 
@@ -170,13 +146,15 @@ def test_component_register_replaces_lab_stub():
     assert grp.commands["telemetry"] is telemetry_group
 
 
-def test_component_register_keeps_lab_stub_commands_with_no_equivalent():
+def test_component_register_keeps_lab_stub_commands_with_no_equivalent(monkeypatch):
     # lab's native-trace `show` command (and similar) has no OTel equivalent
     # here — replacing the stub must not silently drop it.
+    # the group is module-wide: another test that built the mas-lab CLI may already have merged a stub into it
+    monkeypatch.setattr(telemetry_group, "commands", dict(telemetry_group.commands))
     grp = click.Group("mas-lab")
     stub = click.Group("telemetry")
 
-    @click.command("show")
+    @click.command("native-only")
     def native_show_cmd() -> None:
         pass
 
@@ -190,7 +168,7 @@ def test_component_register_keeps_lab_stub_commands_with_no_equivalent():
 
     TelemetryCliComponent().register(grp)
 
-    assert grp.commands["telemetry"].commands["show"] is native_show_cmd
+    assert grp.commands["telemetry"].commands["native-only"] is native_show_cmd
     # library-telemetry's own `push` wins over the stub's same-named command.
     assert grp.commands["telemetry"].commands["push"] is not stub_push_cmd
 

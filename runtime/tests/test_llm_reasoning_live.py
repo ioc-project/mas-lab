@@ -46,7 +46,7 @@ def _answer(message: dict[str, Any]) -> Any:
 
 
 def _provider(base: str, endpoint: FakeEndpoint, reasoning: dict[str, Any]) -> OpenAILLMProvider:
-    provider = OpenAILLMProvider(api_base=base, reasoning=reasoning)
+    provider = OpenAILLMProvider(api_base=base, api_key={"secret": "openai"}, reasoning=reasoning)
     provider._aclient = httpx.AsyncClient(transport=httpx.MockTransport(endpoint))
     return provider
 
@@ -55,7 +55,6 @@ async def _chat(provider: OpenAILLMProvider, model: str) -> dict[str, Any]:
     return await provider.achat_completion(
         model=model,
         messages=[{"role": "user", "content": "Reply with the single word pong and nothing else."}],
-        api_key="test-key",
         max_tokens=64,
         temperature=0,
     )
@@ -69,7 +68,7 @@ async def test_litellm_reasoning_exclude_hides_cot() -> None:
     assert "reasoning_content" not in cleaned
     (request,) = endpoint.requests
     assert str(request.url) == f"{_LITELLM_BASE}/chat/completions"
-    assert request.headers["authorization"] == "Bearer test-key"
+    assert request.headers["authorization"] == "Bearer secret"
     assert "chat_template_kwargs" not in endpoint.bodies[0]
     assert "think" not in endpoint.bodies[0]
 

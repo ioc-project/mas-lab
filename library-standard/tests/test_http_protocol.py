@@ -22,7 +22,7 @@ def test_timeout_prefers_http_timeout_then_default() -> None:
 
 
 def test_from_infra_spec_url_and_from_provider_spec() -> None:
-    provider = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    provider = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1"})
     assert provider.api_base == "http://127.0.0.1:9/v1"
     assert OpenAILLMProvider.from_provider_spec({"api_base": "http://x"}).api_base == "http://x"
 
@@ -50,14 +50,17 @@ def test_structured_message_uses_response_schema() -> None:
     assert HttpLlmProtocol()._structured_message(message, payload)["parsed"] == {"n": 1}
 
 
+@pytest.mark.no_secrets
 def test_protocol_does_not_read_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
-    monkeypatch.setenv("K", "from-env")
-    layer = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1", "api_key_env": "K"})
-    assert layer.api_key == ""
+    from mas.runtime.secrets.ref import SecretRef
+
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    layer = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}})
+    assert layer.api_key == SecretRef(name="openai")
     with pytest.raises(RuntimeError, match="Missing API key"):
         asyncio.run(layer.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))
-    held = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1", "api_key": "secret"})
-    assert held.api_key == "secret"
+    held = OpenAILLMProvider.from_infra_spec({"url": "http://127.0.0.1:9/v1"})
+    assert "from-env" not in repr(held)
     assert "secret" not in repr(held)

@@ -36,14 +36,14 @@ class MasRuntimePyKernelBackend:
         agent_manifest: dict | None = None
         manifest_dir = bind.mas_base_dir or Path.cwd()
         if manifest_path:
-            import yaml
-
             mp = Path(manifest_path)
             if not mp.is_absolute():
                 base = bind.mas_base_dir or Path.cwd()
                 mp = (base / mp).resolve()
             if mp.is_file():
-                agent_manifest = yaml.safe_load(mp.read_text(encoding="utf-8"))
+                from mas.runtime.secrets import load_checked_document
+
+                agent_manifest = load_checked_document(mp)
                 manifest_dir = mp.parent
                 if agent_manifest:
                     from mas.ctl.manifest.mas_agent_merge import apply_loaded_agent_patch

@@ -30,6 +30,8 @@ from mas.library.standard.plugins.llm.thinking import (
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
+from mas.runtime.reliability.classify import provider_failure
+from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,10 @@ class AnthropicLLMProvider(HttpLlmProtocol):
     provider_id = "anthropic"
     kind = "anthropic"
     default_api_base = "https://api.anthropic.com/v1"
-    default_api_key_env = "ANTHROPIC_API_KEY"
+    default_secret = SecretRef(name="anthropic")
+
+    def _auth_header(self) -> tuple[str, str]:
+        return "x-api-key", ""
 
     def _build_chat_request(
         self,
@@ -61,7 +66,6 @@ class AnthropicLLMProvider(HttpLlmProtocol):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
-        api_key: str,
         reasoning: ReasoningSettings,
         max_completion_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
@@ -119,7 +123,7 @@ class AnthropicLLMProvider(HttpLlmProtocol):
             payload["output_config"] = config
         _mark_cacheable(payload, cache_breakpoints(sampling, model), cache_ttl(sampling, model))
         headers = {
-            "x-api-key": api_key,
+            **self._key_headers(),
             "anthropic-version": _ANTHROPIC_VERSION,
             "Content-Type": "application/json",
         }
@@ -476,14 +480,7 @@ def _check_complete(message: dict[str, Any], stop_reason: Any, stop_details: Any
 
 def _stream_error(raw: Any) -> ClassifiedFailure:
     """An in-stream ``error`` event: the HTTP status was 200, the answer is not usable."""
-    err = raw if isinstance(raw, dict) else {}
-    kind = str(err.get("type") or "error")
-    transient = kind in {"overloaded_error", "api_error", "rate_limit_error"}
-    return ClassifiedFailure(
-        f"Anthropic stream failed: {kind}: {err.get('message') or 'no detail'}",
-        failure_class=FailureClass.TRANSIENT if transient else FailureClass.APPLICATION,
-        code=kind,
-    )
+    return provider_failure("Anthropic stream", error=raw)
 
 
 def _sse_event(raw_line: Any) -> dict[str, Any] | None:

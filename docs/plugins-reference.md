@@ -230,6 +230,13 @@ practical examples.
 | `CopyDirRelatedState`     | `mas.library.standard.plugins.related_state.copy_dir`     | `library-standard` |
 | `GitWorktreeRelatedState` | `mas.library.standard.plugins.related_state.git_worktree` | `library-standard` |
 
+### Secret_Store
+
+| Class             | Full module path                                  | Library            |
+| ----------------- | ------------------------------------------------- | ------------------ |
+| `EnvSecretStore`  | `mas.library.standard.plugins.secrets.env_store`  | `library-standard` |
+| `FileSecretStore` | `mas.library.standard.plugins.secrets.file_store` | `library-standard` |
+
 ### Skill_Catalog
 
 | Class                | Full module path                        | Library          |
@@ -380,10 +387,12 @@ A plugin type listed here is a retired spelling. Lookups under it still resolve 
 | `DropSummarizer`                 | summarizer           | `library-standard`  |
 | `EmbedStatesStep`                | step                 | `library-kg`        |
 | `EnvironmentPlugin`              | governance           | `library-standard`  |
+| `EnvSecretStore`                 | secret_store         | `library-standard`  |
 | `EventsToOtelStep`               | step                 | `library-telemetry` |
 | `ExportOtelStep`                 | step                 | `library-telemetry` |
 | `FailLayer`                      | layer                | `library-standard`  |
 | `FaultInjectMiddleware`          | layer                | `library-standard`  |
+| `FileSecretStore`                | secret_store         | `library-standard`  |
 | `GeminiLLMProvider`              | llm_provider         | `library-standard`  |
 | `GeminiLLMProvider`              | layer                | `library-standard`  |
 | `GitWorktreeRelatedState`        | related_state        | `library-standard`  |

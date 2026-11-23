@@ -60,7 +60,7 @@ not stored.
 
 `publish-hf` uploads the tarball unchanged to a dataset repo.
 
-- The token comes from `--token`, `--token-file`, or `HF_TOKEN`, in that
+- The token comes from `--token`, `--token-file`, or the secret `hf`, in that
   order.
 - A repo it creates is **private** by default (`--visibility public` changes
   that).

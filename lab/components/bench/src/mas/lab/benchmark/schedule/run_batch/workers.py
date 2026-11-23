@@ -226,16 +226,41 @@ def _run_job(job: dict[str, Any], events: Any, batch_cache: Any | None = None) -
             cache.clear()
 
 
-def worker_main(jobs: Any, results: Any, events: Any, host_env: dict[str, str] | None = None) -> None:
+def prepare_worker_host(host_env: dict[str, str] | None, secrets: dict[str, Any] | None = None) -> None:
+    """Install the parent's allowlist and the parent's secret store in a spawn worker.
+
+    The process environment is replaced by the allowlist as well: whatever the worker inherited
+    at spawn is gone before any job runs, and a child the worker starts inherits only that.
+    """
+    from mas.ctl.secrets import install_process_resolver
+    from mas.ctl.workspace.user_connections import load_user_connections
+    from mas.lab.connections import bind_user_connections
+    from mas.lab.secret_host import SecretHostSettings
+    from mas.runtime.entrypoint import install_spawned_environment
+
+    install_spawned_environment(host_env or {})  # what the parent hands over; nothing inherited
+    if secrets is not None:
+        SecretHostSettings.from_payload(secrets).install_process()
+    else:
+        install_process_resolver()
+    bind_user_connections(load_user_connections())
+
+
+def worker_main(
+    jobs: Any,
+    results: Any,
+    events: Any,
+    host_env: dict[str, str] | None = None,
+    secrets: dict[str, Any] | None = None,
+) -> None:
     """Entry for a spawn worker. Rebuilds context; never unpickles a RunContext.
 
     Exits when it is told to, and also when its parent process is gone: a
     parent killed without cleanup must not leave workers behind.
     """
-    from mas.runtime import hostenv
     from mas.runtime.spec.batch_cache import BatchCache
 
-    hostenv.install(host_env)  # what the parent hands over; a worker reads no environment itself
+    prepare_worker_host(host_env, secrets)
     parent = multiprocessing.parent_process()
     cache = BatchCache()
     while True:
@@ -260,13 +285,21 @@ def worker_main(jobs: Any, results: Any, events: Any, host_env: dict[str, str] |
 
 class _Worker:
     def __init__(self, ctx: Any, events: Any) -> None:
+        from mas.lab.secret_host import process_settings
+        from mas.runtime.secrets.process import child_env
+
+        settings = process_settings()
+        if settings is not None and settings.store == "env":
+            raise ValueError(
+                "the env secret store cannot reach spawn run workers (they inherit no environment); "
+                "use the file store: mas-ctl secrets import-env"
+            )
+        payload = settings.to_payload() if settings is not None else None
         self.jobs = ctx.Queue()
         self.results = ctx.Queue()
         self.runs = 0
-        from mas.runtime import hostenv
-
         self.proc = ctx.Process(
-            target=worker_main, args=(self.jobs, self.results, events, hostenv.snapshot()), daemon=True
+            target=worker_main, args=(self.jobs, self.results, events, child_env(lab=True), payload), daemon=True
         )
         self.proc.start()
 

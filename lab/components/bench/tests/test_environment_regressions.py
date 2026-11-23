@@ -217,8 +217,10 @@ def test_control_yaml_survives_hostile_script(tmp_path: Path) -> None:
 
 def test_llm_infra_yaml_is_escaped(tmp_path: Path) -> None:
     import yaml
+    from secret_fakes import bound_secrets
 
-    path = write_fixture_llm_infra(tmp_path / "i.yaml", "http://127.0.0.1:1", name="a: b\n  c")
+    with bound_secrets({"lab": "any"}):
+        path = write_fixture_llm_infra(tmp_path / "i.yaml", "http://127.0.0.1:1", name="a: b\n  c")
     assert yaml.safe_load(path.read_text())["metadata"]["name"] == "a: b\n  c"
 
 
@@ -964,7 +966,8 @@ def test_fixture_does_not_inherit_secrets_from_our_environment(monkeypatch) -> N
     )
     env = _fixture_env(spec, os.environ)
     assert "OPENAI_API_KEY" not in env and "MY_SERVICE_TOKEN" not in env
-    assert env["KEEP_ME_KEY"] == "ok" and env["PLAIN_SETTING"] == "yes" and env["EXPLICIT_SECRET"] == "v"
+    assert env["KEEP_ME_KEY"] == "ok" and env["EXPLICIT_SECRET"] == "v"
+    assert "PLAIN_SETTING" not in env  # undeclared host keys stay out
     assert env["MAS_FIXTURE_NAME"] == "f"
 
 
@@ -1017,31 +1020,6 @@ def test_dependency_status_is_read_from_the_same_item() -> None:
     assert row_status(rows, "p", 2, 1) == "ok"
     assert row_status(rows, "p", 3, 1) == "ok"
     assert row_status(rows, "p", 1, 2) == "ok"
-
-
-@pytest.mark.parametrize(
-    "name, secret",
-    [
-        ("OPENAI_API_KEY", True),
-        ("APIKEY", True),
-        ("GH_TOKEN", True),
-        ("DB_PASSWORD", True),
-        ("AWS_SECRET_ACCESS_KEY", True),
-        ("ISSUER_CREDENTIALS", True),
-        ("AUTH_HEADER", True),
-        ("SSH_AUTH_SOCK", False),
-        ("XDG_SESSION_ID", False),
-        ("KEYBOARD_LAYOUT", False),
-        ("KEYCHAIN", False),
-        ("PATH", False),
-        ("PYTHONPATH", False),
-        ("AUTHORS", False),
-    ],
-)
-def test_secret_name_filter(name: str, secret: bool) -> None:
-    from mas.lab.benchmark.environment.fixtures import looks_secret
-
-    assert looks_secret(name) is secret
 
 
 def test_clock_advance_step_does_not_deadlock_inside_a_running_loop(tmp_path: Path) -> None:
@@ -1413,15 +1391,19 @@ def test_nonsense_limits_and_ports_are_refused_at_compile(raw: dict) -> None:
         compile_environment(raw)
 
 
-def test_fixture_env_drops_credential_urls_and_token_like_names(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fixture_env_is_an_allowlist_not_the_host_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     from mas.lab.benchmark.environment.fixtures import _fixture_env
 
     monkeypatch.setenv("DATABASE_URL", "postgres://user:hunter2@db/prod")
     monkeypatch.setenv("GH_PAT", "ghp_x")
     monkeypatch.setenv("PLAIN_URL", "http://example.com/x")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
     env = _fixture_env(compile_fixture({"name": "f", "command": ["x"]}), os.environ)
-    assert "DATABASE_URL" not in env and "GH_PAT" not in env
-    assert env["PLAIN_URL"] == "http://example.com/x"
+    assert "DATABASE_URL" not in env
+    assert "GH_PAT" not in env
+    assert "PLAIN_URL" not in env
+    assert "OPENAI_API_KEY" not in env
+    assert "PATH" in env
 
 
 def test_fixture_probes_ignore_the_proxy_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1530,8 +1512,10 @@ def test_the_library_never_reads_the_process_environment(monkeypatch: pytest.Mon
     from mas.lab.benchmark.environment.fixtures import _fixture_env
 
     monkeypatch.setenv("SOMETHING_ELSE", "x")
-    env = _fixture_env(compile_fixture({"name": "f", "command": ["x"], "env": {"A": "1"}}), {"B": "2"})
-    assert env["A"] == "1" and env["B"] == "2" and "SOMETHING_ELSE" not in env
+    env = _fixture_env(compile_fixture({"name": "f", "command": ["x"], "env": {"A": "1"}}), {"B": "2", "PATH": "/bin"})
+    assert env["A"] == "1" and env["PATH"] == "/bin"
+    assert "B" not in env
+    assert "SOMETHING_ELSE" not in env
 
 
 def test_the_controller_does_not_show_the_cli_environment(tmp_path: Path) -> None:

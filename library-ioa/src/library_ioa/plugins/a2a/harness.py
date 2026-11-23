@@ -33,13 +33,18 @@ class A2AHarnessLoop:
         url: str | None = None,
         *,
         target: str = "harness",
-        headers: dict[str, str] | None = None,
+        headers: dict | None = None,
         timeout: float | None = None,
         comm: AgentCommContract | None = None,
+        allowed_origins: list[str] | None = None,
     ) -> None:
         if (url is None) == (comm is None):
             raise ValueError("a2a-harness takes a url, or a comm, not both and not neither")
-        self._owned = A2AAgentComm(str(url), headers=headers, timeout=timeout) if comm is None else None
+        self._owned = (
+            A2AAgentComm(str(url), headers=headers, timeout=timeout, allowed_origins=allowed_origins)
+            if comm is None
+            else None
+        )
         self._comm: AgentCommContract = comm if comm is not None else self._owned
         self._target = target
         self._bridge = SyncBridge()

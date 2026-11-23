@@ -789,16 +789,18 @@ def test_control_hash_includes_agents_selectors(tmp_path: Path) -> None:
     assert entry != all_agents
 
 
-def test_bind_events_does_not_copy_secret_env() -> None:
+def test_bind_events_does_not_copy_secret() -> None:
     cfg = observability_config_from_manifest(
         {"spec": {}},
         flavour_spec={"bind": {"events": ["sink"]}},
         resolved_infra=ResolvedInfra(
-            applications={"sink": {"protocol": "native", "path": "traces/from-row.jsonl", "secret_env": "TOKEN"}}
+            applications={
+                "sink": {"protocol": "native", "path": "traces/from-row.jsonl", "secret": {"secret": "token"}}
+            }
         ),
     )
     native = cfg.plugin_configs.get("native") or {}
-    assert "secret_env" not in native
+    assert "secret" not in native
     assert native.get("path") == "traces/from-row.jsonl"
 
 
@@ -1217,7 +1219,7 @@ def test_an_absolute_ref_in_a_flavour_control_row_is_refused(tmp_path: Path) -> 
 
 
 def test_urls_are_not_absolute_paths(tmp_path: Path) -> None:
-    path = _write_control(tmp_path, name="url", spec={"plugins": [{"otel": {"otlp_endpoint_env": "X"}}]})
+    path = _write_control(tmp_path, name="url", spec={"plugins": [{"otel": {"otlp_endpoint": "X"}}]})
     assert load_control(path)["kind"] == "Control"
 
 

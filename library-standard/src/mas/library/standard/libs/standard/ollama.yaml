@@ -14,7 +14,8 @@ spec:
   protocol: openai
   proxy:
     api_base: http://localhost:11434/v1
-    # No api_key_env needed for local Ollama
+    # Ollama takes no key: while the optional ollama secret is not set, no auth header is sent.
+    api_key: {secret: {name: ollama, optional: true}}
 
   models:
     # No model mappings needed for Ollama

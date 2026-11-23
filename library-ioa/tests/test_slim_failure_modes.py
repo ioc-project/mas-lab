@@ -122,7 +122,7 @@ def test_a_start_that_fails_half_way_closes_its_connection(monkeypatch: pytest.M
         raise RuntimeError("subscribe failed")
 
     monkeypatch.setattr(slim_fake.FakeApp, "subscribe_async", boom)
-    with pytest.raises(AgentCommError, match="subscribe failed"):
+    with pytest.raises(AgentCommError, match="slim binding error"):
         desk.link("a")
     actor = desk.handle._services[0].actor
     assert actor._connections == []  # no connection is left open for a retry to add to
@@ -299,7 +299,7 @@ def test_a_start_that_raises_from_the_node_is_a_failed_link(monkeypatch: pytest.
 
     monkeypatch.setattr(ConnectionActor, "_aconnect", boom)
     actor = ConnectionActor(endpoint="http://127.0.0.1:46357", timeout_s=0.2)
-    with pytest.raises(AgentCommError, match="node down"):
+    with pytest.raises(AgentCommError, match="slim link start failed"):
         actor.start()
     assert actor.failed is True
     actor.stop()
@@ -389,5 +389,7 @@ def test_an_error_from_the_bindings_never_carries_the_secret(monkeypatch: pytest
     monkeypatch.setattr(slim_fake.FakeService, "create_app_with_secret", refuse)
     with pytest.raises(AgentCommError) as raised:
         desk.link("a")
-    assert _SECRET not in str(raised.value) and "cannot authenticate with ***" in str(raised.value)
+    assert _SECRET not in str(raised.value)
+    assert str(raised.value) == "slim binding error"
     assert raised.value.__cause__ is None  # the original exception, which holds the secret, is not chained
+    assert raised.value.__context__ is None

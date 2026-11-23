@@ -39,7 +39,7 @@ otel_sdk_spans.jsonl
     v
 verified spans
     | Serialization (collector/)     push_file() -> OTLP HTTP collector
-    v                                (dump_spans() reads back from ClickHouse)
+    v                                (clickhouse_http.fetch_spans() reads back)
 OTLP collector / ClickHouse
 ```
 
@@ -71,15 +71,13 @@ Every external dependency is an optional extra. The package imports with nothing
 uv pip install -e library-telemetry                       # base: compare + OTLP push (stdlib only)
 uv pip install -e "library-telemetry[convert]"            # + events -> OTel conversion
 uv pip install -e "library-telemetry[verify]"             # + SpanSpec and JSON-schema verification
-uv pip install -e "library-telemetry[clickhouse]"         # + ClickHouse read-back
-uv pip install -e "library-telemetry[convert,verify,clickhouse,dev]"   # everything
+uv pip install -e "library-telemetry[convert,verify,dev]"   # everything
 ```
 
 | Extra | Enables | Without it |
 |-------|---------|-----------|
 | `convert` | events.jsonl to OTel spans (`MasOtelConverter`, replay, `from_events`); installs the OpenTelemetry SDK and `ioa-observe-sdk` | conversion raises `OtelSdkUnavailableError` |
 | `verify` | `SpanValidator` (L1-L4) and JSON-schema envelope (`pyyaml`, `jsonschema`) | validators raise or degrade to best-effort |
-| `clickhouse` | `dump_spans` / `list_apps` read-back | raises `ClickHouseUnavailableError` |
 
 The inverse direction (OTel to KG) needs `uv pip install -e library-kg`. The `mas-lab telemetry` commands and the pipeline steps also need the `[bench]` extra (`lab/components/bench`, `click`); the repository workspace install provides it.
 
@@ -132,15 +130,17 @@ print(cand.compare_to(ref, strict=True)["passed"])   # True: faithful replay
 ### Push to and read back from a collector
 
 ```python
-from mas.library.telemetry.collector import push_file, dump_spans, list_apps
+from mas.library.telemetry.clickhouse_http import fetch_spans
+from mas.library.telemetry.collector import push_file
 
 push_file("otel_sdk_spans.jsonl", "http://localhost:4318", app_name="my-app")
-dump_spans("<session-id>", output_path="/tmp/session.otel.jsonl")   # needs [clickhouse]
+conn = {"host": "localhost", "port": 8123, "user": "admin", "database": "default"}
+spans = fetch_spans(conn, "<session-id>", password=None)   # stdlib HTTP, no extra
 ```
 
 ## CLI (`mas-lab telemetry`)
 
-The CLI is a `mas-lab` component; there is no separate binary. `mas-lab otel` is an alias. `mas-lab telemetry show TRACE_FILE` (print a native trace) comes from core `mas-lab`.
+The CLI is a `mas-lab` component; there is no separate binary. `mas-lab telemetry show TRACE_FILE` (print a native trace) comes from core `mas-lab`.
 
 ```bash
 # events.jsonl -> otel_sdk_spans.jsonl
@@ -170,7 +170,6 @@ mas-lab telemetry push otel_sdk_spans.jsonl [--endpoint http://localhost:4318 | 
 
 # Read back from ClickHouse
 mas-lab telemetry dump <SESSION_ID> -o session.otel.jsonl
-mas-lab telemetry list-apps
 mas-lab telemetry apps list | sessions list | traces list   # ClickHouse listings
 
 # Introspect the extensible mapping
@@ -186,11 +185,10 @@ Command notes:
 | `inspect` | Prints span, trace and `mas.boundary` counts as JSON. |
 | `compare` | `--strict/--no-strict` (default strict). |
 | `push` | `--infra` reads the endpoint from an infra manifest. Without either flag the endpoint comes from `$OTEL_EXPORTER_OTLP_ENDPOINT`. `--dry-run` converts and summarizes without sending. |
-| `dump` | `--by session` (default, the ClickHouse `session_id` column) or `--by trace` (hex trace id). Needs `[clickhouse]`. |
+| `dump` | From core `mas-lab`. `--by session` (default, the ClickHouse `session_id` column), `--by run` or `--by trace` (hex trace id). |
 | `kinds` | Lists native event kinds that have a registered span handler. |
-| `list-apps` | Lists `ServiceName` values in ClickHouse `otel_traces`. |
 
-When installed, this component replaces the core `push` / `verify` / `dump` stubs and keeps the core `show`, `apps`, `sessions`, `traces` commands.
+When installed, this component adds its commands to the core `show`, `dump`, `apps`, `sessions`, `traces` commands.
 
 Matching pipelines: `telemetry:native-to-otel-json` (convert + verify), `telemetry:otel-span-parity` (compare), `telemetry:export-otel-collector` (push), `telemetry:dump-session` (dump).
 
@@ -205,7 +203,6 @@ The step functions in `mas.library.telemetry.steps` are plain Python and do not 
 | `steps.compare_spans` | `run_compare_spans(reference, candidate, *, strict, output_path)` | structural span parity |
 | `steps.compare_spans` | `run_compare_spans_multi(reference, candidates, *, strict)` | one reference vs many candidates |
 | `steps.push_otlp` | `run_push_otlp(spans_path, *, endpoint, infra, service_name, app_name, dry_run)` | push to OTLP collector (endpoint from `endpoint`, an infra manifest, or `$OTEL_EXPORTER_OTLP_ENDPOINT`) |
-| `steps.push_otlp` | `run_dump_spans(session_id, *, output_path, query_by)` | ClickHouse to spans JSONL |
 
 ## API reference
 
@@ -228,7 +225,7 @@ from mas.library.telemetry import (
 | `OtelSpanSet.from_file(path)` / `.from_spans(list)` | load spans from JSONL / memory |
 | `.save(path)` / `.to_jsonl()` | write `otel_sdk_spans.jsonl` |
 | `.push_to_collector(*, endpoint, ...)` | serialize to an OTLP collector |
-| `OtelSpanSet.fetch_from_clickhouse(session_id, ...)` | read back from ClickHouse (`[clickhouse]`) |
+| `OtelSpanSet.fetch_from_clickhouse(conn, key, *, by, password, ...)` | read back from ClickHouse |
 | `.validate(*, strictness)` / `.verify_structural()` | verification |
 | `.compare_to(reference, *, strict)` | span parity vs a reference |
 | `.span_count` / `.trace_ids()` / `.span_names()` | accessors |
@@ -267,8 +264,6 @@ Details: [docs/verification.md](docs/verification.md), [docs/spanspec.md](docs/s
 | `push_spans_to_collector(sdk_spans, endpoint, ...)` | in-memory SDK spans to collector |
 | `convert_file_to_otlp_jsonl(path, output, ...)` | write OTLP/SDK JSONL without pushing |
 | `OtlpSpan` | minimal OTLP HTTP/JSON span model |
-| `dump_spans(session_id, *, query_by, output_path, ...)` | ClickHouse to JSONL (`[clickhouse]`) |
-| `list_apps(...)` | list ServiceNames in `otel_traces` |
 
 Details: [docs/otlp-collector.md](docs/otlp-collector.md).
 
@@ -284,7 +279,7 @@ TelemetryError                    (base)
 |   +-- SpecNotFoundError          .spanspec.yaml not found
 +-- SerializationError
     +-- CollectorPushError         OTLP push failed
-    +-- ClickHouseUnavailableError clickhouse-connect not installed
+    +-- ClickHouseQueryError       ClickHouse query or connection failed
 ```
 
 ## Schemas
@@ -309,6 +304,7 @@ mas/library/telemetry/
 +-- lab_cli.py             mas-lab telemetry CLI component
 +-- bench.py               PipelineStep adapters (needs [bench])
 +-- infra.py               OtelCollector / ClickHouse infra-manifest targets
++-- clickhouse_http.py     the one ClickHouse client: query, fetch_spans (read-back)
 +-- plugins/otel_plugin.py live `otel` observability plugin
 +-- conversion/            events.jsonl -> OTel spans (needs the SDK)
 |   +-- converter.py       MasOtelConverter: stateful span-tree core + primitive API
@@ -332,12 +328,11 @@ mas/library/telemetry/
 |   +-- compare.py         span parity compare (6 structural checks)
 +-- collector/             spans -> OTLP collector
 |   +-- otlp.py            push_file, push_spans_to_collector, OtlpSpan, convert_*
-|   +-- clickhouse.py      dump_spans, list_apps (read-back)
 +-- steps/                 standalone step functions (no pipeline dependency)
 |   +-- convert.py         run_convert
 |   +-- verify_spans.py    run_verify_spans
 |   +-- compare_spans.py   run_compare_spans, run_compare_spans_multi
-|   +-- push_otlp.py       run_push_otlp, run_dump_spans
+|   +-- push_otlp.py       run_push_otlp
 +-- schemas/               packaged contracts (shipped in the wheel)
     +-- otel_sdk_spans.schema.json    JSON Schema envelope
     +-- mas.spanspec.yaml             per-span L1-L4 SpanSpec

@@ -16,7 +16,6 @@ from typing import Any, Optional
 from mas.lab.benchmark.run_manager import BenchmarkRunManager
 from mas.lab.benchmark.schedule.metadata import register_mas_run
 from mas.lab.benchmark.schedule.run_batch.load import LoadedExperiment
-from mas.runtime import hostenv
 from mas.runtime.package_refs import path_ref_for_anchor
 from mas.runtime.spec.infra_paths import experiment_infra_bundle_path
 
@@ -297,12 +296,14 @@ def build_scenario_overlay_refs(
 
 
 def fixture_base_env(base_env: Mapping[str, str] | None) -> dict[str, str]:
-    """What fixture processes may inherit: the CLI's environment when it sent one, else the host's.
+    """What fixture processes may inherit: the CLI's allowlist when it sent one, else ``child_env(lab=True)``.
 
-    A run started without the CLI (the controller, a program embedding the lab) has no ``fixture_env``;
-    an empty environment would leave its fixtures without ``PATH``.
+    A run started without the CLI (the controller, a program embedding the lab) has no ``fixture_env``.
+    ``child_env(lab=True)`` still gives ``PATH``, XDG, and ``MAS_WORKSPACE_ROOT``.
     """
-    return dict(base_env) if base_env is not None else hostenv.snapshot()
+    from mas.runtime.secrets.process import child_env
+
+    return dict(base_env) if base_env is not None else child_env(lab=True)
 
 
 async def prepare_batch(

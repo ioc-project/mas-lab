@@ -46,7 +46,7 @@ spec:
 | `usage` | `connect` consumes a remote endpoint; `listen` starts the local provider; `[connect, listen]` does both. The old `use`, `deploy`, `use-and-deploy` still work and are deprecated. |
 | `transport` | `stdio`, `sse`, `streamable-http`, and others. |
 | `tools` | `"*"` discovers the names the server advertises. |
-| `headers` | Optional auth. Use `env:VAR`, never hardcoded secrets. |
+| `headers` | Optional auth. Write `{secret: NAME}` for a secret header, never a literal token. |
 
 Each layer owns one thing:
 
@@ -111,7 +111,7 @@ tool_servers:
     tools: "*"
 ```
 
-Keep the Step 2 server running, then run the unchanged agent with it (needs `OPENAI_API_KEY` or a Tutorial 0 cache replay):
+Keep the Step 2 server running, then run the unchanged agent with it (needs secret `openai` or a Tutorial 0 cache replay):
 
 ```bash
 mas-ctl chat docs/tutorials/01-building-an-agent/agent.yaml \

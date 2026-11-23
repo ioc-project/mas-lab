@@ -7,12 +7,12 @@ metadata:
   name: vertex
   description: >
     Vertex generateContent over HTTP. Same body as gemini. Bearer token
-    (VERTEX_ACCESS_TOKEN). Set VERTEX_PROJECT to the Google Cloud project id.
+    `{secret: vertex}`. Set project to the Google Cloud project id.
 
 spec:
   protocol: vertex
   proxy:
-    api_base: env:VERTEX_API_BASE|https://us-central1-aiplatform.googleapis.com
-    api_key_env: VERTEX_ACCESS_TOKEN
-    project: env:VERTEX_PROJECT|
-    location: env:VERTEX_LOCATION|us-central1
+    api_base: https://us-central1-aiplatform.googleapis.com
+    api_key: {secret: vertex}
+    project: ""
+    location: us-central1

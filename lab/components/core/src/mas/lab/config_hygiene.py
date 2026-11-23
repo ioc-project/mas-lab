@@ -5,7 +5,7 @@
 Enforces the declarative config separation rule:
 - Model names belong in agent manifests (agent.yaml), NOT in flavours,
   overlays, or mas.yaml.
-- Access credentials (api_base, api_key_env) belong in flavour files,
+- Access credentials (api_base, api_key SecretRef) belong in flavour files,
   NOT in agent.yaml, overlays, or mas.yaml.
 
 Rules
@@ -16,7 +16,7 @@ MODEL_IN_NON_AGENT
     Exception: ``null`` and ``mock`` values are allowed (test/no-op contexts).
 
 ACCESS_IN_NON_FLAVOUR
-    An ``api_base:``, ``api_key_env:``, or ``provider:`` key found in
+    An ``api_base:``, ``api_key:``, or ``provider:`` key found in
     agent.yaml, overlays, or mas.yaml.  Access credentials live in flavour
     files so that agents are portable across deployments.
 
@@ -32,6 +32,7 @@ CLI::
 
     mas-lab check-config [WORKSPACE_DIR]
 """
+
 from __future__ import annotations
 
 import os
@@ -40,18 +41,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
 
-_MODEL_LINE = re.compile(r"^\s+model:\s*\S")        # "    model: vertex_ai/..."
-_ACCESS_LINE = re.compile(r"^\s+(api_base|api_key_env|provider):\s*\S")
+_MODEL_LINE = re.compile(r"^\s+model:\s*\S")  # "    model: vertex_ai/..."
+_ACCESS_LINE = re.compile(r"^\s+(api_base|api_key|provider):\s*\S")
 
-_SKIP_DIRS = frozenset({
-    ".venv", "__pycache__", ".git", "logs", "output", "results",
-    ".cache", "node_modules", ".mypy_cache", ".ruff_cache",
-})
+_SKIP_DIRS = frozenset(
+    {
+        ".venv",
+        "__pycache__",
+        ".git",
+        "logs",
+        "output",
+        "results",
+        ".cache",
+        "node_modules",
+        ".mypy_cache",
+        ".ruff_cache",
+    }
+)
 
 _SEARCH_ROOTS = [
     "library-samples",
@@ -64,13 +74,14 @@ _SEARCH_ROOTS = [
 # Data types
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Violation:
-    path: str          # workspace-relative path
-    file_kind: str     # agent | overlay | flavour | infra | mas | config | other
+    path: str  # workspace-relative path
+    file_kind: str  # agent | overlay | flavour | infra | mas | config | other
     line_no: int
-    rule: str          # MODEL_IN_NON_AGENT | ACCESS_IN_NON_FLAVOUR
-    text: str          # original line (stripped)
+    rule: str  # MODEL_IN_NON_AGENT | ACCESS_IN_NON_FLAVOUR
+    text: str  # original line (stripped)
 
     def __str__(self) -> str:
         return f"  line {self.line_no} [{self.rule}]: {self.text}"
@@ -111,6 +122,7 @@ class HygieneReport:
 # Classification
 # ---------------------------------------------------------------------------
 
+
 def _classify(path: str, base: str) -> str:
     rel = path.replace(base + os.sep, "").replace(base + "/", "")
     parts = rel.lower().split(os.sep)
@@ -133,6 +145,7 @@ def _classify(path: str, base: str) -> str:
 # ---------------------------------------------------------------------------
 # Core checker
 # ---------------------------------------------------------------------------
+
 
 def _check_file(path: str, base: str) -> List[Violation]:
     rel = path.replace(base + os.sep, "").replace(base + "/", "")

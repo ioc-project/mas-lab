@@ -59,21 +59,12 @@ def code_fingerprint() -> str:
     return digest.hexdigest()[:16]
 
 
-_RUN_ENV_PREFIXES = ("MAS_", "OPENAI_", "AZURE_", "ANTHROPIC_", "LLM_", "LITELLM_", "OTEL_")
-_RUN_ENV_NAMES = frozenset(
-    {"SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"}
-)
-# Set by the client/daemon machinery itself, not by the user.
-_DAEMON_ENV_PREFIXES = ("MAS_CONTROLLER_", "MAS_DOTENV_LOADED")
-
-
 def env_fingerprint(environ: Mapping[str, str] | None = None) -> dict[str, str]:
-    """Hash of each environment variable that can change a run; values never leave the process."""
-    import hashlib
+    """The declared non-secret scheduler keys a run depends on (``MAS_LLM_*``), as plain values.
 
-    env = hostenv.snapshot() if environ is None else environ
-    return {
-        name: hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
-        for name, value in env.items()
-        if (name.startswith(_RUN_ENV_PREFIXES) or name in _RUN_ENV_NAMES) and not name.startswith(_DAEMON_ENV_PREFIXES)
-    }
+    The daemon and its client compare them. A secret, or anything from the secret store, is
+    never part of it: credentials are read from the store at the moment of use by both.
+    """
+    from mas.ctl.session.llm_scheduler_env import scheduler_fingerprint
+
+    return scheduler_fingerprint(environ)

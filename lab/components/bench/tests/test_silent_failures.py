@@ -45,21 +45,22 @@ def test_service_env_conflict_between_benchmarks_is_an_error(tmp_path: Path, mon
     from mas.lab.benchmark.service_manager import ServiceDef, ServiceManager
     from mas.runtime import hostenv
 
-    hostenv.clear_overlay(["MAS_TEST_SVC_ENDPOINT"])
+    hostenv.clear_overlay(["TEST_SVC_ENDPOINT"])
     first = ServiceManager(tmp_path / "none.yaml")
     second = ServiceManager(tmp_path / "none.yaml")
-    a = ServiceDef(name="a", env={"MAS_TEST_SVC_ENDPOINT": "http://a"})
-    b = ServiceDef(name="b", env={"MAS_TEST_SVC_ENDPOINT": "http://b"})
-    same = ServiceDef(name="c", env={"MAS_TEST_SVC_ENDPOINT": "http://a"})
+    a = ServiceDef(name="a", env={"TEST_SVC_ENDPOINT": "http://a"})
+    b = ServiceDef(name="b", env={"TEST_SVC_ENDPOINT": "http://b"})
+    same = ServiceDef(name="c", env={"TEST_SVC_ENDPOINT": "http://a"})
 
     first._apply_env(a)
     second._apply_env(same)
-    with pytest.raises(RuntimeError, match="conflicts"):
+    with pytest.raises(RuntimeError, match="conflicts") as info:
         second._apply_env(b)
+    assert "http://a" not in str(info.value) and "http://b" not in str(info.value)
     first._restore_env(a)
-    assert hostenv.get("MAS_TEST_SVC_ENDPOINT") == "http://a"
+    assert hostenv.get("TEST_SVC_ENDPOINT") == "http://a"
     second._restore_env(same)
-    assert hostenv.get("MAS_TEST_SVC_ENDPOINT") is None
+    assert hostenv.get("TEST_SVC_ENDPOINT") is None
 
 
 def test_service_env_unknown_placeholder_is_an_error(tmp_path: Path):

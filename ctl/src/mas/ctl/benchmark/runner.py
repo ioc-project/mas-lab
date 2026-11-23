@@ -110,10 +110,10 @@ def _memory_seeds_from_run_input(
 
 
 def _manifest_kind_on_disk(spec_path: Path) -> str:
-    from mas.runtime.spec.source import load_yaml_mapping
+    from mas.runtime.secrets import load_checked_document
 
     try:
-        doc = load_yaml_mapping(spec_path)
+        doc = load_checked_document(spec_path)
     except (FileNotFoundError, OSError):
         return ""
     return manifest_kind(doc or {})

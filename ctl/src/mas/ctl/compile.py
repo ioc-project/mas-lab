@@ -41,9 +41,10 @@ from mas.runtime.agent_defaults import (
     default_assembler_id,
     default_pattern_plugin_id,
 )
+from mas.runtime.secrets import load_checked_document
 from mas.runtime.spec.model_ref import ANY_MODEL
 from mas.runtime.spec.plugin_binding import normalize_plugin_binding, plugin_binding_id
-from mas.runtime.spec.source import load_yaml_mapping, resolve_yaml_path
+from mas.runtime.spec.source import resolve_yaml_path
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ def compile_manifest(
     """Load ``manifest``, apply overlays, attach Controls, optionally fill runtime defaults."""
     manifest = Path(manifest)
     overlays = [Path(p) for p in (overlay_paths or [])]
-    doc = load_yaml_mapping(manifest)
+    doc = load_checked_document(manifest)
     kind = str(doc.get("kind") or "").strip()
     kind_l = kind.lower()
     if kind_l not in {"agent"} | _MAS_KINDS:
@@ -488,7 +489,7 @@ def _classify_overlays(
 ) -> _ClassifiedOverlays:
     classified = _ClassifiedOverlays(mas=[], agent=[])
     for ov_path in overlay_paths:
-        raw = load_yaml_mapping(ov_path)
+        raw = load_checked_document(ov_path)
         if is_control_document(raw):
             continue
         overlay = normalize_overlay(raw, name=ov_path.stem)
@@ -588,7 +589,7 @@ def _load_mas_agents(
             if not isinstance(ref, str) or not ref.strip():
                 raise CompileError(f"agency agent {aid!r} is missing ref and is not an inline Agent")
             path = resolve_yaml_path(ref.strip(), mas_dir)
-            doc = load_yaml_mapping(path)
+            doc = load_checked_document(path)
         agents[aid] = doc
         agent_ids.append(aid)
         relpaths[aid] = _agent_relpath(entry, aid)

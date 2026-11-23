@@ -7,8 +7,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import yaml
 from mas.library_roots import _installed_named_libraries, clear_library_discovery_cache
+from mas.runtime.spec import batch_cache as batch_cache_module
 from mas.runtime.spec.batch_cache import (
     BatchCache,
     bind_batch_cache,
@@ -18,19 +18,19 @@ from mas.runtime.spec.batch_cache import (
 from mas.runtime.spec.source import load_yaml_file, load_yaml_mapping
 
 
-def test_second_load_does_not_call_yaml_safe_load(tmp_path: Path, monkeypatch) -> None:
+def test_second_load_does_not_parse_again(tmp_path: Path, monkeypatch) -> None:
     path = tmp_path / "agent.yaml"
     path.write_text("kind: Agent\nmetadata: {name: a}\n", encoding="utf-8")
     cache = BatchCache()
     token = bind_batch_cache(cache)
     parsed = {"n": 0}
-    real = yaml.safe_load
+    real = batch_cache_module.safe_yaml_load
 
     def wrapped(text: object, *args: object, **kwargs: object) -> object:
         parsed["n"] += 1
         return real(text, *args, **kwargs)
 
-    monkeypatch.setattr("mas.runtime.spec.batch_cache.yaml.safe_load", wrapped)
+    monkeypatch.setattr(batch_cache_module, "safe_yaml_load", wrapped)
     try:
         first = load_yaml_mapping(path)
         second = load_yaml_mapping(path)
@@ -62,13 +62,13 @@ def test_changed_file_is_reread(tmp_path: Path, monkeypatch) -> None:
     cache = BatchCache()
     token = bind_batch_cache(cache)
     parsed = {"n": 0}
-    real = yaml.safe_load
+    real = batch_cache_module.safe_yaml_load
 
     def wrapped(text: object, *args: object, **kwargs: object) -> object:
         parsed["n"] += 1
         return real(text, *args, **kwargs)
 
-    monkeypatch.setattr("mas.runtime.spec.batch_cache.yaml.safe_load", wrapped)
+    monkeypatch.setattr(batch_cache_module, "safe_yaml_load", wrapped)
     try:
         assert load_yaml_file(path)["kind"] == "Agent"
         path.write_text("kind: MAS\n", encoding="utf-8")
@@ -84,13 +84,13 @@ def test_cache_dropped_at_clear_reparses(tmp_path: Path, monkeypatch) -> None:
     cache = BatchCache()
     token = bind_batch_cache(cache)
     parsed = {"n": 0}
-    real = yaml.safe_load
+    real = batch_cache_module.safe_yaml_load
 
     def wrapped(text: object, *args: object, **kwargs: object) -> object:
         parsed["n"] += 1
         return real(text, *args, **kwargs)
 
-    monkeypatch.setattr("mas.runtime.spec.batch_cache.yaml.safe_load", wrapped)
+    monkeypatch.setattr(batch_cache_module, "safe_yaml_load", wrapped)
     try:
         load_yaml_file(path)
         cache.clear()

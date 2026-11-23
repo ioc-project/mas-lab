@@ -18,94 +18,27 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
-from urllib.request import ProxyHandler, Request, build_opener
+from urllib.request import Request
 
 from mas.lab.benchmark.environment.model import FixtureSpec
 from mas.lab.benchmark.environment.variables import Variables
+from mas.runtime.envkeys import BASE_KEYS, CHILD_KEYS
+from mas.runtime.secrets.transport import opener_for
 
 logger = logging.getLogger(__name__)
 
 EmitFn = Callable[..., Any]
 
 
-# A name is a secret when one of its `_`-separated words ends in a secret word (API_KEY, APIKEY,
-# GH_TOKEN, DB_PASSWORD), or is a weaker word on its own (AUTH, COOKIE, SESSION). Whole words, so
-# KEYBOARD and KEYCHAIN stay, and a short list of well-known harmless names is kept.
-_STRONG_SUFFIX = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "CREDENTIALS")
-_WEAK_WORDS = frozenset({"AUTH", "COOKIE", "COOKIES", "SESSION", "PAT", "PASS", "BEARER", "JWT"})
-_SECRET_NAMES = frozenset({"MYSQL_PWD", "PGPASSWORD", "AUTHORIZATION", "HTTP_AUTHORIZATION", "PROXY_AUTHORIZATION"})
-# A URL that carries credentials (postgres://user:pw@host, redis://:pw@host) is a secret whatever its name.
-_URL_CREDENTIALS = re.compile(r"://[^/\s:@]*:[^/\s@]+@")
-# Fixtures talk to 127.0.0.1. A proxy from the environment (http_proxy, macOS system settings) would
-# send that traffic away from the machine, or fail it, so these probes never use one.
-_LOOPBACK_OPENER = build_opener(ProxyHandler({}))
-
-
-def loopback_urlopen(target: Any, timeout: float) -> Any:
-    return _LOOPBACK_OPENER.open(target, timeout=timeout)
-
-
-def open_url(url: str, timeout: float) -> Any:
-    """``urlopen`` that skips the environment's proxy for a loopback host and keeps it for any other."""
-    from urllib.parse import urlparse
-    from urllib.request import urlopen
-
-    from mas.lab.benchmark.environment.limits import LOOPBACK_HOSTS
-
-    if (urlparse(url).hostname or "").lower() in LOOPBACK_HOSTS:
-        return loopback_urlopen(url, timeout)
-    return urlopen(url, timeout=timeout)
-
-
-_HARMLESS = frozenset(
-    {"SSH_AUTH_SOCK", "GPG_AGENT_INFO", "TERM_SESSION_ID", "SECURITYSESSIONID", "DBUS_SESSION_BUS_ADDRESS"}
-)
-
-
-def looks_secret(name: str) -> bool:
-    upper = name.upper()
-    if upper in _HARMLESS or upper.startswith("XDG_SESSION_"):
-        return False
-    if upper in _SECRET_NAMES:
-        return True
-    words = upper.split("_")
-    return any(word.endswith(_STRONG_SUFFIX) for word in words) or any(word in _WEAK_WORDS for word in words)
-
-
-def scrubbed_environ(base_env: Mapping[str, str], *, passthrough: tuple[str, ...] = ()) -> dict[str, str]:
-    """*base_env* minus names and URL values that look like secrets."""
-    keep = set(passthrough)
-    return {
-        name: value
-        for name, value in base_env.items()
-        if name in keep or not (looks_secret(name) or _URL_CREDENTIALS.search(value))
-    }
-
-
-# What a process needs to run at all; nothing else comes along in ``env_mode: minimal``.
-_MINIMAL_ENV = frozenset({"PATH", "HOME", "LANG", "TMPDIR", "TERM", "USER", "SYSTEMROOT", "TZ"})
-
-
 def _fixture_env(spec: FixtureSpec, base_env: Mapping[str, str]) -> dict[str, str]:
-    """The environment a fixture process gets: ``base_env`` (given by the CLI), minus secret-looking names.
+    """A fixture's environment: the allowlisted part of *base_env* (the CLI's ``child_env(lab=True)``),
+    the ``passthrough`` keys of it, then the declared ``env`` (a SecretRef revealed here only).
+    ``env_mode: minimal`` keeps only what a process needs to run at all, no trust anchor or proxy."""
+    from mas.runtime.secrets.resolver import reveal_mapping
 
-    A fixture is a command from a lab file; it must not inherit the API keys of the process that
-    runs the experiment. ``passthrough`` names variables to keep, ``env`` sets explicit values.
-    ``env_mode: minimal`` is an allow list instead: only what a process needs to start,
-    plus ``passthrough`` and ``env``.
-    """
-    keep = set(spec.passthrough)
-    if spec.env_mode == "minimal":
-        env = {
-            name: value
-            for name, value in base_env.items()
-            if name in keep or name in _MINIMAL_ENV or name.startswith("LC_")
-        }
-        env.update(spec.env)
-        env["MAS_FIXTURE_NAME"] = spec.name
-        return env
-    env = scrubbed_environ(base_env, passthrough=tuple(keep))
-    env.update(spec.env)
+    keys = BASE_KEYS if spec.env_mode == "minimal" else CHILD_KEYS
+    env = {name: value for name, value in base_env.items() if name in keys or name in spec.passthrough}
+    env.update(reveal_mapping(spec.env))
     env["MAS_FIXTURE_NAME"] = spec.name
     return env
 
@@ -448,7 +381,7 @@ class FixtureRegistry:
         while time.monotonic() < deadline:
             self._raise_if_exited(handle)
             try:
-                with loopback_urlopen(url, 2) as resp:
+                with opener_for(url).open(url, timeout=2) as resp:
                     status = int(resp.status)
             except HTTPError as exc:
                 status = int(exc.code)
@@ -477,7 +410,7 @@ class FixtureRegistry:
             body = json.dumps({"now": now_s}).encode("utf-8")
             try:
                 request = Request(url, data=body, method="POST", headers={"Content-Type": "application/json"})
-                loopback_urlopen(request, 2).close()
+                opener_for(url).open(request, timeout=2).close()
             except (URLError, OSError) as exc:
                 logger.debug("fixture clock push failed for %s: %s", handle.spec.name, exc)
 
@@ -809,7 +742,9 @@ def _command_of(pid: int) -> list[str]:
     try:
         import subprocess as sp
 
-        result = sp.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True)
+        from mas.runtime.secrets import child_env
+
+        result = sp.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, env=child_env())
         if result.returncode == 0:
             return result.stdout.strip().split()
     except OSError:

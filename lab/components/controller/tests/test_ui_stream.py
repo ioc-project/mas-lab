@@ -1013,7 +1013,6 @@ def test_live_experiment_returns_streams(client: TestClient, monkeypatch: pytest
         "mas.lab.controller.routes.experiments.resolve_experiment_path",
         lambda lib_dir, experiment: Path(lib_dir) / "experiment.yaml",
     )
-    monkeypatch.setattr("mas.lab.controller.routes.run._run_pre_steps", lambda *a, **k: None)
     res = client.post(
         "/api/commands",
         json={
@@ -1047,7 +1046,6 @@ def test_live_experiment_forwards_lane_overlays(client: TestClient, monkeypatch:
         "mas.lab.controller.routes.experiments.resolve_experiment_path",
         lambda lib_dir, experiment: Path(lib_dir) / "experiment.yaml",
     )
-    monkeypatch.setattr("mas.lab.controller.routes.run._run_pre_steps", lambda *a, **k: None)
     res = client.post(
         "/api/commands",
         json={
@@ -1173,7 +1171,6 @@ def test_run_experiment_reopens_ingest_after_reset(client: TestClient, monkeypat
         "mas.lab.controller.routes.experiments.resolve_experiment_path",
         lambda lib_dir, experiment: Path(lib_dir) / "experiment.yaml",
     )
-    monkeypatch.setattr("mas.lab.controller.routes.run._run_pre_steps", lambda *a, **k: None)
     started = client.post(
         "/api/commands",
         json={

@@ -19,6 +19,7 @@ from mas.ctl.session.engine_factory import (
     resolve_model_name,
 )
 from mas.runtime.driver.mocks import AutoCtxAssembler
+from mas.runtime.secrets import SecretMissing
 
 _CI_REPLAY = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm-cache" / "ci-replay.yaml"
 
@@ -52,7 +53,7 @@ def test_build_engine_uses_openai_base_url_when_infra_has_no_api_base(monkeypatc
     sel = build_engine(
         AutoCtxAssembler(),
         {"spec": {"models": [{"model": "gpt-4o"}]}},
-        ResolvedInfra(refs=[], llm_proxy={}),
+        ResolvedInfra(refs=[], llm_proxy={"api_key": {"secret": "openai"}}),
         anchor=tmp_path,
     )
     assert sel.mode == "live"
@@ -61,6 +62,23 @@ def test_build_engine_uses_openai_base_url_when_infra_has_no_api_base(monkeypatc
     assert sel.engine.llm_provider.api_base == "http://127.0.0.1:11434/v1"
 
 
+def test_the_default_secret_is_not_sent_to_the_host_openai_base_url_names(monkeypatch, tmp_path):
+    # kills: the openai default secret applied to any host the environment or a leaf names
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://gw.example/v1")
+    with pytest.raises(RuntimeError, match="no api_key SecretRef"):
+        build_engine(
+            AutoCtxAssembler(),
+            {"spec": {"models": [{"model": "gpt-4o"}]}},
+            ResolvedInfra(refs=[], llm_proxy={}),
+            anchor=tmp_path,
+        )
+
+
+@pytest.mark.no_secrets
 def test_build_engine_live_requires_api_key(monkeypatch, tmp_path):
     from mas.ctl.infra.resolve import resolve_infra_refs
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
@@ -71,8 +89,8 @@ def test_build_engine_live_requires_api_key(monkeypatch, tmp_path):
     ctx = AutoCtxAssembler()
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
 
-    with pytest.raises(RuntimeError, match="API key env unset: OPENAI_API_KEY"):
-        build_engine(ctx, {"spec": {}}, infra, anchor=tmp_path)
+    with pytest.raises(SecretMissing, match="openai/value"):
+        build_engine(ctx, {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
 
 
 def test_build_engine_cache_read_only_needs_no_api_key(monkeypatch, tmp_path):
@@ -144,7 +162,7 @@ def test_build_engine_uses_the_agent_llm_stack(monkeypatch, tmp_path):
     other_cache = tmp_path / "other.json"
     infra = bind_flavour(
         ResolvedInfra(
-            llm_proxy={"api_base": "http://127.0.0.1:9/v1", "api_key_env": "OPENAI_API_KEY", "pipeline": []},
+            llm_proxy={"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}, "pipeline": []},
             stacks={
                 "desk-llm": [{"layer": "llm_cache", "for": ["llm"], "params": {"cache_path": str(desk_cache)}}],
                 "other-llm": [{"layer": "llm_cache", "for": ["llm"], "params": {"cache_path": str(other_cache)}}],
@@ -180,6 +198,7 @@ def test_build_engine_uses_the_agent_llm_stack(monkeypatch, tmp_path):
     assert any((step.get("params") or {}).get("cache_path") == str(other_cache) for step in other_steps)
 
 
+@pytest.mark.no_secrets
 def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_path):
     """A readable cache does not excuse a missing key: a miss would fail mid-run."""
     from mas.ctl.infra.resolve import resolve_infra_refs
@@ -194,22 +213,24 @@ def test_build_engine_live_with_cache_still_requires_api_key(monkeypatch, tmp_pa
     cache.write_text('{"some-key": {"content": "Paris", "usage": {}, "source": "cache"}}', encoding="utf-8")
     infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
 
-    with pytest.raises(RuntimeError, match="API key env unset: OPENAI_API_KEY"):
+    with pytest.raises(SecretMissing, match="openai/value"):
         build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
 
 
-def test_build_engine_rejects_a_placeholder_api_key(monkeypatch, tmp_path):
-    """A pasted placeholder such as '…' used to fail deep inside the HTTP client."""
-    from mas.ctl.infra.resolve import resolve_infra_refs
-    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+def test_build_engine_rejects_a_string_api_key(tmp_path):
+    """A plaintext string is not a SecretRef."""
+    from mas.ctl.infra.models import InfraManifest
+    from mas.runtime.secrets.errors import SecretRefError
 
-    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
-    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
-    monkeypatch.setenv("OPENAI_API_KEY", "\u2026")
-    infra = resolve_infra_refs(["standard:openai"], anchor=tmp_path)
-
-    with pytest.raises(RuntimeError, match="non-ASCII"):
-        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+    path = tmp_path / "proxy.yaml"
+    path.write_text(
+        "apiVersion: infra/v1\nkind: LLMProxy\nmetadata: {name: arm}\n"
+        "spec:\n  protocol: openai\n  proxy:\n    api_base: https://h.example/v1\n"
+        "    api_key: not-a-ref\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SecretRefError, match="SecretRef"):
+        InfraManifest.load(path)
 
 
 def test_parse_execution_rejects_removed_mocking_key():
@@ -364,10 +385,10 @@ def test_resolve_model_name_unclaimed_with_several_leaves_is_error(monkeypatch):
     monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
     infra = ResolvedInfra(
         refs=[],
-        llm_proxy={"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY", "allowed": ["m-a"]},
+        llm_proxy={"api_base": "https://arm.example/v1", "api_key": {"secret": "arm"}, "allowed": ["m-a"]},
         llm_proxies={
-            "arm": {"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY", "allowed": ["m-a"]},
-            "judge": {"api_base": "https://judge.example/v1", "api_key_env": "JUDGE_KEY", "allowed": ["m-b"]},
+            "arm": {"api_base": "https://arm.example/v1", "api_key": {"secret": "arm"}, "allowed": ["m-a"]},
+            "judge": {"api_base": "https://judge.example/v1", "api_key": {"secret": "judge"}, "allowed": ["m-b"]},
         },
     )
     with pytest.raises(KeyError, match="not claimed"):
@@ -577,7 +598,7 @@ def _llm_proxy_file(tmp_path, api_base: str) -> str:
     path = tmp_path / "llm.yaml"
     path.write_text(
         "apiVersion: infra/v1\nkind: LLMProxy\nmetadata:\n  name: llm\n"
-        f"spec:\n  protocol: openai\n  proxy:\n    api_base: {api_base}\n    api_key_env: OPENAI_API_KEY\n"
+        f"spec:\n  protocol: openai\n  proxy:\n    api_base: {api_base}\n    api_key: {{secret: openai}}\n"
         "  models:\n    mappings:\n      default: gpt-4o\n",
         encoding="utf-8",
     )
@@ -604,17 +625,12 @@ def test_build_engine_warns_when_openai_base_url_is_ignored(monkeypatch, tmp_pat
     assert sel.engine.llm_provider.api_base == "https://example.invalid/v1"
 
 
-def test_standard_openai_follows_openai_base_url_and_says_where_the_key_goes(monkeypatch, tmp_path, caplog):
-    from mas.ctl.infra import env_resolve
-
-    env_resolve._warned_endpoints.clear()
+def test_standard_openai_uses_the_url_in_the_file(monkeypatch, tmp_path, caplog):
     monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
     with caplog.at_level("WARNING"):
         sel = _build_from(monkeypatch, tmp_path, "standard:openai")
-    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:9/v1"
-    messages = [r.getMessage() for r in caplog.records]
-    assert not any("is ignored" in m for m in messages)
-    assert any("API key" in m and "127.0.0.1:9" in m for m in messages)
+    assert sel.engine.llm_provider.api_base == "https://api.openai.com/v1"
+    assert any("OPENAI_BASE_URL" in r.getMessage() and "ignored" in r.getMessage() for r in caplog.records)
 
 
 def test_standard_openai_uses_openai_when_the_env_var_is_unset(monkeypatch, tmp_path):
@@ -632,16 +648,12 @@ def test_standard_openai_does_not_follow_openai_api_base(monkeypatch, tmp_path):
     assert sel.engine.llm_provider.api_base == "https://api.openai.com/v1"
 
 
-def test_a_named_env_var_in_the_file_is_not_stolen_by_openai_base_url(monkeypatch, tmp_path):
-    """The init form for a custom URL: its own variable decides, a leftover OPENAI_BASE_URL does not."""
+def test_a_plain_api_base_in_the_file_is_not_stolen_by_openai_base_url(monkeypatch, tmp_path):
+    """A custom URL in the file wins over a leftover OPENAI_BASE_URL."""
     monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:9/v1")
-    monkeypatch.delenv("MYLLM_API_BASE", raising=False)
-    ref = _llm_proxy_file(tmp_path, "env:MYLLM_API_BASE|http://127.0.0.1:11434/v1")
+    ref = _llm_proxy_file(tmp_path, "http://127.0.0.1:11434/v1")
     sel = _build_from(monkeypatch, tmp_path, ref)
     assert sel.engine.llm_provider.api_base == "http://127.0.0.1:11434/v1"
-    monkeypatch.setenv("MYLLM_API_BASE", "http://127.0.0.1:8000/v1")
-    sel = _build_from(monkeypatch, tmp_path, ref)
-    assert sel.engine.llm_provider.api_base == "http://127.0.0.1:8000/v1"
 
 
 def test_runtime_engine_cache_kill_switch_turns_off_an_infra_llm_cache_step():
@@ -676,3 +688,25 @@ def test_no_cache_step_is_inserted_by_default():
         cache_write_override=None,
     )
     assert not proxy.get("pipeline")
+
+
+@pytest.mark.no_secrets
+def test_build_engine_refuses_a_default_endpoint_leaf_without_its_secret(monkeypatch, tmp_path):
+    """A leaf with no api_base goes to the provider's default endpoint and still needs its key."""
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    infra = ResolvedInfra(
+        refs=[],
+        llm_proxy={"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}},
+        llm_proxies={
+            "local": {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}},
+            "upstream": {"protocol": "openai", "api_key": {"secret": {"name": "upstream", "key": "token"}}},
+        },
+    )
+    from secret_fakes import bound_secrets
+
+    with bound_secrets({"openai": "k"}), pytest.raises(SecretMissing, match="upstream/token") as caught:
+        build_engine(AutoCtxAssembler(), {"spec": {"models": [{"model": "gpt-4o"}]}}, infra, anchor=tmp_path)
+    assert caught.value.ref.name == "upstream"

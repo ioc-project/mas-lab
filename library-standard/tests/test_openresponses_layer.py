@@ -54,7 +54,7 @@ class _Transport:
 def _provider(transport: _Transport, **params: Any) -> OpenResponsesLLMProvider:
     return OpenResponsesLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openresponses"}, **params},
         call_kinds=("llm",),
     )
 
@@ -276,7 +276,7 @@ def test_failed_response_and_refusal_are_failures() -> None:
     failed = _Transport({"status": "failed", "error": {"code": "server_error", "message": "boom"}})
     with pytest.raises(ClassifiedFailure) as err:
         _chat(_provider(failed), messages=[{"role": "user", "content": "x"}])
-    assert err.value.failure_class is FailureClass.TRANSIENT and err.value.code == "server_error"
+    assert err.value.failure_class is FailureClass.APPLICATION and "boom" not in str(err.value)
     refused = _Transport(
         {"status": "completed", "output": [{"type": "message", "content": [{"type": "refusal", "refusal": "no"}]}]}
     )
@@ -338,7 +338,7 @@ def test_stream_error_event_and_failed_event_raise() -> None:
             messages=[{"role": "user", "content": "x"}],
             stream=True,
         )
-    assert err.value.failure_class is FailureClass.TRANSIENT
+    assert err.value.failure_class is FailureClass.APPLICATION
     with pytest.raises(ClassifiedFailure):
         _chat(
             _provider(
@@ -357,11 +357,12 @@ def test_streamed_http_error_body_is_classified() -> None:
         _chat(_provider(transport), messages=[{"role": "user", "content": "x"}], stream=True)
 
 
-def test_missing_key_names_the_env_var() -> None:
+@pytest.mark.no_secrets
+def test_missing_key_names_the_secret_ref() -> None:
     provider = OpenResponsesLLMProvider.wrap(
-        _Transport(), {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "MY_KEY"}, call_kinds=("llm",)
+        _Transport(), {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openresponses"}}, call_kinds=("llm",)
     )
-    with pytest.raises(Exception, match="MY_KEY"):
+    with pytest.raises(Exception, match="secret:openresponses/value"):
         _chat(provider, messages=[{"role": "user", "content": "x"}])
 
 

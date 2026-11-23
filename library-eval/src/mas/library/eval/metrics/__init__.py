@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
+from mas.library.eval.errors import judge_error_text
 from mas.library.eval.evaluator import MetricScore
 
 INPUT_KINDS = frozenset({"native_trace", "otel_spans", "kg"})
@@ -104,7 +105,7 @@ class EvalMetric(ABC):
                 results[metric.metric_id] = {
                     "value": None,
                     "reasoning": "",
-                    "error": str(exc),
+                    "error": judge_error_text(exc),
                 }
         return results
 

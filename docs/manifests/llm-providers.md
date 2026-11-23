@@ -7,7 +7,7 @@
 A **protocol layer** turns the portable LLM call (messages, tools, sampling, `reasoning`) into one provider's wire format and turns the reply back into an OpenAI-shaped message.
 `protocol: <name>` plus a url on an infra `LLMProxy` selects the layer; it expands to `[http, <name>]`, so the layer posts through the shared http transport.
 The spec is a portable **overset** (the union of what providers accept): each layer maps only what its wire supports, and the [model catalog](llm-model-catalog.md) decides per model what is allowed.
-Infra fields (`api_base`, `api_key_env`, `timeout`) are in [infra.md](infra.md).
+Infra fields (`api_base`, `api_key`, `timeout`) are in [infra.md](infra.md).
 
 ## Feature matrix
 

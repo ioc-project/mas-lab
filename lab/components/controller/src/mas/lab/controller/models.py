@@ -4,11 +4,20 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
-from pydantic import AliasChoices, BaseModel, Field
+from typing import Annotated, Optional
 
 from mas.lab.controller.constants import MAX_TIMEOUT
+from mas.lab.controller.path_safety import validate_name
+from pydantic import AfterValidator, AliasChoices, BaseModel, Field
+
+# A name that becomes a file or directory name: the name allow-list, no path separator, no ``..``.
+FileName = Annotated[str, AfterValidator(validate_name)]
+
+
+def _file_name_keys(value: dict[str, str]) -> dict[str, str]:
+    for key in value:
+        validate_name(key)
+    return value
 
 
 class ValidateRequest(BaseModel):
@@ -19,7 +28,7 @@ class ValidateRequest(BaseModel):
 
 
 class SaveOverlayRequest(BaseModel):
-    name: str = Field(..., description="Overlay name (used as filename, without .yaml)")
+    name: FileName = Field(..., description="Overlay name (used as filename, without .yaml)")
     content: str = Field(..., description="Full overlay YAML content")
     run_validation: bool = Field(default=True, description="Validate against schema before saving")
 
@@ -77,10 +86,6 @@ class RunMASRequest(BaseModel):
         default_factory=list,
         description="If set, only these infra files are passed to mas-ctl (no directory glob).",
     )
-    pre: list[dict] = Field(
-        default_factory=list,
-        description="Inline pipeline-style steps run in the library cwd before mas-ctl (type: shell).",
-    )
     demo_ui_ingest_url: Optional[str] = Field(
         default=None,
         description="When set, mas-ctl POSTs live native records to this demo-ui ingest URL.",
@@ -111,10 +116,6 @@ class ExperimentRunRequest(BaseModel):
     infra_refs: list[str] = Field(
         default_factory=list,
         description="Extra infra files relative to the library root (LLM cache, model pin)",
-    )
-    pre: list[dict] = Field(
-        default_factory=list,
-        description="Inline pipeline-style steps run in the library cwd before the worker starts",
     )
     demo_ui_ingest_url: Optional[str] = Field(
         default=None,
@@ -183,13 +184,13 @@ class PipelineRunRequest(BaseModel):
 
 
 class SavePipelineRequest(BaseModel):
-    name: str = Field(..., description="Pipeline name (used as filename, without .yaml)")
+    name: FileName = Field(..., description="Pipeline name (used as filename, without .yaml)")
     content: str = Field(..., description="Full pipeline YAML content")
     run_validation: bool = Field(default=True, description="Validate against schema before saving")
 
 
 class SaveExperimentRequest(BaseModel):
-    name: str = Field(..., description="Experiment name (used as filename, without .yaml)")
+    name: FileName = Field(..., description="Experiment name (used as filename, without .yaml)")
     content: str = Field(..., description="Full experiment YAML content")
 
 
@@ -207,9 +208,9 @@ class EvalOutputRequest(BaseModel):
 
 
 class SaveMASResourceRequest(BaseModel):
-    mas_name: str = Field(..., description="MAS name (becomes the app folder name under apps/)")
+    mas_name: FileName = Field(..., description="MAS name (becomes the app folder name under apps/)")
     mas_yaml: str = Field(..., description="MAS manifest YAML content")
-    agents: dict[str, str] = Field(
+    agents: Annotated[dict[str, str], AfterValidator(_file_name_keys)] = Field(
         default_factory=dict,
         description="Map of agent name → agent YAML content (stored in apps/<mas_name>/agents/)",
     )

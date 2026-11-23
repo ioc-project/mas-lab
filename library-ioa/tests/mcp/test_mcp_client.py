@@ -143,13 +143,9 @@ def test_call_tool_forwards_timeout_and_meta() -> None:
     assert session.call_tool.call_args.kwargs["meta"] == {"trace": "1"}
 
 
-def test_headers_use_create_mcp_http_client() -> None:
-    client = MCPClient(
-        url="http://127.0.0.1:9001/mcp",
-        headers={"Authorization": "Bearer x"},
-        timeout=2.5,
-        transport="streamable-http",
-    )
+def test_headers_go_on_the_client_the_mcp_client_builds() -> None:
+    from secret_fakes import bound_secrets
+
     http_clients: list[object] = []
     transports: list[_Transport] = []
 
@@ -173,15 +169,24 @@ def test_headers_use_create_mcp_http_client() -> None:
         return cm
 
     session = _Session(list_pages=[_ListResult([_Dump({"name": "t"})])])
-    with (
-        patch("library_ioa.plugins.mcp.client.create_mcp_http_client", side_effect=_Httpx),
-        patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
-        patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
-    ):
-        asyncio.run(client.list_tools())
+    with bound_secrets({"mcp": "x"}):
+        client = MCPClient(
+            url="http://127.0.0.1:9001/mcp",
+            headers={"Authorization": {"secret": {"name": "mcp", "prefix": "Bearer "}}},
+            timeout=2.5,
+            transport="streamable-http",
+        )
+        with (
+            patch("httpx2.AsyncClient", side_effect=_Httpx),
+            patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
+            patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
+        ):
+            asyncio.run(client.list_tools())
 
     assert http_clients[0].kwargs["headers"] == {"Authorization": "Bearer x"}
-    assert "timeout" not in http_clients[0].kwargs
+    assert http_clients[0].kwargs["timeout"].read == 300.0  # the SDK's stream budget, not the call timeout
+    assert "trust_env" not in http_clients[0].kwargs  # SSL_CERT_FILE still applies
+    assert "mounts" in http_clients[0].kwargs  # a loopback url never goes through a proxy
     assert transports[0].exits == 1
     assert http_clients[0].exits == 1
 
@@ -197,7 +202,7 @@ def test_provided_http_client_is_passed_to_streamable_http() -> None:
 
     session = _Session(list_pages=[_ListResult([_Dump({"name": "t"})])])
     with (
-        patch("library_ioa.plugins.mcp.client.create_mcp_http_client") as factory,
+        patch("httpx2.AsyncClient") as factory,
         patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
         patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
     ):
@@ -207,7 +212,9 @@ def test_provided_http_client_is_passed_to_streamable_http() -> None:
     assert captured["kwargs"]["http_client"] is provided
 
 
-def test_timeout_does_not_create_custom_http_client() -> None:
+def test_the_call_timeout_is_not_the_http_client_budget() -> None:
+    import httpx2
+
     client = MCPClient(url="http://127.0.0.1:9001/mcp", timeout=30)
     captured: dict[str, object] = {}
 
@@ -217,14 +224,14 @@ def test_timeout_does_not_create_custom_http_client() -> None:
 
     session = _Session(list_pages=[_ListResult([_Dump({"name": "t"})])])
     with (
-        patch("library_ioa.plugins.mcp.client.create_mcp_http_client") as factory,
         patch("library_ioa.plugins.mcp.client.streamable_http_client", side_effect=_factory),
         patch("library_ioa.plugins.mcp.client.ClientSession", return_value=session),
     ):
         asyncio.run(client.list_tools())
 
-    factory.assert_not_called()
-    assert "http_client" not in captured["kwargs"]
+    http_client = captured["kwargs"]["http_client"]
+    assert isinstance(http_client, httpx2.AsyncClient)
+    assert http_client.timeout.read == 300.0 and http_client.timeout.connect == 30.0
 
 
 def test_follow_pagination_false_stops_after_first_page() -> None:

@@ -41,7 +41,7 @@ def test_vertex_posts_project_path_with_bearer() -> None:
         transport,
         {
             "api_base": "https://us-central1-aiplatform.googleapis.com",
-            "api_key": "tok",
+            "api_key": {"secret": "vertex"},
             "project": "demo-proj",
             "location": "us-central1",
         },
@@ -51,7 +51,7 @@ def test_vertex_posts_project_path_with_bearer() -> None:
     assert req.url.path.endswith(
         "/v1beta1/projects/demo-proj/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent"
     )
-    assert req.headers["Authorization"] == "Bearer tok"
+    assert req.headers["Authorization"] == "Bearer secret"
     assert "x-goog-api-key" not in req.headers
     body = json.loads(req.content)
     assert body["contents"][0]["parts"][0]["text"] == "q"
@@ -65,7 +65,7 @@ def test_nested_proxy_project_reaches_the_post() -> None:
         {
             "proxy": {
                 "api_base": "https://europe-west1-aiplatform.googleapis.com",
-                "api_key": "tok",
+                "api_key": {"secret": "vertex"},
                 "project": "demo-proj",
                 "location": "europe-west1",
             }
@@ -80,7 +80,7 @@ def test_nested_proxy_project_reaches_the_post() -> None:
 def test_missing_project_is_runtime_error() -> None:
     provider = VertexLLMProvider.wrap(
         _Transport(),
-        {"api_base": "https://us-central1-aiplatform.googleapis.com", "api_key": "tok"},
+        {"api_base": "https://us-central1-aiplatform.googleapis.com", "api_key": {"secret": "vertex"}},
     )
     with pytest.raises(RuntimeError, match="proxy.project"):
         _chat(provider, model="gemini-2.5-flash", messages=[{"role": "user", "content": "q"}])

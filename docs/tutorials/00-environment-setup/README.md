@@ -13,7 +13,7 @@ You install MAS Lab, give it access to an LLM, and run your first `mas-ctl` comm
 ## What you need
 
 - A clone of the repository: `git clone https://github.com/ioc-project/mas-lab.git && cd mas-lab`
-- An `OPENAI_API_KEY` for live LLM runs. Offline, only `mas-ctl validate` works.
+- An OpenAI key for live LLM runs (`echo KEY | mas-ctl secrets set openai`). Offline, only `mas-ctl validate` works.
 
 ## Choose your path
 
@@ -34,7 +34,7 @@ uv venv .venv
 uv pip install mas-lab
 export PATH="$PWD/.venv/bin:$PATH"
 mas-lab init
-export OPENAI_API_KEY=<your-key>
+echo KEY | mas-ctl secrets set openai
 ```
 
 `mas-lab` is the meta-package: it installs the runtime, control plane, lab
@@ -50,18 +50,19 @@ LLM access has three parts. Keep secrets out of YAML.
 
 | Piece | What it is | Where it lives |
 | ----- | ---------- | -------------- |
-| **Infra manifest** | Endpoint settings: API base URL, allowed models, `api_key_env` name (no secret) | `infra_refs` in `config.yaml`, or `--infra-ref` |
-| **Credential** | API key or token | `docker/.env` (Docker) or a gitignored `.env` (developers) |
+| **Infra manifest** | Endpoint settings: API base URL, allowed models, `api_key` SecretRef | `infra_refs` in `config.yaml`, or `--infra-ref` |
+| **Credential** | API key or token | file store (`echo KEY \| mas-ctl secrets set openai`) |
 | **Flavour** | Glue between the logic spec and the infra (`spec.bind`); `local` is the default and binds nothing | `mas_ctl.flavour` / `mas_lab.flavour`, or the manifest |
 
 The bundled `standard:openai` and `standard:ollama` infra need no `mas-lab init`. Set the key:
 
 ```bash
-cp docs/tutorials/00-environment-setup/.env.example docker/.env
-# Edit docker/.env — set OPENAI_API_KEY=sk-...
+echo KEY | mas-ctl secrets set openai
 ```
 
-For an OpenAI-compatible proxy, pass `--infra-ref standard:llm-proxy` and set `LLM_PROXY_API_BASE` next to the key.
+`.env` (see `.env.example`) holds non-secret `MAS_LLM_*` keys only; it never holds an API key.
+
+For an OpenAI-compatible proxy, pass `--infra-ref standard:llm-proxy` and set `proxy.api_base` to your gateway URL with an overlay.
 Schema: [`config.schema.yaml`](../../schemas/config.schema.yaml). Reference: [user-config.md](../../user-config.md).
 
 ### Step 2 — Build the images
@@ -119,9 +120,9 @@ Open the UI at <http://localhost:8080>. The controller API is at <http://localho
 | Task | Purpose |
 | ---- | ------- |
 | `task start` / `task restart` | Start the stack; rebuild after `docker/.env` or code changes |
-| `task verify-env` | Confirm `OPENAI_API_KEY` inside the backend container |
+| `task verify-env` | Confirm the `openai` secret is present inside the backend container |
 
-Put secrets in `docker/.env` only. A shell `export` does not reach containers. Details: `docker/README.md`.
+Put secrets in the file store (`mas-ctl secrets set`), not a shell `export`. A host `export` does not reach containers. Details: `docker/README.md`.
 
 ## Path 2 — Developers (uv + task)
 
@@ -152,12 +153,12 @@ task verify-unit
 ### Step 2 — Set the key
 
 ```bash
-cp docs/tutorials/00-environment-setup/.env.example .env
-# Edit .env and set OPENAI_API_KEY=sk-...
+echo KEY | mas-ctl secrets set openai
+# or copy an existing dotenv into the file store:
+# mas-ctl secrets import-env .env
 ```
 
-`mas-ctl` and `mas-lab benchmark run` load `.env` from the current directory. `mas-ctl` also searches
-from the manifest's directory up to the repository root. Use `mas-ctl --env FILE …` to name one. Never commit keys.
+The value lives in the file store (`<workspace>/.mas/secrets`). `mas-ctl secrets import-env FILE` copies dotenv lines into that store and does not export them into the process. Never commit keys.
 
 ### Step 3 — Set the user config
 
@@ -252,25 +253,25 @@ On `mas-ctl`, `-o` / `--overlay` applies an overlay (a small YAML file that chan
 
 ## Infrastructure: LLM endpoints
 
-The infra reference says where to call the LLM. The key lives in `.env` or `docker/.env`.
+The infra reference says where to call the LLM. The key lives in the secret store (`echo KEY | mas-ctl secrets set openai`).
 
 | Bundle | Use when |
 | ------ | -------- |
-| `standard:openai` | OpenAI API (`OPENAI_API_KEY`) |
+| `standard:openai` | OpenAI API (`{secret: openai}`) |
 | `standard:ollama` | Local Ollama at `http://localhost:11434/v1` (no key) |
-| `standard:groq` | Groq (`GROQ_API_KEY`) |
-| `standard:openrouter` | OpenRouter (`OPENROUTER_API_KEY`) |
-| `standard:xai` | xAI (`XAI_API_KEY`) |
-| `standard:azure` | Azure OpenAI (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`) |
-| `standard:bedrock` | Bedrock Converse (`AWS_BEARER_TOKEN_BEDROCK`) |
+| `standard:groq` | Groq (`{secret: groq}`) |
+| `standard:openrouter` | OpenRouter (`{secret: openrouter}`) |
+| `standard:xai` | xAI (`{secret: xai}`) |
+| `standard:azure` | Azure OpenAI (`{secret: azure}`, set the endpoint as a host value) |
+| `standard:bedrock` | Bedrock Converse (`{secret: bedrock}`) |
 | `standard:litellm` | Local LiteLLM proxy |
-| `standard:cerebras` | Cerebras (`CEREBRAS_API_KEY`) |
-| `standard:mistral` | Mistral (`MISTRAL_API_KEY`) |
+| `standard:cerebras` | Cerebras (`{secret: cerebras}`) |
+| `standard:mistral` | Mistral (`{secret: mistral}`) |
 | `standard:vllm` | Local vLLM at `http://localhost:8000/v1` |
-| `standard:huggingface` | Hugging Face router (`HF_TOKEN`) |
-| `standard:databricks` | Databricks serving (`DATABRICKS_TOKEN`, `DATABRICKS_HOST`) |
-| `standard:vertex` | Vertex AI (`VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT`) |
-| `standard:openresponses` | Open Responses host (`OPENRESPONSES_API_KEY`) |
+| `standard:huggingface` | Hugging Face router (`{secret: hf}`) |
+| `standard:databricks` | Databricks serving (`{secret: databricks}`, set the host as a host value) |
+| `standard:vertex` | Vertex AI (`{secret: vertex}`, set the project as a host value) |
+| `standard:openresponses` | Open Responses host (`{secret: openresponses}`) |
 | `standard:production` | Tutorial default. Wraps `standard:openai`. |
 | `standard:development` | Local Ollama bundle |
 
@@ -298,7 +299,7 @@ TUTORIAL_ONLINE=1 pytest tests/tutorials/test_scenario_commands.py -v -k tuto-00
 | Symptom | Fix |
 | ------- | --- |
 | `command not found: mas-lab` | Run `direnv allow` or `source .venv/bin/activate`, then `task install`. |
-| `401` from the LLM | Set `OPENAI_API_KEY` in `docker/.env` then `task restart` (Docker), or in the repo `.env` (source). Check `default_infra` with `mas-lab config`. |
+| `401` from the LLM | `echo KEY \| mas-ctl secrets set openai` (or `mas-ctl secrets import-env FILE`). Check `default_infra` with `mas-lab config`. |
 | Docker build fails | Run `docker compose` from `docker/`. The first `uv sync` in the image needs network access. |
 | Wrong benchmark output path | Run `mas-lab config`. Outputs go to `$XDG_DATA_HOME/mas/labs/` unless the user config says otherwise. |
 

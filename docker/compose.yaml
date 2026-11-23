@@ -6,8 +6,12 @@
 #
 # UI:  http://localhost:8080
 # API: http://localhost:8090
+# Both ports are published on the host's loopback only (MAS_BIND_ADDRESS, default 127.0.0.1).
 #
 # Mount your project at /workspace and persistent data at /data (see .env.example).
+# docker/.env only fills the ${...} values below; the containers get the keys listed under
+# `environment:` and nothing else. Secrets live in the file store <workspace>/.mas/secrets on the
+# workspace mount: `docker compose run --rm cli mas-ctl secrets set openai` writes it to the host.
 
 name: mas-lab
 
@@ -18,20 +22,20 @@ services:
       dockerfile: docker/backend/Dockerfile
     image: mas-lab-backend:local
     ports:
-      - "${MAS_BACKEND_PORT:-8090}:8090"
-    environment:
+      - "${MAS_BIND_ADDRESS:-127.0.0.1}:${MAS_BACKEND_PORT:-8090}:8090"
+    environment: &host-env
       MAS_WORKSPACE_ROOT: /workspace
       MAS_DATA_ROOT: /data
       MAS_CONTROLLER_PORT: "8090"
-    # Secrets and local overrides: docker/.env only (gitignored).
-    # Intentionally NOT ${OPENAI_API_KEY} here — shell exports must not override the file.
-    env_file:
-      - path: .env
-        required: false
+      MAS_LAB_ROOT: ${MAS_LAB_ROOT:-}
+      MAS_LLM_VERIFY_SSL: ${MAS_LLM_VERIFY_SSL:-}
+      SSL_CERT_FILE: ${SSL_CERT_FILE:-}
+      # The user config mount below; not under /root, which the server's user cannot read.
+      XDG_CONFIG_HOME: /config
     volumes:
       - ${MAS_WORKSPACE_MOUNT:-..}:/workspace
       - ${MAS_DATA_MOUNT:-./data}:/data
-      - ${MAS_XDG_CONFIG_MOUNT:-${HOME}/.config/mas}:/root/.config/mas:ro
+      - ${MAS_XDG_CONFIG_MOUNT:-${HOME}/.config/mas}:/config/mas:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/api/health')"]
       interval: 15s
@@ -45,7 +49,7 @@ services:
       dockerfile: docker/ui/Dockerfile
     image: mas-lab-ui:local
     ports:
-      - "${MAS_UI_PORT:-8080}:8080"
+      - "${MAS_BIND_ADDRESS:-127.0.0.1}:${MAS_UI_PORT:-8080}:8080"
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8090}
     depends_on:
@@ -58,14 +62,9 @@ services:
   cli:
     profiles: [tools]
     image: mas-lab-backend:local
-    environment:
-      MAS_WORKSPACE_ROOT: /workspace
-      MAS_DATA_ROOT: /data
-    env_file:
-      - path: .env
-        required: false
+    environment: *host-env
     volumes:
       - ${MAS_WORKSPACE_MOUNT:-..}:/workspace
       - ${MAS_DATA_MOUNT:-./data}:/data
-      - ${MAS_XDG_CONFIG_MOUNT:-${HOME}/.config/mas}:/root/.config/mas:ro
+      - ${MAS_XDG_CONFIG_MOUNT:-${HOME}/.config/mas}:/config/mas:ro
     entrypoint: ["/usr/local/bin/mas-lab-entrypoint"]

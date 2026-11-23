@@ -8,9 +8,10 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-
+from mas.lab.controller.manifest_validation import refuse_secret_fields, refuse_secret_values
 from mas.lab.controller.models import PipelineRunRequest, SavePipelineRequest, ValidateRequest
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from mas.lab.controller.path_safety import is_relative_name
+from mas.lab.controller.routes._api import deps, jobs, validate_pipeline_yaml
 
 router = APIRouter()
 
@@ -22,11 +23,11 @@ async def pipeline_run(library_name: str, req: PipelineRunRequest):
 
     cleanup_paths: list[Path] = []
 
-    # Support inline YAML content (has newlines) or a filename
-    if "\n" in req.pipeline_yaml:
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".yaml", prefix="pipeline-", delete=False, dir=str(lib_dir)
-        )
+    refuse_secret_fields({"only": req.only})
+    # A relative file name names a pipeline file; anything else is inline YAML content.
+    if not is_relative_name(req.pipeline_yaml):
+        refuse_secret_values(req.pipeline_yaml)
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="pipeline-", delete=False, dir=str(lib_dir))
         tmp.write(req.pipeline_yaml)
         tmp.close()
         pipeline_path = Path(tmp.name).name
@@ -49,7 +50,7 @@ async def pipeline_run(library_name: str, req: PipelineRunRequest):
 
 
 @router.post("/api/libraries/{library_name}/pipelines/validate", tags=["Libraries"])
-async def validate_pipeline(library_name: str, req: ValidateRequest):
+def validate_pipeline(library_name: str, req: ValidateRequest):
     """Validate a pipeline manifest against the schema and check DAG integrity."""
     deps.get_library_path(library_name)
     result = validate_pipeline_yaml(req.manifest_yaml)
@@ -59,7 +60,7 @@ async def validate_pipeline(library_name: str, req: ValidateRequest):
 
 
 @router.post("/api/libraries/{library_name}/pipelines", tags=["Libraries"], status_code=201)
-async def create_pipeline(library_name: str, req: SavePipelineRequest):
+def create_pipeline(library_name: str, req: SavePipelineRequest):
     """Create a new pipeline definition in the library's pipelines/ directory."""
     lib_dir = deps.get_library_path(library_name)
     pipe_dir = lib_dir / "pipelines"
@@ -76,6 +77,7 @@ async def create_pipeline(library_name: str, req: SavePipelineRequest):
         if not result["valid"]:
             raise HTTPException(status_code=422, detail=result["errors"])
 
+    refuse_secret_values(req.content)
     file_path.write_text(req.content, encoding="utf-8")
     deps.get_manifest_store().invalidate()
     return {"name": req.name, "filename": filename}
@@ -95,7 +97,7 @@ async def get_pipeline(library_name: str, pipeline_name: str):
 
 
 @router.put("/api/libraries/{library_name}/pipelines/{pipeline_name}", tags=["Libraries"])
-async def update_pipeline(library_name: str, pipeline_name: str, req: SavePipelineRequest):
+def update_pipeline(library_name: str, pipeline_name: str, req: SavePipelineRequest):
     """Update an existing pipeline definition. Supports rename via req.name."""
     lib_dir = deps.get_library_path(library_name)
     pipe_dir = lib_dir / "pipelines"
@@ -117,6 +119,7 @@ async def update_pipeline(library_name: str, pipeline_name: str, req: SavePipeli
         if not result["valid"]:
             raise HTTPException(status_code=422, detail=result["errors"])
 
+    refuse_secret_values(req.content)
     if old_path != new_path:
         old_path.unlink()
     new_path.write_text(req.content, encoding="utf-8")

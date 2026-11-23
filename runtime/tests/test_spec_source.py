@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from mas.runtime.spec import source as source_module
 from mas.runtime.spec.source import (
     clear_yaml_file_cache,
     load_yaml_file,
@@ -89,13 +90,13 @@ def test_load_yaml_file_keeps_the_parse_when_only_mtime_changes(
     clear_yaml_file_cache()
     assert load_yaml_file(f) == {"a": 1}
     parsed = {"count": 0}
-    real = yaml.safe_load
+    real = source_module.safe_yaml_load
 
     def wrapped(text: object, *args: object, **kwargs: object) -> object:
         parsed["count"] += 1
         return real(text, *args, **kwargs)
 
-    monkeypatch.setattr("mas.runtime.spec.source.yaml.safe_load", wrapped)
+    monkeypatch.setattr(source_module, "safe_yaml_load", wrapped)
     os.utime(f, (f.stat().st_atime + 5, f.stat().st_mtime + 5))
     assert load_yaml_file(f) == {"a": 1}
     assert parsed["count"] == 0

@@ -13,8 +13,6 @@ import random
 import time
 from typing import Any, Dict, List
 
-from mas.runtime import hostenv
-
 try:
     from deepeval.metrics import AnswerRelevancyMetric as _RealAnswerRelevancyMetric
     from deepeval.test_case import LLMTestCase
@@ -37,23 +35,27 @@ def _resolve_model_arg(model: Any) -> Any:
     If *model* is already a ``DeepEvalBaseLLM`` instance, return as-is.
     If it's a string (e.g. ``"azure/gpt-4o"``), create an ``OpenAIModel``
     configured with the workspace proxy base-url and API key.
+
+    A secret error (missing, denied) and an infra resolution error propagate: deepeval's own
+    default client is never used as a fallback for a judge that was meant to use the store.
+    Only a missing optional package (``library-eval``) leaves *model* as given.
     """
     if model is not None and not isinstance(model, str):
         return model
     try:
         from mas.library.eval.mce.runner import _deepeval_llm_cls, _resolve_infra
-
-        api_base, api_key_env, default_model = _resolve_infra()
-        effective_model = model or default_model or "gpt-4o"
-        api_key = hostenv.get(api_key_env) or hostenv.get("OPENAI_API_KEY") or "none"
-        cls = _deepeval_llm_cls()
-        return cls(
-            model=effective_model,
-            api_key=api_key,
-            base_url=api_base or None,
-        )
-    except Exception:
+        from mas.library.standard.lib.openai_client import openai_api_base, reveal_openai_key
+    except ImportError:
         return model
+
+    api_base, api_key_ref, default_model = _resolve_infra()
+    effective_model = model or default_model or "gpt-4o"
+    cls = _deepeval_llm_cls()
+    return cls(
+        model=effective_model,
+        api_key=reveal_openai_key(api_key_ref, api_base),
+        base_url=openai_api_base(api_base),
+    )
 
 
 class AnswerRelevancyMetric:
@@ -70,9 +72,9 @@ class AnswerRelevancyMetric:
         self.reason = ""
         self._delegate = None
         if DEEPEVAL_AVAILABLE and _RealAnswerRelevancyMetric is not None:
+            # Outside the try: a secret or infra error must stop the metric, not turn it into a mock.
+            resolved_model = _resolve_model_arg(kwargs.pop("model", None))
             try:
-                model_arg = kwargs.pop("model", None)
-                resolved_model = _resolve_model_arg(model_arg)
                 self._delegate = _RealAnswerRelevancyMetric(
                     threshold=threshold,
                     model=resolved_model,
@@ -109,9 +111,12 @@ class AnswerRelevancyMetric:
                 self.score = float(getattr(self._delegate, "score", 0.0))
                 self.reason = str(getattr(self._delegate, "reason", ""))
             except Exception as exc:
+                from mas.runtime.reliability.classify import error_summary
+
+                # The type and status only: a judge SDK error's text is the provider's body.
                 self.score = 0.0
                 self.reason = ""
-                error = str(exc)
+                error = error_summary(exc)
         else:
             self.score = random.uniform(0.6, 1.0)
             self.reason = "Mock relevancy score."

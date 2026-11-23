@@ -7,11 +7,11 @@ metadata:
   name: azure
   description: >
     Azure OpenAI. Classic deployments post under /openai/deployments/{name}.
-    A host that already ends in /v1 keeps /chat/completions. Requires
-    AZURE_OPENAI_API_KEY. Set AZURE_OPENAI_ENDPOINT to the resource URL.
+    A host that already ends in /v1 keeps /chat/completions. The key is
+    `{secret: azure}`. Set api_base to the resource URL.
 
 spec:
   protocol: azure
   proxy:
-    api_base: env:AZURE_OPENAI_ENDPOINT|https://example.openai.azure.com
-    api_key_env: AZURE_OPENAI_API_KEY
+    api_base: https://example.openai.azure.com
+    api_key: {secret: azure}

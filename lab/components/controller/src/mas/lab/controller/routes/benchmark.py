@@ -10,15 +10,16 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
-
 from mas.lab.controller.deps import build_tree
+from mas.lab.controller.manifest_validation import refuse_secret_fields, refuse_secret_values
 from mas.lab.controller.models import (
     BenchmarkAnalyzeRequest,
     BenchmarkExportRequest,
     BenchmarkImportRequest,
     BenchmarkRunRequest,
 )
-from mas.lab.controller.routes._api import MAS_LAB_ROOT, deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from mas.lab.controller.path_safety import is_relative_name
+from mas.lab.controller.routes._api import MAS_LAB_ROOT, deps, jobs
 
 router = APIRouter()
 
@@ -30,8 +31,10 @@ async def benchmark_run(library_name: str, req: BenchmarkRunRequest):
 
     cleanup_paths: list[Path] = []
 
-    # If the value looks like YAML content (has newlines), write to a temp file
-    if "\n" in req.experiment_yaml:
+    refuse_secret_fields({"flavour": req.flavour})
+    # A relative file name names an experiment file; anything else is inline YAML content.
+    if not is_relative_name(req.experiment_yaml):
+        refuse_secret_values(req.experiment_yaml)
         tmp = tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", prefix="experiment-", delete=False, dir=str(lib_dir)
         )
@@ -66,6 +69,8 @@ async def benchmark_run(library_name: str, req: BenchmarkRunRequest):
 async def benchmark_analyze(library_name: str, req: BenchmarkAnalyzeRequest):
     """Regenerate statistics/plots for an existing benchmark run."""
     lib_dir = deps.get_library_path(library_name)
+    if req.experiment_yaml and not is_relative_name(req.experiment_yaml):
+        raise HTTPException(status_code=422, detail="experiment_yaml must be a file name relative to the library")
     cmd = ["mas-lab", "benchmark", "analyze", req.benchmark_id]
     if req.experiment_yaml:
         cmd += ["--experiment-yaml", req.experiment_yaml]
@@ -110,7 +115,9 @@ async def benchmark_download(library_name: str, benchmark_id: str):
     out_path = tmp_dir / f"{benchmark_id}.tar.gz"
 
     cmd = ["mas-lab", "benchmark", "export", benchmark_id, "--output", str(out_path)]
-    result = subprocess.run(cmd, cwd=lib_dir, capture_output=True, text=True, timeout=120)
+    from mas.runtime.secrets.process import child_env
+
+    result = subprocess.run(cmd, cwd=lib_dir, capture_output=True, text=True, timeout=120, env=child_env(lab=True))
     if result.returncode != 0:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         detail = result.stderr.strip().split("\n")[-1] if result.stderr else "Export failed"
@@ -156,9 +163,7 @@ async def benchmark_upload_import(library_name: str, file: UploadFile):
     """Accept a .tar.gz upload and import it as a benchmark run."""
     lib_dir = deps.get_library_path(library_name)
 
-    tmp = tempfile.NamedTemporaryFile(
-        suffix=".tar.gz", prefix="bench-import-", delete=False, dir=str(lib_dir)
-    )
+    tmp = tempfile.NamedTemporaryFile(suffix=".tar.gz", prefix="bench-import-", delete=False, dir=str(lib_dir))
     try:
         contents = await file.read()
         tmp.write(contents)
@@ -195,6 +200,7 @@ async def list_experiments():
         meta_file = d / "metadata.yaml"
         if meta_file.exists():
             import yaml
+
             meta = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
             entry["status"] = meta.get("status", "unknown")
             entry["description"] = meta.get("experiment_description", "")
@@ -227,6 +233,7 @@ async def get_experiment(experiment_name: str):
     meta_file = exp_dir / "metadata.yaml"
     if meta_file.exists():
         import yaml
+
         metadata = yaml.safe_load(meta_file.read_text(encoding="utf-8"))
 
     tree = build_tree(exp_dir, exp_dir)
@@ -255,6 +262,7 @@ async def get_experiment_file(experiment_name: str, path: str):
     # Trace symlinks may point to the XDG cache dir (~/.cache/mas/) which is
     # separate from MAS_LAB_ROOT (~/.local/share/mas/).
     from mas.runtime.xdg import mas_cache_root
+
     allowed_roots = [
         str(exp_dir.resolve()),
         str((mas_lab_root / "data").resolve()),

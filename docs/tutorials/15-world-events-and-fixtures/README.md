@@ -56,7 +56,9 @@ item cannot declare fixtures. Field reference:
 [environment.md](../../manifests/environment.md),
 [dataset.md §10](../../manifests/dataset.md#10-world-around-the-item-environment).
 
-Then run it (loopback fixtures, `models.main: scripted`, no live model key):
+Then run it (loopback fixtures, `models.main: scripted`). No model key: the scripted model's
+proxy row is keyless (`{secret: {name: lab, optional: true}}`), so no secret store setup is
+needed: with no store directory an optional ref reads as absent.
 
 ```bash
 mas-lab benchmark run labs/revocation.lab/experiment.yaml --force

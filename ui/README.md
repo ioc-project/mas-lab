@@ -105,7 +105,7 @@ See [docker/README.md](../docker/README.md). Quick smoke test:
 
 ```bash
 cd docker
-cp .env.example .env   # set OPENAI_API_KEY
+cp .env.example .env   # mounts only; `echo KEY | mas-ctl secrets set openai`
 docker compose up --build
 ```
 

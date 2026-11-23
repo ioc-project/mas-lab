@@ -141,10 +141,9 @@
           "default": "",
           "description": "API base URL"
         },
-        "api_key_env": {
-          "type": "string",
-          "default": "OPENAI_API_KEY",
-          "description": "Env var for API key"
+        "api_key": {
+          "type": "object",
+          "description": "SecretRef for the API key ({secret: NAME})"
         },
         "levels": {
           "type": "array",

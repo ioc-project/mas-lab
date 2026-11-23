@@ -5,14 +5,12 @@
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 from mas.runtime import hostenv
+from mas.runtime.envkeys import LLM_SCHEDULER_KEYS
 
 logger = logging.getLogger(__name__)
-
-_HF_TOKEN_ENV = "HF_TOKEN"
 
 
 def huggingface_token(
@@ -20,11 +18,7 @@ def huggingface_token(
     token: str | None = None,
     token_file: str | Path | None = None,
 ) -> str:
-    """Resolve a Hugging Face token. ``--token`` wins, then ``--token-file``, then ``HF_TOKEN``.
-
-    Lab commands pass the flags here. This module is the only place that reads
-    the environment for that token.
-    """
+    """Resolve a Hugging Face token. ``--token`` wins, then ``--token-file``, then secret ``hf``."""
     explicit = (token or "").strip()
     if explicit:
         return explicit
@@ -34,10 +28,12 @@ def huggingface_token(
         if not text:
             raise ValueError(f"token file {path} is empty")
         return text
-    env = hostenv.get(_HF_TOKEN_ENV, "").strip()
-    if env:
-        return env
-    raise ValueError("Hugging Face token is required (--token, --token-file, or HF_TOKEN)")
+    from mas.runtime.secrets import SecretMissing, SecretRef, current_resolver
+
+    try:
+        return current_resolver().reveal(SecretRef(name="hf"))
+    except SecretMissing as exc:
+        raise ValueError("Hugging Face token is required (--token, --token-file, or secret hf)") from exc
 
 
 _warned_overrides: set[tuple[str, str]] = set()
@@ -73,18 +69,25 @@ def env_model_override(*, replaces: str = "the declared model") -> str | None:
     return None
 
 
-def env_named_secret(name: str) -> str:
-    """Read a secret from an environment variable named in a manifest.
+_warned_endpoints: set[tuple[str, str]] = set()
 
-    Logs the variable name, never the value. Empty or malformed names raise.
-    """
-    token = str(name or "").strip()
-    if not token or any(ch in token for ch in " \n=/"):
-        raise ValueError("secret_env must be an environment variable name")
-    value = hostenv.get(token, "").strip()
-    if not value:
-        raise ValueError(f"missing secret in environment variable {token!r}")
-    return value
+
+def warn_endpoint_from_env(var: str, value: str) -> None:
+    """Warn once that an address came from the shell, so the API key follows it to that host."""
+    from urllib.parse import urlparse
+
+    host = urlparse(value).netloc.rsplit("@", 1)[-1] or "(unparsed)"
+    key = (var, host)
+    if key in _warned_endpoints:
+        return
+    _warned_endpoints.add(key)
+    logger.warning(
+        "LLM address comes from the environment variable %s (host %s): the API key for this endpoint is "
+        "sent to that host. Unset %s to use the address in the file.",
+        var,
+        host,
+        var,
+    )
 
 
 def load_dotenv(
@@ -94,16 +97,16 @@ def load_dotenv(
     explicit: Path | None = None,
     override: bool = False,
 ) -> Path | None:
-    """Load dotenv from explicit path, CWD, manifest directory, and repo ancestors."""
-    try:
-        from dotenv import load_dotenv as _load
-    except ImportError:
-        return None
+    """Locate a dotenv file. Does not export values into ``os.environ``.
 
+    Non-secret ``MAS_LLM_*`` keys overlay into hostenv for the scheduler.
+    Use ``mas-ctl secrets import-env`` to copy secrets into the file store.
+    """
+    del override  # previously forwarded to python-dotenv; values must not enter the process env
     seen: set[Path] = set()
     candidates: list[Path] = []
     if explicit:
-        candidates.append(explicit)
+        candidates.append(Path(explicit))
     base = cwd or Path.cwd()
     candidates.append(base / ".env")
     if manifest_dir:
@@ -113,19 +116,24 @@ def load_dotenv(
                 candidates.append(parent / ".env")
                 break
 
-    loaded: Path | None = None
     for path in candidates:
         resolved = path.resolve()
         if not resolved.is_file() or resolved in seen:
             continue
         seen.add(resolved)
-        _load(resolved, override=override)
-        loaded = resolved
+        _overlay_non_secret_dotenv(resolved)
+        return resolved
+    return None
 
-    if loaded is not None:
-        os.environ.setdefault("MAS_DOTENV_LOADED", str(loaded))
-        # The file may add MAS_LLM_* and MAS_LLM_CACHE as well as plain variables: re-read all of them.
-        from mas.ctl.session.llm_scheduler_env import refresh_env_overrides
 
-        refresh_env_overrides()
-    return loaded
+def _overlay_non_secret_dotenv(path: Path) -> None:
+    from dotenv import dotenv_values
+    from mas.ctl.session.llm_scheduler_env import refresh_env_overrides
+
+    parsed = dotenv_values(path)
+    # Only the non-secret LLM scheduler keys; the shell wins over the file, as with any dotenv loader.
+    overlay = {k: v for k, v in parsed.items() if k in LLM_SCHEDULER_KEYS and v and hostenv.get(k) is None}
+    if not overlay:
+        return
+    hostenv.set_overlay(overlay)
+    refresh_env_overrides()

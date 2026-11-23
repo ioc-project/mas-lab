@@ -8,7 +8,7 @@ Session-level MCE metrics available
 -------------------------------------
 All metrics are LLM-as-judge (``mce_metrics_plugin``); they require a working
 LLM service.  Call :func:`install_openai_llm_service` once per process before
-computing.
+computing; each trace then opens its own judge client (:func:`judge_client`).
 
 Core session metrics:
 - ``goal_success_rate``           — Did the agent accomplish the user's goal?
@@ -31,14 +31,19 @@ stub (unfinished TODO prompt) and is not wired into this runner.
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
+from mas.library.eval.errors import JudgeCallFailed, judge_error_text
 from mas.library.eval.mce.catalog import run_mce_class, session_scope
 from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
+from mas.runtime.secrets import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +55,6 @@ logger = logging.getLogger(__name__)
 # deepeval scores are natively continuous (AnswerRelevancyMetric = fraction of
 # relevant statements; GEval = weighted rubric 0-1 float).
 _DEEPEVAL_METRIC_NAMES = {"answer_relevancy", "goal_success_rate"}
-
-_deepeval_model: Any = None  # deepeval OpenAIModel instance; set by install_openai_llm_service
 
 
 def _deepeval_llm_cls() -> Any:
@@ -80,7 +83,9 @@ def _make_deepeval_model(
             base_url=base_url or None,
         )
     except Exception as exc:
-        logger.warning("deepeval OpenAIModel unavailable: %s", exc)
+        from mas.runtime.reliability.classify import error_summary
+
+        logger.warning("deepeval OpenAIModel unavailable: %s", error_summary(exc))
         return None
 
 
@@ -105,8 +110,18 @@ def _compute_deepeval_score(
             "error": None,
         }
 
-    if _deepeval_model is None:
+    if _service is None:
         return {"value": None, "reasoning": "", "error": "deepeval model not initialised"}
+    from mas.library.standard.lib.openai_client import openai_api_base, reveal_openai_key
+
+    # Built for this score only: the key is revealed now and goes with the model when it returns.
+    deepeval_model = _make_deepeval_model(
+        model=_service.model,
+        api_key=reveal_openai_key(_service.api_key, _service.base_url),
+        base_url=openai_api_base(_service.base_url),
+    )
+    if deepeval_model is None:
+        return {"value": None, "reasoning": "", "error": "deepeval model unavailable"}
     try:
         from deepeval.test_case import LLMTestCase
 
@@ -116,7 +131,7 @@ def _compute_deepeval_score(
             from deepeval.metrics import AnswerRelevancyMetric
 
             metric = AnswerRelevancyMetric(
-                model=_deepeval_model,
+                model=deepeval_model,
                 async_mode=False,
                 verbose_mode=False,
             )
@@ -132,7 +147,7 @@ def _compute_deepeval_score(
                     "If the assistant cannot achieve the goal, does it state why?"
                 ),
                 evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-                model=_deepeval_model,
+                model=deepeval_model,
                 async_mode=False,
                 verbose_mode=False,
             )
@@ -146,32 +161,46 @@ def _compute_deepeval_score(
             "error": None,
         }
     except Exception as exc:
-        logger.error("deepeval metric %r failed: %s", metric_name, exc)
-        return {"value": None, "reasoning": "", "error": str(exc)}
+        summary = judge_error_text(exc)
+        logger.error("deepeval metric %r failed: %s", metric_name, summary)
+        return {"value": None, "reasoning": "", "error": summary}
 
 
 # ---------------------------------------------------------------------------
 # LLM service setup (openai SDK via public metrics_computation_engine)
 # ---------------------------------------------------------------------------
 
-_jury: Any = None  # metrics_computation_engine.llm_judge.jury.Jury
-_jury_patched = False
-_effective_model: str = ""
-_openai_client: Any = None
-_openai_base_url: str = ""
-_openai_api_key: str = ""
+
+@dataclass(frozen=True)
+class _JudgeService:
+    """What the installed judge calls. ``api_key`` is the SecretRef, never its value."""
+
+    model: str
+    base_url: str
+    api_key: SecretRef
+    output_kwargs: Dict[str, Any] = field(default_factory=dict)
+
+
+_service: Optional[_JudgeService] = None
+_jury: Any = None  # metrics_computation_engine.llm_judge.jury.Jury; carries no key
+_run_client: ContextVar[Any] = ContextVar("mas_mce_judge_client", default=None)
 
 
 def install_openai_llm_service(
     model_override: Optional[str] = None,
     *,
-    api_key_env: Optional[str] = None,
+    api_key: object = None,
     model_source: Optional[str] = None,
 ) -> str:
-    """Create a ``Jury`` (public MCE) backed by the openai SDK.
+    """Configure the judge (public MCE ``Jury``) on the openai SDK.
 
     Patches ``LLMClient.query`` at class level so that all ``Jury`` instances
-    route through our openai client (no litellm required).  Idempotent.
+    route through a judge client (no litellm required).  Idempotent.
+
+    Only the model, base URL and key SecretRef are kept. The key is revealed when a
+    judge run opens its client (:func:`judge_client`) and dropped when the run ends,
+    so a rotated secret is picked up by the next run. The secret is checked here so
+    that a missing key fails before the first trace.
 
     Configuration resolution order:
       1. *model_override* argument (eval_mce / experiment.evaluation.model /
@@ -184,30 +213,22 @@ def install_openai_llm_service(
     Returns the effective model id. Logs at INFO so the judge is visible
     next to summarizer model logs.
     """
-    global _jury, _jury_patched, _deepeval_model, _effective_model
-    global _openai_client, _openai_base_url, _openai_api_key
-    infra_api_base, infra_api_key_env, infra_model = _resolve_infra(model=model_override)
-    effective_model = infra_model
+    global _service, _jury
+    from mas.library.standard.lib.openai_client import openai_key_ref, reveal_openai_key
 
-    # Idempotency fast path: skip the reinstall only when the model this call
-    # would actually use already matches the installed one — not merely
-    # whether *this* call happened to pass an explicit override. A prior
-    # call's override (or infra default) can differ from this call's, even
-    # when both pass model_override=None.
-    if (
-        _jury_patched
-        and api_key_env is None
-        and effective_model == _effective_model
-        and (infra_api_base or "") == _openai_base_url
-    ):
-        return _effective_model
+    infra_api_base, infra_api_key, effective_model = _resolve_infra(model=model_override)
+    base_url = str(infra_api_base or "")
+    key_ref = openai_key_ref(api_key if api_key is not None else infra_api_key, base_url)
+    service = _JudgeService(
+        model=str(effective_model),
+        base_url=base_url,
+        api_key=key_ref,
+        output_kwargs=output_token_kwargs(effective_model, generation=_resolve_infra_generation()),
+    )
+    reveal_openai_key(key_ref, base_url)
+    if _jury is not None and service == _service:
+        return service.model
 
-    effective_api_base = infra_api_base or None
-    effective_api_key = hostenv.get(api_key_env or infra_api_key_env) or hostenv.get("OPENAI_API_KEY") or "none"
-
-    from openai import OpenAI
-
-    _client = OpenAI(api_key=effective_api_key, base_url=effective_api_base)
     try:
         from mas.runtime.engine.llm_scheduler import install_policy_from_pipeline
 
@@ -215,101 +236,101 @@ def install_openai_llm_service(
         install_policy_from_pipeline(_pipeline_for_routed_model(effective_model, proxy, leaves))
     except Exception as exc:
         logger.warning("llm_scheduler policy not installed: %s", exc)
-    _openai_client = _client
-    _openai_base_url = str(effective_api_base or "")
-    _openai_api_key = str(effective_api_key or "")
-    _output_kwargs = output_token_kwargs(effective_model, generation=_resolve_infra_generation())
 
     from metrics_computation_engine.llm_judge.jury import Jury
     from metrics_computation_engine.llm_judge.llm import LLMClient
 
-    def _query_patch(self: Any, messages: list, **kwargs: Any) -> Any:
-        # Strip response_format — some proxies don't support JSON mode;
-        # the prompt already instructs the model to return JSON.
-        kwargs.pop("response_format", None)
-        model = self.model or effective_model
+    LLMClient.query = _jury_query  # type: ignore[method-assign]
+    _service = service
+    # The patched query opens its own judge client, so the jury is given no key.
+    _jury = Jury({"LLM_MODEL_NAME": service.model, "LLM_BASE_MODEL_URL": service.base_url, "LLM_API_KEY": ""})
+
+    source = model_source or ("override" if model_override else "defaults.model")
+    logger.info(
+        "MCE Jury configured (model=%s, source=%s, base_url=%s)",
+        service.model,
+        source,
+        service.base_url or None,
+    )
+    return service.model
+
+
+def _jury_query(self: Any, messages: list, **kwargs: Any) -> Any:
+    """``LLMClient.query`` of the public MCE, on the judge client of the current run."""
+    # Strip response_format — some proxies don't support JSON mode;
+    # the prompt already instructs the model to return JSON.
+    kwargs.pop("response_format", None)
+    service = _require_service()
+    model = self.model or service.model
+    with judge_client() as client:
 
         def _once() -> Any:
             return paced_live_call(
-                lambda: _client.chat.completions.create(model=model, messages=messages, **{**_output_kwargs, **kwargs}),
+                lambda: client.chat.completions.create(
+                    model=model, messages=messages, **{**service.output_kwargs, **kwargs}
+                ),
                 model=model,
             )
 
+        failure: JudgeCallFailed | None = None
         try:
             return _call_with_mce_retry(_once, model=model)
         except Exception as exc:
-            raise RuntimeError(f"MCE LLM call failed (model={model!r}): {exc}") from exc
-
-    LLMClient.query = _query_patch  # type: ignore[method-assign]
-
-    llm_config = {
-        "LLM_MODEL_NAME": effective_model,
-        "LLM_BASE_MODEL_URL": effective_api_base or "",
-        "LLM_API_KEY": effective_api_key,
-    }
-    _jury = Jury(llm_config)
-
-    # Build deepeval model from the same config so continuous metrics use the same LLM.
-    _deepeval_model = _make_deepeval_model(
-        model=effective_model,
-        api_key=effective_api_key,
-        base_url=effective_api_base or None,
-    )
-
-    _jury_patched = True
-    _effective_model = str(effective_model)
-    source = model_source or ("override" if model_override else "defaults.model")
-    logger.info(
-        "MCE Jury configured (model=%s, source=%s, base_url=%s, deepeval=%s)",
-        effective_model,
-        source,
-        effective_api_base,
-        "ok" if _deepeval_model else "unavailable",
-    )
-    return effective_model
+            failure = JudgeCallFailed(f"MCE LLM call failed (model={model!r}): {judge_error_text(exc)}")
+        raise failure
 
 
-def get_openai_client() -> Any:
-    """Return the OpenAI client installed by :func:`install_openai_llm_service`."""
-    if _openai_client is None:
+def _require_service() -> _JudgeService:
+    if _service is None:
         raise RuntimeError(
             "Judge LLM client is not installed. Call install_openai_llm_service() first (eval_mce does this)."
         )
-    return _openai_client
+    return _service
+
+
+@contextmanager
+def judge_client() -> Iterator[Any]:
+    """The judge's OpenAI client for one run.
+
+    The key is revealed on entry and the client is closed on exit; nothing outside the
+    run keeps it. A nested use inside a run shares that run's client.
+    """
+    current = _run_client.get()
+    if current is not None:
+        yield current
+        return
+    service = _require_service()
+    from mas.library.standard.lib.openai_client import openai_client_for_key
+
+    client = openai_client_for_key(service.api_key, service.base_url)
+    token = _run_client.set(client)
+    try:
+        yield client
+    finally:
+        _run_client.reset(token)
+        client.close()
 
 
 def get_effective_judge_model() -> str:
-    """Return the model id last installed for the shared judge client."""
-    if not _effective_model:
-        raise RuntimeError(
-            "Judge LLM client is not installed. Call install_openai_llm_service() first (eval_mce does this)."
-        )
-    return _effective_model
+    """Return the model id last installed for the judge."""
+    return _require_service().model
 
 
 def get_jury() -> Any:
     """Return the MCE Jury installed by :func:`install_openai_llm_service`."""
-    if _jury is None:
-        raise RuntimeError(
-            "Judge LLM client is not installed. Call install_openai_llm_service() first (eval_mce does this)."
-        )
+    _require_service()
     return _jury
 
 
 def llm_service_config() -> dict[str, str]:
-    """Model, base URL, and API key last installed for the shared client.
+    """Model and base URL last installed for the judge.
 
-    Callers (for example a Stateful Eval wrapper) must not copy these into
-    process environment variables; pass them as constructor arguments.
+    The API key is not returned. Open :func:`judge_client` for a live request.
     """
-    if _openai_client is None:
-        raise RuntimeError(
-            "Judge LLM client is not installed. Call install_openai_llm_service() first (eval_mce does this)."
-        )
+    service = _require_service()
     return {
-        "model": _effective_model,
-        "base_url": _openai_base_url,
-        "api_key": _openai_api_key,
+        "model": service.model,
+        "base_url": service.base_url,
     }
 
 
@@ -328,15 +349,17 @@ def _pipeline_for_routed_model(
     return steps or list((proxy or {}).get("pipeline") or [])
 
 
-def _resolve_infra(*, model: Optional[str] = None) -> tuple[str, str, str]:
+def _resolve_infra(*, model: Optional[str] = None) -> tuple[str, object, str]:
     """Resolve LLM proxy config from workspace infra refs.
 
     The judge model name selects the LLMProxy leaf (same routing as the agent).
-    Returns ``(api_base, api_key_env, model)``.
+    Returns ``(api_base, api_key SecretRef or None, model)``. ``None`` leaves the key to
+    :func:`mas.library.standard.lib.openai_client.openai_key_ref`, which allows the
+    default secret only for the default endpoint.
     """
     proxy, ws, leaves = _resolve_infra_proxy()
     if proxy is None:
-        return ("", "OPENAI_API_KEY", model or "gpt-4o")
+        return ("", None, model or "gpt-4o")
     from mas.runtime.agent_defaults import resolve_default_model
     from mas.runtime.registry.llm_provider_registry import canonical_model_name, leaf_for_model
 
@@ -351,7 +374,7 @@ def _resolve_infra(*, model: Optional[str] = None) -> tuple[str, str, str]:
         )
     return (
         leaf.get("api_base", ""),
-        leaf.get("api_key_env") or "OPENAI_API_KEY",
+        leaf.get("api_key") or None,
         resolved_model,
     )
 
@@ -377,11 +400,8 @@ def _resolve_infra_proxy() -> tuple[dict[str, Any] | None, Any, dict[str, dict[s
     if not refs:
         return None, ws, {}
 
-    try:
-        resolved = resolve_infra_refs(refs, workspace=ws)
-    except Exception as exc:
-        logger.warning("Could not resolve infra refs %s: %s", refs, exc)
-        return None, ws, {}
+    # An unresolved ref raises: an empty proxy would send the judge's key to the default endpoint.
+    resolved = resolve_infra_refs(refs, workspace=ws)
     return resolved.llm_proxy, ws, dict(resolved.llm_proxies or {})
 
 
@@ -391,19 +411,6 @@ def _resolve_infra_proxy() -> tuple[dict[str, Any] | None, Any, dict[str, dict[s
 
 _MCE_MAX_RETRIES = 4
 _MCE_BASE_DELAY = 5.0  # seconds — doubles each retry, capped at 120 s
-
-
-def _is_ratelimit_error(exc: Exception) -> bool:
-    """Return True if *exc* looks like a transient rate-limit / quota error.
-
-    Checks for HTTP 429 or rate-limiting language in the error message.  HTTP
-    401 alone is *not* treated as a rate-limit error — a plain auth failure
-    (wrong API key) should fail immediately, not waste 4 retries.  The
-    Outshift proxy signals budget exhaustion via a 401 whose message body
-    contains "budget" or "quota", so those keywords still trigger a retry.
-    """
-    s = str(exc).lower()
-    return any(tok in s for tok in ("429", "rate", "quota", "too many", "budget"))
 
 
 def _mce_retry_policy():
@@ -421,15 +428,36 @@ def _mce_retry_policy():
 
 
 def _classify_mce_failure(exc: BaseException):
+    """A judge failure as its type and status (:func:`judge_error_text`), never the SDK error's
+    text: that text is the provider's body, which may echo the request. A 429 or an SDK ``RateLimitError`` is
+    retried, and so is a 401/403 whose body says the proxy budget is spent (read, never copied)."""
+    import httpx
     from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
-    from mas.runtime.reliability.classify import classify_http_exception
+    from mas.runtime.reliability.classify import (
+        classify_http_exception,
+        is_rate_limited,
+        response_status,
+        retry_after_seconds,
+    )
 
-    if _is_ratelimit_error(exc if isinstance(exc, Exception) else Exception(str(exc))):
-        return ClassifiedFailure(str(exc), failure_class=FailureClass.TRANSIENT, code="RATE_LIMIT")
-    classified = classify_http_exception(exc, message=str(exc))
-    if classified.failure_class is FailureClass.TRANSIENT:
-        return classified
-    return ClassifiedFailure(str(exc), failure_class=FailureClass.APPLICATION, code="ERROR")
+    text = judge_error_text(exc)
+    if is_rate_limited(exc):
+        return ClassifiedFailure(
+            text,
+            failure_class=FailureClass.TRANSIENT,
+            code="RATE_LIMIT",
+            retry_after_s=retry_after_seconds(getattr(exc, "response", None)),
+        )
+    if response_status(exc) is not None:
+        classified = classify_http_exception(exc, message=text)
+        if classified.failure_class is FailureClass.TRANSIENT:
+            return classified
+    elif isinstance(exc, httpx.TransportError) or type(exc).__name__ in _SDK_TRANSPORT_ERRORS:
+        return ClassifiedFailure(text, failure_class=FailureClass.TRANSIENT, code="TRANSPORT")
+    return ClassifiedFailure(text, failure_class=FailureClass.APPLICATION, code="ERROR")
+
+
+_SDK_TRANSPORT_ERRORS = frozenset({"APIConnectionError", "APITimeoutError"})
 
 
 def _call_with_mce_retry(fn, *, model: str):
@@ -448,34 +476,15 @@ def paced_live_call(fn, *, model: str):
     """Run a live judge HTTP call under the shared llm_scheduler slot."""
     from mas.runtime.engine.llm_scheduler import llm_slot
 
+    base_url = _service.base_url if _service is not None else ""
     provider = ""
-    if _openai_base_url:
+    if base_url:
         try:
-            provider = urlparse(_openai_base_url).hostname or ""
+            provider = urlparse(base_url).hostname or ""
         except Exception:
-            provider = _openai_base_url
+            provider = base_url
     with llm_slot(model=model, provider=provider):
         return fn()
-
-
-def _llm_call_with_retry(client: Any, model: str, messages: list) -> str:
-    """Call the OpenAI-compatible chat endpoint with exponential-backoff retry.
-
-    Retries on rate-limit / transient errors up to ``_MCE_MAX_RETRIES`` times.
-    Non-retryable errors are re-raised immediately as RuntimeError.
-    """
-
-    def _once() -> str:
-        def _create() -> str:
-            resp = client.chat.completions.create(model=model, messages=messages, **output_token_kwargs(model))
-            return resp.choices[0].message.content or ""
-
-        return paced_live_call(_create, model=model)
-
-    try:
-        return _call_with_mce_retry(_once, model=model)
-    except Exception as exc:
-        raise RuntimeError(f"MCE LLM call failed (model={model!r}): {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
@@ -551,44 +560,47 @@ def compute_session_metrics(
     results: Dict[str, Dict[str, Any]] = {}
 
     try:
-        for name in metric_names:
-            # Prefer deepeval for continuous-capable metrics when not in binary mode.
-            if not binary_grading and name in _DEEPEVAL_METRIC_NAMES:
-                if not (context.get("input_query") or "").strip():
-                    results[name] = {
-                        "value": None,
-                        "reasoning": "",
-                        "error": "input_query_empty",
-                    }
+        # One judge client (one reveal of the key) for the trace; closed when it is scored.
+        with judge_client() if _service is not None else nullcontext():
+            for name in metric_names:
+                # Prefer deepeval for continuous-capable metrics when not in binary mode.
+                if not binary_grading and name in _DEEPEVAL_METRIC_NAMES:
+                    if not (context.get("input_query") or "").strip():
+                        results[name] = {
+                            "value": None,
+                            "reasoning": "",
+                            "error": "input_query_empty",
+                        }
+                        continue
+                    if not (context.get("final_response") or "").strip():
+                        results[name] = {
+                            "value": None,
+                            "reasoning": "",
+                            "error": "final_response_empty",
+                        }
+                        continue
+                    results[name] = _compute_deepeval_score(
+                        name,
+                        context.get("input_query") or "",
+                        context.get("final_response") or "",
+                    )
                     continue
-                if not (context.get("final_response") or "").strip():
-                    results[name] = {
-                        "value": None,
-                        "reasoning": "",
-                        "error": "final_response_empty",
-                    }
-                    continue
-                results[name] = _compute_deepeval_score(
-                    name,
-                    context.get("input_query") or "",
-                    context.get("final_response") or "",
-                )
-                continue
 
-            try:
-                outcome = loop.run_until_complete(run_mce_class(name, session, jury=_jury))
-            except Exception as exc:
-                logger.error("MCE metric %r failed on %s: %s", name, trace_path, exc)
-                results[name] = {"value": None, "reasoning": "", "error": str(exc)}
-                continue
-            if outcome is None:
-                results[name] = {"value": None, "reasoning": "", "error": f"import failed: {name}"}
-                continue
-            results[name] = {
-                "value": float(outcome.value) if outcome.value is not None else None,
-                "reasoning": str(outcome.reasoning or ""),
-                "error": str(outcome.error_message) if outcome.error_message else None,
-            }
+                try:
+                    outcome = loop.run_until_complete(run_mce_class(name, session, jury=_jury))
+                except Exception as exc:
+                    error = judge_error_text(exc)
+                    logger.error("MCE metric %r failed on %s: %s", name, trace_path, error)
+                    results[name] = {"value": None, "reasoning": "", "error": error}
+                    continue
+                if outcome is None:
+                    results[name] = {"value": None, "reasoning": "", "error": f"import failed: {name}"}
+                    continue
+                results[name] = {
+                    "value": float(outcome.value) if outcome.value is not None else None,
+                    "reasoning": str(outcome.reasoning or ""),
+                    "error": str(outcome.error_message) if outcome.error_message else None,
+                }
     finally:
         loop.close()
 

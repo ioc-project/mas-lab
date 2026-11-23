@@ -5,6 +5,7 @@
 
 mas_ctl:
   flavour: local
+  # non-secret MAS_LLM_* only; API keys: mas-ctl secrets set
   env: .env
   # Human exchange log on stderr. Machines use events.jsonl / telemetry.
   trace: summary
@@ -13,6 +14,6 @@ mas_lab:
   flavour: local
   benchmark_flavour: local
 
-# OpenAI via library-standard (requires OPENAI_API_KEY in .env)
+# OpenAI via library-standard (`echo KEY | mas-ctl secrets set openai`)
 infra_refs:
   - standard:openai

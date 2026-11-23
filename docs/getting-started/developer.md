@@ -33,12 +33,11 @@ task verify-unit
 ## 2 — Set the key
 
 ```bash
-cp docs/tutorials/00-environment-setup/.env.example .env
-# Edit .env and set OPENAI_API_KEY=<your-key>
+echo KEY | mas-ctl secrets set openai
+# or: mas-ctl secrets import-env .env
 ```
 
-`mas-ctl` and `mas-lab benchmark run` load `.env` from the current directory.
-Never commit keys.
+The value lives in the file store. Never commit keys.
 
 ## 3 — Set the user config
 

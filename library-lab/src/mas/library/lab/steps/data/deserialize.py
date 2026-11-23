@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """DeserializeStep — generic artifact decoding step.
 
 Reads an artifact from a store using the registered
@@ -30,19 +29,20 @@ Example YAML::
           type: neo4j
           uri: bolt://localhost:7687
           user: neo4j
-          password_env: NEO4J_PASSWORD
+          password: {secret: neo4j}
           database: neo4j
         opts:
           session_id: "{session_id}"
 """
 
+from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Any
 
 from mas.lab.benchmark.codecs import get_codec
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, ConfigParam
+from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.schema_validation import validate_payload
 from mas.library.lab.steps.data.serialize import _iter_channel_records, _jsonl_path, _resolve_store
@@ -76,25 +76,38 @@ class DeserializeStep(PipelineStep):
     type: str = "deserialize"
 
     PARAMS = [
-        ConfigParam("artifact_kind", str,
-                    description="Logical artifact kind (e.g. 'otel_traces', 'kg')."),
-        ConfigParam("output_key", str, default=None,
-                    description="Key for the decoded artifact in the output data dict.  "
-                                "Defaults to artifact_kind."),
-        ConfigParam("store", dict, default=None,
-                    description="Inline DatastoreSpec: type, host/uri, port, user, "
-                                "password_env, database, path."),
-        ConfigParam("store_name", str, default=None,
-                    description="Named store ID from the workspace infra manifest. "
-                                "Alternative to inline 'store:'."),
-        ConfigParam("infra", str, default=None,
-                    description="Experiment infra bundle name. Auto-selects store "
-                                "matching artifact_kind+read."),
-        ConfigParam("opts", dict, default=None,
-                    description="Extra keyword arguments forwarded to Codec.decode()."),
-        ConfigParam("artifact_schema", dict, default=None,
-                description="Optional JSON Schema (inline dict or file path) "
-                    "used to validate the decoded artifact."),
+        ConfigParam("artifact_kind", str, description="Logical artifact kind (e.g. 'otel_traces', 'kg')."),
+        ConfigParam(
+            "output_key",
+            str,
+            default=None,
+            description="Key for the decoded artifact in the output data dict.  Defaults to artifact_kind.",
+        ),
+        ConfigParam(
+            "store",
+            dict,
+            default=None,
+            description="Inline DatastoreSpec: type, host/uri, port, user, password (SecretRef), database, path.",
+        ),
+        ConfigParam(
+            "store_name",
+            str,
+            default=None,
+            description="Named store ID from the workspace infra manifest. Alternative to inline 'store:'.",
+        ),
+        ConfigParam(
+            "infra",
+            str,
+            default=None,
+            description="Experiment infra bundle name. Auto-selects store matching artifact_kind+read.",
+        ),
+        ConfigParam("opts", dict, default=None, description="Extra keyword arguments forwarded to Codec.decode()."),
+        ConfigParam(
+            "artifact_schema",
+            dict,
+            default=None,
+            description="Optional JSON Schema (inline dict or file path) used to validate the decoded artifact.",
+        ),
     ]
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
@@ -103,11 +116,7 @@ class DeserializeStep(PipelineStep):
         extra_opts: dict[str, Any] = self.config.get("opts") or {}
         artifact_schema: Any = self.config.get("artifact_schema")
 
-        schema_base_dir = (
-            ctx.pipeline.config_path.parent
-            if getattr(ctx.pipeline, "config_path", None)
-            else Path.cwd()
-        )
+        schema_base_dir = ctx.pipeline.config_path.parent if getattr(ctx.pipeline, "config_path", None) else Path.cwd()
 
         store = _resolve_store(
             self.name,
@@ -121,7 +130,9 @@ class DeserializeStep(PipelineStep):
 
         logger.info(
             "[%s] decoding %r ← %s store",
-            self.name, artifact_kind, store.type,
+            self.name,
+            artifact_kind,
+            store.type,
         )
         artifact = decode_streaming(codec, extra_opts)
 

@@ -23,9 +23,17 @@ from mas.lab.benchmark.schedule.run_batch import run_mas_benchmark
 
 
 @pytest.fixture(autouse=True)
-def _scripted_model_key(monkeypatch) -> None:
+def _scripted_model_key(tmp_path: Path, monkeypatch) -> None:
     """The lab answers from its scripted-model fixture; the key only has to exist for the live-LLM check."""
-    monkeypatch.setenv("OPENAI_API_KEY", "offline-scripted-model")
+    from mas.ctl.secrets import write_file_secret
+
+    secrets = tmp_path / "secrets"
+    write_file_secret(secrets, "lab", "offline-scripted-model")
+    write_file_secret(secrets, "openai", "offline-scripted-model")
+    ws = tmp_path / "workspace"
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "config.yaml").write_text(f"secrets:\n  dir: {secrets}\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(ws))
 
 
 LAB = Path(__file__).resolve().parents[4] / "labs" / "revocation.lab"

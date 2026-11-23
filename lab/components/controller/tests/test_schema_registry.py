@@ -19,7 +19,7 @@ def client(sample_lab, monkeypatch):
     store._libraries = {"demo": sample_lab}
 
     monkeypatch.setattr("mas.lab.controller.deps.get_manifest_store", lambda: store)
-    return TestClient(fastapi_app.app)
+    return TestClient(fastapi_app.create_app())
 
 
 @pytest.mark.parametrize(

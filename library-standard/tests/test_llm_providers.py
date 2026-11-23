@@ -128,17 +128,15 @@ def test_llm_providers_from_manifest_routes_two_openai_leaves():
                 ]
             }
         },
-        llm_proxy={"api_base": "https://arm.example/v1", "api_key_env": "ARM_KEY"},
+        llm_proxy={"api_base": "https://arm.example/v1"},
         llm_proxies={
             "arm": {
                 "api_base": "https://arm.example/v1",
-                "api_key_env": "ARM_KEY",
                 "allowed": ["provider-a/model-a"],
                 "protocol": "openai",
             },
             "judge": {
                 "api_base": "https://judge.example/v1",
-                "api_key_env": "JUDGE_KEY",
                 "allowed": ["judge-model"],
                 "protocol": "openai",
             },
@@ -158,14 +156,12 @@ def test_iter_model_specs_claims_canonical_and_alias():
         llm_proxies={
             "arm": {
                 "api_base": "https://arm.example/v1",
-                "api_key_env": "ARM_KEY",
                 "allowed": ["real-a"],
                 "mappings": {"default": "real-a"},
                 "protocol": "openai",
             },
             "judge": {
                 "api_base": "https://judge.example/v1",
-                "api_key_env": "JUDGE_KEY",
                 "allowed": ["judge-model"],
                 "protocol": "openai",
             },
@@ -189,14 +185,12 @@ def test_iter_model_specs_claims_canonical_and_alias():
         llm_proxies={
             "arm": {
                 "api_base": "https://arm.example/v1",
-                "api_key_env": "ARM_KEY",
                 "allowed": ["real-a"],
                 "mappings": {"default": "real-a"},
                 "protocol": "openai",
             },
             "judge": {
                 "api_base": "https://judge.example/v1",
-                "api_key_env": "JUDGE_KEY",
                 "allowed": ["judge-model"],
                 "protocol": "openai",
             },
@@ -217,14 +211,12 @@ def test_llm_providers_from_manifest_wraps_per_leaf_pipeline():
         llm_proxies={
             "arm": {
                 "api_base": "https://arm.example/v1",
-                "api_key_env": "ARM_KEY",
                 "allowed": ["provider-a/model-a"],
                 "protocol": "openai",
                 "pipeline": [{"layer": "fault_inject", "params": {"rate": 1.0}}],
             },
             "judge": {
                 "api_base": "https://judge.example/v1",
-                "api_key_env": "JUDGE_KEY",
                 "allowed": ["judge-model"],
                 "protocol": "openai",
                 "pipeline": [{"layer": "llm_scheduler", "params": {"max_in_flight": 2}}],
@@ -257,12 +249,12 @@ def test_llm_providers_from_manifest_wraps_per_leaf_pipeline():
 def test_llm_providers_from_manifest_uses_models_kind():
     provider = llm_providers_from_manifest(
         {"spec": {"models": [{"model": "gpt-4o-mini", "kind": "openai"}]}},
-        llm_proxy={"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"},
+        llm_proxy={"api_base": "https://api.openai.com/v1"},
     )
     provider = _protocol(provider)
     assert isinstance(provider, OpenAILLMProvider)
-    assert provider.api_base == "https://example.test/v1"
-    assert provider.api_key_env == "CUSTOM_KEY"
+    assert provider.api_base == "https://api.openai.com/v1"
+    assert provider.api_key.name == "openai"
 
 
 def test_registry_resolves_openai_and_cache():
@@ -290,25 +282,33 @@ def test_registry_resolves_openai_and_cache():
     assert get_registry().resolve_by_type("layer", "groq").load_class() is GroqLLMProvider
 
 
-def test_factory_fills_api_key_from_the_named_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_does_not_copy_an_api_key_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     from mas.runtime.registry.llm_provider_registry import apply_llm_endpoint_defaults, instantiate_llm_provider
+    from mas.runtime.secrets.ref import SecretRef
 
-    monkeypatch.setenv("CUSTOM_KEY", "from-env")
-    spec = apply_llm_endpoint_defaults(
-        {"kind": "openai"}, {"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"}
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    spec = apply_llm_endpoint_defaults({"kind": "openai"}, {"api_base": "https://example.test/v1"})
+    assert "api_key" not in spec or spec.get("api_key") != "from-env"
+    provider = instantiate_llm_provider("openai", spec)
+    assert provider.api_key is None  # example.test is not OpenAI's endpoint: no default secret either
+    assert "from-env" not in repr(provider)
+    assert instantiate_llm_provider("openai", {"api_base": "https://api.openai.com/v1"}).api_key == SecretRef(
+        name="openai"
     )
-    assert spec["api_key"] == "from-env"
-    assert instantiate_llm_provider("openai", spec).api_key == "from-env"
 
 
-def test_factory_fills_the_protocol_default_env_when_infra_omits_api_key_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_factory_uses_the_protocol_default_secret_only_for_its_own_endpoint() -> None:
+    # kills: the default secret (the OpenAI key) sent to whatever host the leaf names
     from mas.runtime.registry.llm_provider_registry import instantiate_llm_provider
+    from mas.runtime.secrets.ref import SecretRef
 
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    provider = instantiate_llm_provider("openai", {"api_base": "http://127.0.0.1:9/v1"})
-    assert provider.api_key == "sk-test"
+    assert instantiate_llm_provider("openai", {}).api_key == SecretRef(name="openai")
+    assert instantiate_llm_provider("openai", {"api_base": "https://api.openai.com/v1/"}).api_key == SecretRef(
+        name="openai"
+    )
+    for other in ("http://127.0.0.1:9/v1", "https://api.openai.com.evil.test/v1", "http://api.openai.com/v1"):
+        assert instantiate_llm_provider("openai", {"api_base": other}).api_key is None, other
+    assert OpenAILLMProvider.from_infra_spec({"api_base": "https://gw.example/v1"}).api_key is None
 
 
 def test_openai_from_infra_spec_reads_proxy_and_protocol_fields():
@@ -316,14 +316,13 @@ def test_openai_from_infra_spec_reads_proxy_and_protocol_fields():
         {
             "protocol": "openai",
             "api_base": "https://example.test/v1",
-            "api_key_env": "CUSTOM_KEY",
             "stream": True,
             "reasoning_effort": "low",
             "timeout": 7,
         }
     )
     assert provider.api_base == "https://example.test/v1"
-    assert provider.api_key_env == "CUSTOM_KEY"
+    assert provider.api_key is None
     assert provider.stream is True
     assert provider.reasoning_effort == "low"
     assert provider.http_timeout == 7.0
@@ -465,7 +464,6 @@ async def test_openai_provider_streams_content_chunks(monkeypatch) -> None:
     message = await provider.achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=received.append,
     )
     assert received == ["Hel", "lo"]
@@ -511,7 +509,6 @@ async def test_openai_provider_stream_skips_noise_and_accumulates_tool_calls(mon
     message = await OpenAILLMProvider(stream=True).achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=_boom,
     )
     assert message["content"] == "x"
@@ -576,7 +573,7 @@ def test_openai_from_manifest_binds_nested_reasoning():
                 ]
             }
         },
-        llm_proxy={"api_base": "https://example.test/v1", "api_key_env": "CUSTOM_KEY"},
+        llm_proxy={"api_base": "https://example.test/v1"},
     )
     provider = _protocol(provider)
     assert isinstance(provider, OpenAILLMProvider)
@@ -598,7 +595,6 @@ async def test_openai_provider_sends_reasoning_payload_and_strips_cot(monkeypatc
     out = await provider.achat_completion(
         model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         max_tokens=900,
     )
     payload = _FakePostClient.last_json
@@ -617,7 +613,7 @@ async def test_openai_provider_sends_mode_think_include(monkeypatch) -> None:
     provider = OpenAILLMProvider(
         reasoning={"effort": "low", "mode": "pro", "think": True, "include": ["reasoning.encrypted_content"]},
     )
-    await provider.achat_completion(model="gpt-5", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    await provider.achat_completion(model="gpt-5", messages=[{"role": "user", "content": "hi"}])
     payload = _FakePostClient.last_json
     assert payload is not None
     assert "think" not in payload
@@ -629,7 +625,7 @@ async def test_openai_provider_flattens_vllm_think_into_json_body(monkeypatch) -
     message = {"role": "assistant", "content": "ok"}
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: _FakePostClient(message, **kwargs))
     provider = OpenAILLMProvider(reasoning={"think": True, "exclude": True})
-    await provider.achat_completion(model="onprem/gemma4", messages=[{"role": "user", "content": "hi"}], api_key="k")
+    await provider.achat_completion(model="onprem/gemma4", messages=[{"role": "user", "content": "hi"}])
     payload = _FakePostClient.last_json
     assert payload is not None
     assert "think" not in payload
@@ -652,7 +648,6 @@ async def test_openai_provider_stream_drops_think_tags(monkeypatch) -> None:
     message = await provider.achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=received.append,
     )
     assert "".join(received) == "Hello"
@@ -669,7 +664,6 @@ async def test_openai_provider_default_exclude_strips_without_sending_extension(
     out = await OpenAILLMProvider().achat_completion(
         model="gpt-4o",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         max_tokens=100,
     )
     payload = _FakePostClient.last_json
@@ -729,7 +723,7 @@ async def test_openai_provider_retries_dropped_connection_then_succeeds(monkeypa
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=2)
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     out = await _retrying(OpenAILLMProvider()).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert out["content"] == "ok"
     assert client.calls == 3
@@ -740,9 +734,7 @@ async def test_openai_provider_gives_up_after_max_attempts(monkeypatch) -> None:
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=10)
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     with pytest.raises(RuntimeError):
-        await _retrying(OpenAILLMProvider()).achat_completion(
-            model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
-        )
+        await _retrying(OpenAILLMProvider()).achat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}])
     assert client.calls == 4
 
 
@@ -759,7 +751,7 @@ async def test_openai_provider_recreates_client_after_transport_failure(monkeypa
 
     monkeypatch.setattr("httpx.AsyncClient", factory)
     out = await _retrying(OpenAILLMProvider()).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert out["content"] == "ok"
     assert len(created) == 2
@@ -788,7 +780,7 @@ async def test_openai_provider_keeps_client_after_http_429(monkeypatch) -> None:
     client = _StatusThenOkClient()
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     out = await _retrying(OpenAILLMProvider()).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert out["content"] == "ok"
     assert client.calls == 2
@@ -806,9 +798,7 @@ async def test_openai_provider_does_not_retry_auth_error(monkeypatch) -> None:
     client = _FlakyPostClient({"role": "assistant", "content": "ok"}, fail_times=1, exc_factory=_auth_error)
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     with pytest.raises(RuntimeError):
-        await _retrying(OpenAILLMProvider()).achat_completion(
-            model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
-        )
+        await _retrying(OpenAILLMProvider()).achat_completion(model="gpt", messages=[{"role": "user", "content": "hi"}])
     assert client.calls == 1
 
 
@@ -849,7 +839,6 @@ async def test_openai_provider_retries_stream_connect_failure(monkeypatch) -> No
     message = await provider.achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=received.append,
     )
     assert received == ["Hi"]
@@ -913,7 +902,6 @@ async def test_openai_provider_does_not_retry_after_partial_stream_emitted(monke
         await provider.achat_completion(
             model="gpt",
             messages=[{"role": "user", "content": "hi"}],
-            api_key="k",
             on_stream_chunk=received.append,
         )
     assert received == ["Hel"]
@@ -934,7 +922,6 @@ async def test_openai_provider_stream_ignores_reasoning_deltas(monkeypatch) -> N
     message = await provider.achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=received.append,
     )
     assert received == ["Hi"]
@@ -975,7 +962,6 @@ async def test_openai_achat_completion_uses_shared_request_builder(monkeypatch) 
     out = await provider.achat_completion(
         model="gpt-5",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         max_tokens=900,
     )
     payload = _AsyncPostClient.last_json
@@ -1011,7 +997,7 @@ async def test_openai_provider_recreates_async_client_after_transport_failure(mo
 
     monkeypatch.setattr("httpx.AsyncClient", factory)
     out = await _retrying(OpenAILLMProvider()).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert out["content"] == "ok"
     assert len(created) == 2
@@ -1066,7 +1052,6 @@ async def test_openai_provider_does_not_retry_async_after_partial_stream(monkeyp
         await OpenAILLMProvider(stream=True).achat_completion(
             model="gpt",
             messages=[{"role": "user", "content": "hi"}],
-            api_key="k",
             on_stream_chunk=received.append,
         )
     assert received == ["Hel"]
@@ -1097,7 +1082,7 @@ async def test_openai_provider_keeps_async_client_after_http_429(monkeypatch) ->
     client = _StatusThenOkAsyncClient()
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: client)
     out = await _retrying(OpenAILLMProvider()).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert out["content"] == "ok"
     assert client.calls == 2
@@ -1154,7 +1139,6 @@ async def test_openai_provider_retries_async_stream_connect_failure(monkeypatch)
     message = await _retrying(OpenAILLMProvider(stream=True)).achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=received.append,
     )
     assert received == ["Hi"]
@@ -1178,7 +1162,7 @@ async def test_openai_provider_async_stream_records_usage(monkeypatch) -> None:
 
     monkeypatch.setattr("httpx.AsyncClient", lambda **kwargs: _AsyncStreamClient())
     message = await OpenAILLMProvider(stream=True).achat_completion(
-        model="gpt", messages=[{"role": "user", "content": "hi"}], api_key="k"
+        model="gpt", messages=[{"role": "user", "content": "hi"}]
     )
     assert message["content"] == "Hi"
     assert message["usage"] == {"prompt_tokens": 2}
@@ -1186,7 +1170,7 @@ async def test_openai_provider_async_stream_records_usage(monkeypatch) -> None:
 
 
 def test_resolve_ssl_verify_falls_back_to_httpx_default(monkeypatch) -> None:
-    from mas.library.standard.plugins.llm import http as llm_http
+    from mas.library.standard.lib import tls as llm_http
 
     monkeypatch.setattr(llm_http, "_system_ssl_context", lambda: None)
     monkeypatch.setattr(llm_http, "_default_ca_bundle", lambda: None)
@@ -1241,7 +1225,6 @@ async def test_openai_provider_async_stream_skips_noise_and_accumulates_tool_cal
     message = await OpenAILLMProvider(stream=True).achat_completion(
         model="gpt",
         messages=[{"role": "user", "content": "hi"}],
-        api_key="k",
         on_stream_chunk=_boom,
     )
     assert message["content"] == "x"

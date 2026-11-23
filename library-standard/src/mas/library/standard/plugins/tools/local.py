@@ -20,7 +20,6 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.library.standard.plugins.tools.containment import (
     containment_roots,
     resolve_under_roots,
@@ -31,6 +30,9 @@ from mas.runtime.driver.sync_bridge import SyncBridge
 from mas.runtime.engine.tool_workers import arun_sync_tool, ctx_for_tool
 from mas.runtime.manifest.schema import ToolDocument
 from mas.runtime.registry.provider_protocol import ManifestToolLoadError
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.manifest import check_manifest
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 from mas.runtime.system_plugins import (
     BoundSystemPlugins,
     CallContext,
@@ -493,11 +495,15 @@ def _normalize_tool_entry(
         if not ref_path.is_file():
             raise ManifestToolLoadError(f"spec.tools[{index}]: tool ref not found: {ref_path}")
         try:
-            doc = yaml.safe_load(ref_path.read_text(encoding="utf-8"))
-        except OSError as exc:
+            doc = safe_yaml_load(ref_path.read_text(encoding="utf-8"), source=str(ref_path))
+        except (OSError, ValueError) as exc:
             raise ManifestToolLoadError(f"spec.tools[{index}]: cannot read {ref_path}: {exc}") from exc
         if not isinstance(doc, dict):
             raise ManifestToolLoadError(f"spec.tools[{index}]: invalid tool YAML at {ref_path}")
+        try:
+            check_manifest(doc, source=str(ref_path))
+        except SecretRefError as exc:
+            raise ManifestToolLoadError(f"spec.tools[{index}]: {exc}") from None
         try:
             tool_contract = ToolDocument.from_dict(doc)
         except ValueError as exc:

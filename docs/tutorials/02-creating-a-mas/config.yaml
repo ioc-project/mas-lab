@@ -4,6 +4,7 @@
 # (or MAS_INFRA_REFS / --infra-ref).
 mas_ctl:
   flavour: local
+  # non-secret MAS_LLM_* only; API keys: mas-ctl secrets set
   env: .env
   # Human exchange log on stderr. Machines use events.jsonl / telemetry.
   trace: summary

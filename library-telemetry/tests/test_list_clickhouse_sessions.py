@@ -1,28 +1,16 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Tests for ListClickhouseSessionsStep (needs the bench framework, part of the dev extra).
-
-Mocks urllib.request.urlopen and mas.lab.connections.resolve_clickhouse_conn
-directly (a lightweight HTTP GET, not the clickhouse_connect client), so no
-real ClickHouse server or clickhouse-connect package is needed.
-"""
+"""Tests for ListClickhouseSessionsStep (needs the bench framework, part of the dev extra), against a loopback
+fake ClickHouse with the mas.lab.connections resolvers replaced."""
 
 from __future__ import annotations
 
-import urllib.error as _uerr
-
 import pytest
+from fake_clickhouse import FakeClickHouse, echo_credentials
+from mas.library.telemetry.exceptions import ClickHouseQueryError
+from mas.library.telemetry.steps import list_clickhouse_sessions as mod
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture
-def fake_conn(monkeypatch):
-    from mas.library.telemetry.steps import list_clickhouse_sessions as mod
-
-    conn = {"host": "ch.local", "port": 8123, "user": "u", "password": "p", "database": "db"}
-    monkeypatch.setattr("mas.lab.connections.resolve_clickhouse_conn", lambda: conn, raising=False)
-    return mod
 
 
 class _FakeCtx:
@@ -30,116 +18,44 @@ class _FakeCtx:
         self.dry_run = dry_run
 
 
-def _step(mod, **config):
-    return mod.ListClickhouseSessionsStep("list-sessions", config)
+async def _run(monkeypatch, port: int, *, dry_run: bool = False, **config):
+    conn = {"host": "127.0.0.1", "port": port, "user": "u", "database": "db"}
+    monkeypatch.setattr("mas.lab.connections.resolve_clickhouse_conn", lambda: conn, raising=False)
+    monkeypatch.setattr("mas.lab.connections.resolve_clickhouse_password", lambda: "p-canary", raising=False)
+    return await mod.ListClickhouseSessionsStep("list-sessions", config).execute(_FakeCtx(dry_run))
 
 
-class TestListClickhouseSessionsStep:
-    async def test_dataset_id_required(self):
-        from mas.library.telemetry.steps import list_clickhouse_sessions as mod
+async def test_dataset_id_required(monkeypatch):
+    with pytest.raises(ValueError, match="dataset_id"):
+        await _run(monkeypatch, 9)
 
-        step = _step(mod)
-        with pytest.raises(ValueError, match="dataset_id"):
-            await step.execute(_FakeCtx())
 
-    async def test_dry_run_returns_empty_without_network(self, monkeypatch):
-        from mas.library.telemetry.steps import list_clickhouse_sessions as mod
+async def test_dry_run_returns_empty_without_network(monkeypatch):
+    out = await _run(monkeypatch, 9, dry_run=True, dataset_id="ds-1")
+    assert out.data == {"session_ids": [], "count": 0, "dataset_id": "ds-1"}
+    assert out.metadata["dry_run"] is True
 
-        def _boom(*_a, **_kw):
-            raise AssertionError("dry_run must not touch the network")
 
-        monkeypatch.setattr(mod._req, "urlopen", _boom)
-        step = _step(mod, dataset_id="ds-1")
-        out = await step.execute(_FakeCtx(dry_run=True))
-        assert out.data == {"session_ids": [], "count": 0, "dataset_id": "ds-1"}
-        assert out.metadata["dry_run"] is True
+async def test_rows_are_parsed_and_an_unparseable_line_is_skipped(monkeypatch):
+    body = b'{"session_id": "s1"}\nnot json\n{"session_id": "s2"}\n\n'
+    with FakeClickHouse(lambda _r: (200, {}, body)) as server:
+        out = await _run(monkeypatch, server.port, dataset_id="ds-1", limit=5)
+    assert out.data == {"session_ids": ["s1", "s2"], "count": 2, "dataset_id": "ds-1"}
+    assert "LIMIT 5" in out.metadata["query"]
+    assert server.requests[0]["credentials"] == "u:p-canary"
 
-    async def test_successful_query_parses_jsonl_rows(self, fake_conn, monkeypatch):
-        mod = fake_conn
-        raw = '{"session_id": "s1"}\n{"session_id": "s2"}\n\n'
 
-        class _Resp:
-            def __enter__(self):
-                return self
+async def test_an_http_error_names_the_code_not_the_body(monkeypatch):
+    # kills: the server's answer (which may echo the credentials it received) copied into the failure
+    with FakeClickHouse(echo_credentials(500)) as server:
+        with pytest.raises(ClickHouseQueryError, match=r"HTTPError \(code 500\)") as raised:
+            await _run(monkeypatch, server.port, dataset_id="ds-1")
+    assert "p-canary" not in str(raised.value) and raised.value.__cause__ is None
 
-            def __exit__(self, *a):
-                return False
 
-            def read(self):
-                return raw.encode()
-
-        monkeypatch.setattr(mod._req, "urlopen", lambda *a, **kw: _Resp())
-        step = _step(mod, dataset_id="ds-1", limit=5)
-        out = await step.execute(_FakeCtx())
-        assert out.data == {
-            "session_ids": ["s1", "s2"],
-            "count": 2,
-            "dataset_id": "ds-1",
-        }
-        assert "LIMIT 5" in out.metadata["query"]
-
-    async def test_unparseable_line_is_skipped_not_fatal(self, fake_conn, monkeypatch):
-        mod = fake_conn
-        raw = '{"session_id": "s1"}\nnot json\n'
-
-        class _Resp:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                return False
-
-            def read(self):
-                return raw.encode()
-
-        monkeypatch.setattr(mod._req, "urlopen", lambda *a, **kw: _Resp())
-        step = _step(mod, dataset_id="ds-1")
-        out = await step.execute(_FakeCtx())
-        assert out.data["session_ids"] == ["s1"]
-
-    async def test_missing_table_http_error_gets_friendly_message(self, fake_conn, monkeypatch):
-        mod = fake_conn
-
-        class _Body:
-            def read(self):
-                return b"Code: 60. UNKNOWN_TABLE"
-
-            def close(self):
-                pass
-
-        def _raise(*_a, **_kw):
-            raise _uerr.HTTPError("url", 404, "not found", {}, _Body())
-
-        monkeypatch.setattr(mod._req, "urlopen", _raise)
-        step = _step(mod, dataset_id="ds-1")
-        with pytest.raises(RuntimeError, match="port-forwarded"):
-            await step.execute(_FakeCtx())
-
-    async def test_other_http_error_includes_code_and_body(self, fake_conn, monkeypatch):
-        mod = fake_conn
-
-        class _Body:
-            def read(self):
-                return b"internal error"
-
-            def close(self):
-                pass
-
-        def _raise(*_a, **_kw):
-            raise _uerr.HTTPError("url", 500, "server error", {}, _Body())
-
-        monkeypatch.setattr(mod._req, "urlopen", _raise)
-        step = _step(mod, dataset_id="ds-1")
-        with pytest.raises(RuntimeError, match="ClickHouse error 500"):
-            await step.execute(_FakeCtx())
-
-    async def test_connection_failure_wrapped_as_runtime_error(self, fake_conn, monkeypatch):
-        mod = fake_conn
-
-        def _raise(*_a, **_kw):
-            raise OSError("connection refused")
-
-        monkeypatch.setattr(mod._req, "urlopen", _raise)
-        step = _step(mod, dataset_id="ds-1")
-        with pytest.raises(RuntimeError, match="ClickHouse connection failed"):
-            await step.execute(_FakeCtx())
+async def test_a_redirect_is_not_followed_with_the_credentials(monkeypatch):
+    # kills: urllib following a redirect to another host with the credentials
+    with FakeClickHouse() as other, FakeClickHouse(lambda _r: (302, {"Location": other.url}, b"")) as server:
+        with pytest.raises(ClickHouseQueryError, match="code 302"):
+            await _run(monkeypatch, server.port, dataset_id="ds-1")
+    assert len(server.requests) == 1 and other.requests == []

@@ -150,8 +150,10 @@ def test_resolved_schema_picks_up_a_changed_fragment(tmp_path: Path) -> None:
 
 
 def test_overlay_schema_parses_each_fragment_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.runtime.spec import source
+
     clear_schema_caches()
-    real = yaml.safe_load
+    real = source.safe_yaml_load
     seen: list[str] = []
 
     def wrapped(data: object, *args: object, **kwargs: object) -> object:
@@ -162,7 +164,7 @@ def test_overlay_schema_parses_each_fragment_once(monkeypatch: pytest.MonkeyPatc
             seen.append("text")
         return real(data, *args, **kwargs)
 
-    monkeypatch.setattr("mas.runtime.spec.source.yaml.safe_load", wrapped)
+    monkeypatch.setattr(source, "safe_yaml_load", wrapped)
     load_schema("overlay")
     load_schema("overlay")
     assert seen.count("text") == 1

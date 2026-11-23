@@ -8,14 +8,14 @@ import re
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from fastapi import HTTPException
 from mas.ctl.overlay.canvas import (
+    CanvasLayoutWrite,
     apply_ui_canvas_to_overlay_yaml,
     apply_ui_canvas_to_yaml,
     overlay_is_layout_only,
-    persist_overlay_canvas_yaml,
-    persist_ui_canvas_yaml,
+    plan_overlay_canvas_yaml,
+    plan_ui_canvas_yaml,
 )
 from mas.lab.controller.kinds import KIND_CATALOG
 from mas.lab.controller.manifest_layout import (
@@ -33,6 +33,7 @@ from mas.lab.controller.path_safety import (
     validate_version,
 )
 from mas.lab.controller.scope_catalog import Scope, ScopeCatalog, get_scope_catalog
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load
 from mas.version_spec import version_satisfies
 
 
@@ -59,8 +60,8 @@ def _registry_for(store: Any | None):
 
 def _manifest_name(yaml_text: str, fallback: str) -> str:
     try:
-        doc = yaml.safe_load(yaml_text) or {}
-    except Exception:
+        doc = safe_yaml_load(yaml_text) or {}
+    except YamlLoadError:
         return fallback
     if not isinstance(doc, dict):
         return fallback
@@ -85,14 +86,10 @@ def _layout_overlays_for(
     return matched
 
 
-def _project_application_canvas(
-    scope: Scope, bundle: ItemBundle, *, store: Any | None = None
-) -> None:
+def _project_application_canvas(scope: Scope, bundle: ItemBundle, *, store: Any | None = None) -> None:
     """Project registered layout-only canvas overlays onto a MAS item."""
     mas_name = _manifest_name(bundle.manifest, bundle.name)
-    matched = _layout_overlays_for(
-        store, scope, kind="MAS", names=[mas_name, bundle.name]
-    )
+    matched = _layout_overlays_for(store, scope, kind="MAS", names=[mas_name, bundle.name])
     mas_yaml, agents, _overlay_path = apply_ui_canvas_to_yaml(
         bundle.root or scope.root, bundle.manifest, bundle.children, overlays=matched
     )
@@ -100,9 +97,7 @@ def _project_application_canvas(
     bundle.children = agents
 
 
-def _project_overlay_canvas(
-    scope: Scope, bundle: ItemBundle, *, store: Any | None = None
-) -> None:
+def _project_overlay_canvas(scope: Scope, bundle: ItemBundle, *, store: Any | None = None) -> None:
     """Project a registered layout-only canvas overlay onto a spec overlay."""
     name = _manifest_name(bundle.manifest, bundle.name)
     matched = _layout_overlays_for(store, scope, kind="Overlay", names=[name, bundle.name])
@@ -152,8 +147,10 @@ def group_items(scope: Scope, kind: str, *, q: str | None = None) -> list[dict[s
     needle = (q or "").strip().lower()
     for name, items in sorted(by_name.items()):
         versions, latest = versions_of(items)
-        if needle and needle not in name.lower() and not any(
-            needle in (i.title or "").lower() or needle in (i.summary or "").lower() for i in items
+        if (
+            needle
+            and needle not in name.lower()
+            and not any(needle in (i.title or "").lower() or needle in (i.summary or "").lower() for i in items)
         ):
             continue
         listed = []
@@ -241,6 +238,19 @@ def _copy_into_ids(store: Any | None = None, kind: str | None = None) -> list[st
     return [s.id for s in scopes]
 
 
+def _status_of(exc: Exception) -> int | None:
+    return getattr(exc, "status", None) or getattr(exc, "status_code", None)
+
+
+def _refuse_secrets_in_payload(manifest: str, children: dict[str, str]) -> None:
+    """Refuse a secret value in the manifest or a child before any file of the update is planned."""
+    from mas.lab.controller.manifest_validation import refuse_secret_values
+
+    refuse_secret_values(manifest, source="manifest")
+    for child, text in children.items():
+        refuse_secret_values(text, source=child)
+
+
 def _read_only_error(store: Any | None = None, kind: str | None = None) -> ItemError:
     return ItemError(403, {"reason": "read_only", "copy_into": _copy_into_ids(store, kind)})
 
@@ -277,40 +287,45 @@ def create_item(
         copy_from = layout.read(scope, template)
         if copy_from is None:
             raise ItemError(404, f"template {template!r} not found")
-    initial_manifest, extra_writes = _payload_from_upload(scope, layout, name, version, upload_id)
-    return _commit_create(
-        scope,
-        kind,
-        name,
-        version,
-        template=template,
-        parent=parent,
-        copy_from=copy_from,
-        initial_manifest=initial_manifest,
-        extra_writes=extra_writes,
-        store=store,
-    )
+    try:
+        initial_manifest = _manifest_from_upload(upload_id)
+        return _commit_create(
+            scope,
+            kind,
+            name,
+            version,
+            template=template,
+            parent=parent,
+            copy_from=copy_from,
+            initial_manifest=initial_manifest,
+            store=store,
+        )
+    except (ItemError, HTTPException) as exc:
+        if upload_id and _status_of(exc) == 422:
+            from mas.lab.controller.uploads import get_upload_store
+
+            get_upload_store().delete(upload_id)
+        raise
 
 
-def _payload_from_upload(
-    scope: Scope,
-    layout: Any,
-    name: str,
-    version: str | None,
-    upload_id: str | None,
-) -> tuple[str | None, list[FileWrite] | None]:
+def _manifest_from_upload(upload_id: str | None) -> str | None:
+    """The manifest text of an upload: a YAML or JSON file, checked for secret values."""
     if not upload_id:
-        return None, None
-    from mas.lab.controller.uploads import get_upload_store
+        return None
+    from mas.lab.controller.manifest_validation import refuse_secret_values
+    from mas.lab.controller.uploads import get_upload_store, is_manifest_upload
 
     uploaded = get_upload_store().get(upload_id)
     if uploaded is None:
         raise ItemError(404, f"upload {upload_id!r} not found")
-    suffix = Path(uploaded.name).suffix.lower()
-    if suffix in {".yaml", ".yml"}:
-        return uploaded.path.read_text(encoding="utf-8"), None
-    dest = layout.default_create_root(scope, name, version) / f"{name}{suffix or '.dat'}"
-    return None, [FileWrite(dest, source=uploaded.path)]
+    if not is_manifest_upload(uploaded.name):
+        raise ItemError(422, "an item upload must be a YAML or JSON manifest (.yaml, .yml, .json)")
+    try:
+        text = uploaded.path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise ItemError(422, "an item upload must be UTF-8 text") from None
+    refuse_secret_values(text, source=uploaded.name)
+    return text
 
 
 def _commit_create(
@@ -323,7 +338,6 @@ def _commit_create(
     parent: str | None = None,
     copy_from: ItemBundle | None = None,
     initial_manifest: str | None = None,
-    extra_writes: list | None = None,
     store: Any | None = None,
 ) -> dict[str, Any]:
     layout = layout_for(kind)
@@ -342,8 +356,6 @@ def _commit_create(
             if not write.delete and write.path.suffix in {".yaml", ".yml"}:
                 write.content = initial_manifest
                 break
-    if extra_writes:
-        writes = list(writes) + list(extra_writes)
     _validate_writes(scope, kind, writes)
     apply_writes(scope, writes)
     _invalidate(store)
@@ -377,20 +389,27 @@ def update_item(
             409,
             {"reason": "stale_revision", "revision": current.revision, "item": current.public_dict()},
         )
+    _refuse_secrets_in_payload(manifest, children or {})
     current.manifest = manifest
     current.children = children or {}
+    canvas: CanvasLayoutWrite | None = None
     if kind == "application" and current.root is not None:
-        mas_yaml, agents = persist_ui_canvas_yaml(
+        current.manifest, current.children, canvas = plan_ui_canvas_yaml(
             current.root, current.manifest, current.children, mas_name=current.name
         )
-        current.manifest = mas_yaml
-        current.children = agents
     elif kind == "overlay" and current.manifest_path is not None:
-        current.manifest = persist_overlay_canvas_yaml(
+        current.manifest, canvas = plan_overlay_canvas_yaml(
             current.manifest_path.parent, current.manifest, overlay_name=current.name
         )
-    writes = layout.plan_update(scope, current, located)
+    writes = list(layout.plan_update(scope, current, located))
     _validate_writes(scope, kind, writes)
+    if canvas is not None:
+        # The layout-only overlay is UI data with no schema of its own; it is checked for secret
+        # values and written in the same batch as the item, so a refused update writes nothing.
+        from mas.lab.controller.manifest_validation import refuse_secret_values
+
+        refuse_secret_values(canvas.content, source=canvas.path.name)
+        writes.append(FileWrite(canvas.path, canvas.content))
     apply_writes(scope, writes)
     _invalidate(store)
     bundle = layout.read(scope, item)

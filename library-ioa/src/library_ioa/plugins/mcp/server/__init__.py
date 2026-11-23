@@ -12,9 +12,12 @@ from inspect import Parameter, Signature, iscoroutinefunction, signature
 from pathlib import Path
 from typing import Any, Dict, List
 
-import yaml
+from mas.runtime.entrypoint import install_host_environment
 from mas.runtime.manifest.schema.tool import ToolDocument
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.manifest import load_checked_document
 from mas.runtime.spec.endpoint_usage import usage_listens
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 from mcp.server.extension import Extension
 from mcp.server.mcpserver import Context, MCPServer
 
@@ -239,9 +242,7 @@ class MCPToolServerFactory:
 
     def add_manifest(self, manifest_path: str | Path, *, tool_name: str | None = None) -> None:
         path = Path(manifest_path)
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(doc, dict):
-            raise ValueError(f"Tool manifest {path} did not parse to a mapping.")
+        doc = load_checked_document(path)
 
         tool_doc = ToolDocument.from_dict(doc)
         resolved_tool_name = tool_name or tool_doc.name
@@ -403,6 +404,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    install_host_environment()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -428,8 +430,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "serve":
         deployment: dict[str, Any] = {}
         if args.infra_ref:
-            infra_doc = yaml.safe_load(args.infra_ref.read_text(encoding="utf-8"))
-            if not isinstance(infra_doc, dict) or infra_doc.get("kind") != "ToolServerRegistry":
+            try:
+                infra_doc = load_checked_document(args.infra_ref)
+            except (SecretRefError, ValueError) as exc:
+                parser.error(str(exc))
+            if infra_doc.get("kind") != "ToolServerRegistry":
                 parser.error("--infra-ref must point to a ToolServerRegistry manifest")
             servers = (infra_doc.get("spec") or {}).get("tool_servers") or []
             deployment = next(
@@ -458,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
             allowed = {str(tool_claim)} if isinstance(tool_claim, str) else {str(name) for name in tool_claim}
             selected_manifests: list[Path] = []
             for tool_manifest in tool_manifests:
-                tool_doc = yaml.safe_load(tool_manifest.read_text(encoding="utf-8"))
+                tool_doc = safe_yaml_load(tool_manifest.read_text(encoding="utf-8"), source=str(tool_manifest))
                 tool_meta = tool_doc.get("metadata") if isinstance(tool_doc, dict) else None
                 if isinstance(tool_meta, dict) and str(tool_meta.get("name") or "") in allowed:
                     selected_manifests.append(tool_manifest)
@@ -472,7 +477,7 @@ def main(argv: list[str] | None = None) -> int:
             tool_manifest = tool_manifests[0]
             tool_name_from_manifest = ""
             if tool_manifest.is_file():
-                tool_doc = yaml.safe_load(tool_manifest.read_text(encoding="utf-8"))
+                tool_doc = safe_yaml_load(tool_manifest.read_text(encoding="utf-8"), source=str(tool_manifest))
                 tool_meta = tool_doc.get("metadata") if isinstance(tool_doc, dict) else None
                 if isinstance(tool_meta, dict):
                     tool_name_from_manifest = str(tool_meta.get("name") or "").strip()

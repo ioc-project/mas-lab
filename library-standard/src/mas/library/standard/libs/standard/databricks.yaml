@@ -7,11 +7,12 @@ metadata:
   name: databricks
   description: >
     Databricks model serving. OpenAI chat body posted at
-    /serving-endpoints/{name}/invocations. Requires DATABRICKS_TOKEN
-    and DATABRICKS_HOST (workspace URL).
+    /serving-endpoints/{name}/invocations. The token is `{secret: databricks}`
+    (`mas-ctl secrets set databricks`). Set api_base to the workspace URL
+    with an overlay.
 
 spec:
   protocol: databricks
   proxy:
-    api_base: env:DATABRICKS_HOST|
-    api_key_env: DATABRICKS_TOKEN
+    api_base: https://example.cloud.databricks.com
+    api_key: {secret: databricks}

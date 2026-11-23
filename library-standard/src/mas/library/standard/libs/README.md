@@ -16,27 +16,27 @@ mas-runtime run-agent agent.yaml --infra-ref standard:ollama
 
 - **`standard:openai`** — Direct OpenAI API connection
   - Models: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo
-  - Requires: `OPENAI_API_KEY` environment variable
-  - Endpoint: `env:OPENAI_BASE_URL` (fallback `https://api.openai.com/v1`)
+  - Requires: secret `openai` (`mas-ctl secrets set openai`)
+  - Endpoint: `https://api.openai.com/v1` (override with a plain `api_base`)
 
 - **`standard:ollama`** — Local Ollama instance
   - Models: llama3.2, mistral, codellama, phi3, qwen2.5
   - Default: llama3.2
   - No API key required (assumes localhost:11434)
 
-- **`standard:groq`** — Groq chat-completions host (`GROQ_API_KEY`)
-- **`standard:openrouter`** — OpenRouter (`OPENROUTER_API_KEY`)
-- **`standard:xai`** — xAI (`XAI_API_KEY`)
-- **`standard:litellm`** — Local LiteLLM proxy (`LITELLM_API_KEY` optional)
-- **`standard:cerebras`** — Cerebras (`CEREBRAS_API_KEY`)
-- **`standard:mistral`** — Mistral (`MISTRAL_API_KEY`)
+- **`standard:groq`** — Groq chat-completions host (secret `groq`)
+- **`standard:openrouter`** — OpenRouter (secret `openrouter`)
+- **`standard:xai`** — xAI (secret `xai`)
+- **`standard:litellm`** — Local LiteLLM proxy (secret `litellm`, optional)
+- **`standard:cerebras`** — Cerebras (secret `cerebras`)
+- **`standard:mistral`** — Mistral (secret `mistral`)
 - **`standard:vllm`** — Local vLLM at `http://localhost:8000/v1`
-- **`standard:azure`** — Azure OpenAI (`AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`)
-- **`standard:bedrock`** — Bedrock Converse bearer token (`AWS_BEARER_TOKEN_BEDROCK`)
-- **`standard:vertex`** — Vertex AI generateContent (`VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT`)
-- **`standard:openresponses`** — Open Responses host, `POST /responses` (`OPENRESPONSES_API_KEY`)
-- **`standard:huggingface`** — Hugging Face router (`HF_TOKEN`)
-- **`standard:databricks`** — Databricks serving (`DATABRICKS_TOKEN`, `DATABRICKS_HOST`)
+- **`standard:azure`** — Azure OpenAI (secret `azure`; set `api_base` to the resource URL)
+- **`standard:bedrock`** — Bedrock Converse bearer token (secret `bedrock`)
+- **`standard:vertex`** — Vertex AI generateContent (secret `vertex`)
+- **`standard:openresponses`** — Open Responses host, `POST /responses` (secret `openresponses`)
+- **`standard:huggingface`** — Hugging Face router (secret `hf`)
+- **`standard:databricks`** — Databricks serving (secret `databricks`)
 
 ### Composite Bundles
 
@@ -125,28 +125,28 @@ Resolution examples:
 - `standard:openai` → `libs/standard/openai.yaml`
 - `standard:production` → `libs/standard/production.yaml`
 
-## Environment Variables
+## Secrets
 
-| Bundle | Required env vars |
+| Bundle | Secret name (`mas-ctl secrets set NAME`) |
 | --- | --- |
-| `standard:openai` | `OPENAI_API_KEY` |
+| `standard:openai` | `openai` |
 | `standard:ollama` | None |
-| `standard:groq` | `GROQ_API_KEY` |
-| `standard:openrouter` | `OPENROUTER_API_KEY` |
-| `standard:xai` | `XAI_API_KEY` |
-| `standard:litellm` | `LITELLM_API_KEY` (optional) |
-| `standard:cerebras` | `CEREBRAS_API_KEY` |
-| `standard:mistral` | `MISTRAL_API_KEY` |
-| `standard:vllm` | `VLLM_API_KEY` (optional) |
-| `standard:azure` | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT` |
-| `standard:bedrock` | `AWS_BEARER_TOKEN_BEDROCK` |
-| `standard:vertex` | `VERTEX_ACCESS_TOKEN`, `VERTEX_PROJECT` |
-| `standard:openresponses` | `OPENRESPONSES_API_KEY` |
-| `standard:huggingface` | `HF_TOKEN` |
-| `standard:databricks` | `DATABRICKS_TOKEN`, `DATABRICKS_HOST` |
+| `standard:groq` | `groq` |
+| `standard:openrouter` | `openrouter` |
+| `standard:xai` | `xai` |
+| `standard:litellm` | `litellm` (optional) |
+| `standard:cerebras` | `cerebras` |
+| `standard:mistral` | `mistral` |
+| `standard:vllm` | `vllm` (optional) |
+| `standard:azure` | `azure` |
+| `standard:bedrock` | `bedrock` |
+| `standard:vertex` | `vertex` |
+| `standard:openresponses` | `openresponses` |
+| `standard:huggingface` | `hf` |
+| `standard:databricks` | `databricks` |
 
 ```bash
-export OPENAI_API_KEY=your-key-here
+echo KEY | mas-ctl secrets set openai
 mas-runtime run-agent agent.yaml
 ```
 

@@ -6,6 +6,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 from library_ioa.plugins.mcp.spec import MCPProviderSpec
+from mas.runtime.secrets import SecretRef
+from mas.runtime.secrets.errors import SecretRefError
 
 
 def test_params_endpoint_alias() -> None:
@@ -70,7 +72,7 @@ def test_params_carry_url_headers_timeout_args_and_leftovers() -> None:
             "name": "search",
             "params": {
                 "url": "http://127.0.0.1:9001/mcp",
-                "headers": {"Authorization": "Bearer token"},
+                "headers": {"Authorization": {"secret": {"name": "mcp", "prefix": "Bearer "}}},
                 "timeout": 12,
                 "args": ["--verbose"],
                 "command": "uv",
@@ -83,7 +85,7 @@ def test_params_carry_url_headers_timeout_args_and_leftovers() -> None:
     )
     assert spec.url == "http://127.0.0.1:9001/mcp"
     assert spec.transport == "sse"
-    assert spec.headers == {"Authorization": "Bearer token"}
+    assert spec.headers == {"Authorization": SecretRef(name="mcp", prefix="Bearer ")}
     assert spec.timeout == 12.0
     assert spec.command == "uv"
     assert spec.args == ("--verbose",)
@@ -141,38 +143,23 @@ def test_spec_is_frozen() -> None:
         spec.name = "y"  # type: ignore[misc]
 
 
-def test_url_override_uses_manifest_default_without_env() -> None:
-    spec = MCPProviderSpec.from_dict({"name": "search", "url": "env:MAS_TEST_MCP_URL|http://127.0.0.1:9001/mcp"})
-    assert spec.url == "http://127.0.0.1:9001/mcp"
+def test_env_prefix_on_secret_header_is_a_secret_ref_error() -> None:
+    with pytest.raises(SecretRefError, match="SecretRef"):
+        MCPProviderSpec.from_dict(
+            {
+                "name": "search",
+                "url": "http://127.0.0.1:9001/mcp",
+                "headers": {"Authorization": "env:MAS_TEST_MCP_HEADER"},
+            }
+        )
 
 
-def test_url_override_env_wins_over_manifest_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MAS_TEST_MCP_URL", "http://127.0.0.1:9/mcp")
-    spec = MCPProviderSpec.from_dict({"name": "search", "url": "env:MAS_TEST_MCP_URL|http://127.0.0.1:9001/mcp"})
-    assert spec.url == "http://127.0.0.1:9/mcp"
-
-
-def test_secret_header_expands_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("MAS_TEST_MCP_HEADER", "Bearer test-token")
-    spec = MCPProviderSpec.from_dict(
-        {
-            "name": "search",
-            "url": "http://127.0.0.1:9001/mcp",
-            "headers": {"Authorization": "env:MAS_TEST_MCP_HEADER"},
-            "env": {"CHILD": "env:MAS_TEST_MCP_HEADER"},
-        }
-    )
-    assert spec.headers["Authorization"] == "Bearer test-token"
-    assert spec.env["CHILD"] == "Bearer test-token"
-
-
-def test_secret_header_omitted_when_env_unset(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("MAS_TEST_MCP_HEADER", raising=False)
-    spec = MCPProviderSpec.from_dict(
-        {
-            "name": "search",
-            "url": "http://127.0.0.1:9001/mcp",
-            "headers": {"Authorization": "env:MAS_TEST_MCP_HEADER"},
-        }
-    )
-    assert spec.headers == {}
+def test_env_prefix_on_stdio_env_is_a_secret_ref_error() -> None:
+    with pytest.raises(SecretRefError, match="SecretRef"):
+        MCPProviderSpec.from_dict(
+            {
+                "name": "search",
+                "command": "python",
+                "env": {"CHILD": "env:MAS_TEST_MCP_HEADER"},
+            }
+        )

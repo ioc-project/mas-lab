@@ -15,7 +15,6 @@ from typing import Any
 
 from mas.runtime.reliability.classes import CircuitOpenError, ClassifiedFailure, FailureClass
 
-_RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 _TRANSIENT_MARKERS = (
     "UNEXPECTED_EOF",
     "UNEXPECTED_EOF_WHILE_READING",
@@ -44,6 +43,69 @@ _CONTEXT_LENGTH_PHRASES = (
     "exceeds the maximum number of tokens",
 )
 _RETRY_DELAY_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*s\s*$", re.IGNORECASE)
+_URL_RE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>]+")
+
+
+def is_retryable_status(status: int) -> bool:
+    """429 and any 5xx (including 500 from an overloaded LLM server): the call may succeed when re-issued."""
+    return status == 429 or status >= 500
+
+
+def shown_urls(text: str) -> str:
+    """``text`` with every url in it cut to scheme, host, port and path: no userinfo, query or fragment."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    def cut(match: re.Match[str]) -> str:
+        try:
+            parsed = urlsplit(match.group(0))
+            host = parsed.hostname or ""
+            if ":" in host:
+                host = f"[{host}]"
+            netloc = f"{host}:{parsed.port}" if parsed.port else host
+        except ValueError:
+            return "<url>"
+        return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+
+    return _URL_RE.sub(cut, str(text))
+
+
+def response_status(exc: BaseException) -> int | None:
+    """The HTTP status of the response ``exc`` carries (httpx, the OpenAI and Anthropic SDKs), else None."""
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return status if isinstance(status, int) and not isinstance(status, bool) else None
+
+
+def provider_failure(
+    family: str, *, status: int | None = None, error: Any = None, headers: Any = None
+) -> ClassifiedFailure:
+    """A failure a provider reported in an answer it sent with HTTP 200 (a JSON ``error`` or a stream error
+    event): ``<family> call failed[: HTTP <status>]``. ``error`` and ``headers`` are never read or shown."""
+    transient = status is not None and is_retryable_status(status)
+    return ClassifiedFailure(
+        f"{family} call failed" + (f": HTTP {status}" if status else ""),
+        failure_class=FailureClass.TRANSIENT if transient else FailureClass.APPLICATION,
+        code=f"HTTP_{status}" if status else "PROVIDER_ERROR",
+    )
+
+
+def error_summary(exc: BaseException) -> str:
+    """The exception's type name, plus ``HTTP <status>`` when it carries a response. Never its text: an SDK
+    error's text holds the provider's body, which may echo the request."""
+    status = response_status(exc)
+    return type(exc).__name__ + (f": HTTP {status}" if status is not None else "")
+
+
+def is_rate_limited(exc: BaseException) -> bool:
+    """True for a 429 response or an SDK ``RateLimitError``; the error's text is never read."""
+    return response_status(exc) == 429 or any(cls.__name__ == "RateLimitError" for cls in type(exc).__mro__)
+
+
+def safe_exception_text(exc: BaseException) -> str:
+    """What an error may say about ``exc``: one with a response is :func:`error_summary` (never its body),
+    anything else its text with urls cut by :func:`shown_urls`."""
+    if response_status(exc) is not None:
+        return error_summary(exc)
+    return shown_urls(str(exc))
 
 
 def _iter_exception_chain(exc: BaseException) -> list[BaseException]:
@@ -182,7 +244,7 @@ def classify_http_exception(exc: BaseException, *, message: str = "") -> Classif
     import httpx
 
     text = str(exc)
-    operator = message or f"request failed: {exc}"
+    operator = message or f"request failed: {safe_exception_text(exc)}"
 
     if isinstance(exc, ClassifiedFailure):
         return exc
@@ -204,7 +266,7 @@ def classify_http_exception(exc: BaseException, *, message: str = "") -> Classif
         return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code="TRANSPORT")
     if isinstance(exc, ssl.SSLError):
         return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code="TLS_DROP")
-    if isinstance(exc, httpx.HTTPStatusError):
+    if response_status(exc) is not None:
         return _classify_status(exc, operator=operator)
     lowered = text.lower()
     if re.search(r"\b429\b", lowered) or any(tok in lowered for tok in ("rate limit", "too many", "quota")):
@@ -229,7 +291,7 @@ def _classify_status(exc: Any, *, operator: str) -> ClassifiedFailure:
         return ClassifiedFailure(operator, failure_class=FailureClass.TRANSIENT, code="BUDGET")
     if status in (401, 403):
         return ClassifiedFailure(operator, failure_class=FailureClass.FATAL, code=f"HTTP_{status}")
-    if status in _RETRYABLE_STATUS or status >= 500:
+    if is_retryable_status(status):
         return ClassifiedFailure(
             operator,
             failure_class=FailureClass.TRANSIENT,
@@ -254,6 +316,8 @@ def classify_tool_exception(exc: BaseException) -> ClassifiedFailure:
         return ClassifiedFailure(str(exc), failure_class=FailureClass.APPLICATION, code="CONTROL")
     if type(exc).__name__ == "ToolExecutionError" and exc.__cause__ is not None:
         return classify_tool_exception(exc.__cause__)
+    if response_status(exc) is not None:
+        return classify_http_exception(exc, message=f"tool call failed: {error_summary(exc)}")
     if isinstance(exc, (ManifestToolLoadError, UnclaimedToolError)):
         return ClassifiedFailure(
             str(exc),
@@ -266,10 +330,10 @@ def classify_tool_exception(exc: BaseException) -> ClassifiedFailure:
             failure_class=FailureClass.UNAVAILABLE,
             code="TOOL_UNAVAILABLE",
         )
-    classified = classify_http_exception(exc, message=str(exc))
+    text = shown_urls(str(exc))
+    classified = classify_http_exception(exc, message=text)
     if classified.failure_class in (FailureClass.TRANSIENT, FailureClass.UNAVAILABLE, FailureClass.FATAL):
         return classified
-    text = str(exc)
     if any(marker in text for marker in _UNAVAILABLE_MARKERS):
         return ClassifiedFailure(text, failure_class=FailureClass.UNAVAILABLE, code="TOOL_UNAVAILABLE")
     if "timeout" in text.lower() or any(marker in text for marker in _TRANSIENT_MARKERS):
@@ -286,6 +350,7 @@ def _macos_install_certificates_hint() -> str:
 
 
 def _extract_api_error_message(response: Any) -> str:
+    """The provider's error message, for matching only (context length, budget). Never shown."""
     with __import__("contextlib").suppress(Exception):
         data = response.json()
         if isinstance(data, dict):
@@ -316,52 +381,41 @@ def classify_llm_http_error(exc: BaseException) -> str:
             f"On macOS CPython you may also {_macos_install_certificates_hint()}."
         )
 
-    if isinstance(exc, ssl.SSLError) or any(marker in str(exc) for marker in _TRANSIENT_MARKERS):
-        return (
-            "LLM request failed: TLS/connection dropped "
-            f"({exc}). This is a transient socket error, not a certificate failure."
-        )
-
-    if isinstance(exc, httpx.ConnectError):
-        exc_text = str(exc)
-        if "Connection refused" in exc_text or "Name or service not known" in exc_text:
-            return f"LLM request failed: cannot reach API ({exc}). Check api_base and network."
-        return f"LLM request failed: connection error ({exc})."
-
-    if isinstance(exc, httpx.TimeoutException):
-        return "LLM request failed: request timed out. Retry or increase the client timeout."
-
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-        detail = _extract_api_error_message(exc.response)
-        detail_hint = f": {detail}" if detail else ""
+    status = response_status(exc)
+    if status is not None:
+        # The body is read to recognise the failure, never copied: a proxy may echo the refused request.
+        shown = f"HTTP {status}"
         if status in _CONTEXT_LENGTH_STATUS and is_context_length_exceeded(exc):
             return (
-                "LLM request failed: the prompt does not fit the model context window"
-                f"{detail_hint}. Set context_window to the model's real limit so history is trimmed, "
+                f"LLM request failed: the prompt does not fit the model context window ({shown}). "
+                "Set context_window to the model's real limit so history is trimmed, "
                 "or use a model with a larger window."
             )
         if status in (401, 403):
             return (
-                f"LLM request failed: HTTP {status} (authentication/authorization){detail_hint}. "
-                "Check the API key env var named in your infra manifest (api_key_env). "
+                f"LLM request failed: {shown}. "
+                "Check the SecretRef on api_key in your infra manifest. "
                 "Ensure config.yaml infra_refs selects the correct bundle "
                 "(e.g. standard:llm-proxy vs standard:production)."
             )
-        if status == 429:
-            return f"LLM request failed: HTTP 429 rate limit{detail_hint}."
-        if status >= 500:
-            return f"LLM request failed: HTTP {status} from LLM provider{detail_hint}."
-        if "ExceededBudget" in detail or "budget_exceeded" in detail.lower():
-            return (
-                f"LLM request failed: proxy budget exceeded{detail_hint}. "
-                "Contact your LLM proxy admin or use another infra bundle "
-                "(e.g. mas-ctl chat --infra-ref standard:openai with OPENAI_API_KEY, "
-                "or llm_cache replay with raise_on_miss for offline testing)."
-            )
-        return f"LLM request failed: HTTP {status}{detail_hint}"
+        return f"LLM request failed: {shown}."
 
-    return f"LLM request failed: {exc}"
+    if isinstance(exc, ssl.SSLError) or any(marker in str(exc) for marker in _TRANSIENT_MARKERS):
+        return (
+            "LLM request failed: TLS/connection dropped "
+            f"({shown_urls(str(exc))}). This is a transient socket error, not a certificate failure."
+        )
+
+    if isinstance(exc, httpx.ConnectError):
+        exc_text = shown_urls(str(exc))
+        if "Connection refused" in exc_text or "Name or service not known" in exc_text:
+            return f"LLM request failed: cannot reach API ({exc_text}). Check api_base and network."
+        return f"LLM request failed: connection error ({exc_text})."
+
+    if isinstance(exc, httpx.TimeoutException):
+        return "LLM request failed: request timed out. Retry or increase the client timeout."
+
+    return f"LLM request failed: {safe_exception_text(exc)}"
 
 
 def classify_llm_failure(exc: BaseException) -> ClassifiedFailure:

@@ -18,8 +18,9 @@ mas-lab benchmark publish-hf [OPTIONS] TARBALL
 
 Upload a benchmark archive tarball (from `benchmark export`) to a Hugging Face
 **dataset** repo, unchanged. The repo is created if it does not exist.
-Pass `--token` or `--token-file`, or set `HF_TOKEN` (ctl reads the
-environment).
+Pass `--token` or `--token-file`, or store the token as secret `hf`
+(`mas-ctl secrets set hf`). `HF_TOKEN` is not read; `mas-ctl secrets import-env`
+copies it into the store as `hf`.
 
 By default the repo is private and the upload opens a review PR instead of
 writing to the default branch. The command prints the resulting commit SHA;
@@ -40,7 +41,7 @@ The command does not print a digest of the tarball. Compute one with
 | `--visibility` | Repo visibility: `private` or `public` (default: `private`). |
 | `--revision` | Branch or commit SHA to target (default: `main`). |
 | `--create-pr / --no-create-pr` | Create a reviewable PR-style revision instead of writing directly to the default branch (default: enabled). |
-| `--token` | Hugging Face access token. Overrides `--token-file` and `HF_TOKEN`. |
+| `--token` | Hugging Face access token. Overrides `--token-file` and secret `hf`. |
 | `--token-file` | Read the access token from a file. |
 
 ## SEE ALSO

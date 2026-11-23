@@ -4565,15 +4565,6 @@
             "title": "Infra Refs",
             "description": "Extra infra files relative to the library root (LLM cache, model pin)"
           },
-          "pre": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Pre",
-            "description": "Inline pipeline-style steps run in the library cwd before the worker starts"
-          },
           "demo_ui_ingest_url": {
             "anyOf": [
               {
@@ -4888,15 +4879,6 @@
             "type": "array",
             "title": "Infra Refs",
             "description": "If set, only these infra files are passed to mas-ctl (no directory glob)."
-          },
-          "pre": {
-            "items": {
-              "additionalProperties": true,
-              "type": "object"
-            },
-            "type": "array",
-            "title": "Pre",
-            "description": "Inline pipeline-style steps run in the library cwd before mas-ctl (type: shell)."
           },
           "demo_ui_ingest_url": {
             "anyOf": [

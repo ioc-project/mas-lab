@@ -72,7 +72,7 @@ provider settings must live exclusively in flavour YAMLs. Any violation causes
 | Rule | Triggered when |
 |------|---------------|
 | `MODEL_IN_NON_AGENT` | `model:` key appears in flavour / overlay / infra / mas.yaml |
-| `ACCESS_IN_NON_FLAVOUR` | `api_base` / `api_key_env` / `provider` appear outside a flavour |
+| `ACCESS_IN_NON_FLAVOUR` | `api_base` / `api_key` / `provider` appear outside a flavour |
 
 ```bash
 mas-lab check-config .
@@ -200,8 +200,6 @@ components/core/src/mas/lab/
 │   └── reporter.py           Report formatter
 ├── schemas/
 │   └── workflow.py           Workflow YAML schema
-├── telemetry/
-│   └── otlp_push.py          OTLP converter + HTTP push
 └── utils/
     └── output_formatter.py   Table / JSON output helpers
 ```

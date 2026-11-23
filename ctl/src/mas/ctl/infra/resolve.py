@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
-from mas.ctl.infra.env_resolve import resolve_manifest_values
+from mas.ctl.infra.bind import refuse_retarget
 from mas.ctl.infra.models import InfraManifest, ModelsSpec, ProxySpec, proxy_protocol_fields
 from mas.ctl.infra.pipeline_chain import BidirectionalInfraPipeline
 from mas.ctl.libraries.bundles import list_manifest_libraries
@@ -17,12 +17,34 @@ from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 from mas.runtime import hostenv
 from mas.runtime.engine.call_kinds import as_str_list, read_aliased_field
 from mas.runtime.engine.infra_pipeline import stamp_middleware_step
+from mas.runtime.secrets import is_loopback_host, prepare_manifest
+from mas.runtime.secrets.url import origin
 from mas.runtime.spec.endpoint_usage import CONNECT, LISTEN, usage_modes
 from mas.runtime.spec.schema_bindings_generated import INFRA_MIDDLEWARE_PATH_PARAM_KEYS
 from mas.runtime.spec.source import load_yaml_file, resolve_ref_with_search
 from mas.runtime.xdg import mas_infra_dir, mas_runtime_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _infra_rows(spec: dict[str, Any]) -> dict[str, Any]:
+    rows = {"proxy": spec.get("proxy")}
+    for group in ("providers", "endpoints"):
+        rows.update({f"{group}.{name}": row for name, row in (spec.get(group) or {}).items()})
+    servers = [row for row in spec.get("tool_servers") or [] if isinstance(row, dict)]
+    rows.update({f"tool_servers[{row.get('id')}]": row for row in servers})
+    return rows
+
+
+def _refuse_override_retarget(before: dict[str, Any], after: dict[str, Any], overrides: Any) -> None:
+    """A CLI ``--override`` that moves a row holding SecretRefs restates them among its own values."""
+    from mas.ctl.overrides import parse_override
+
+    values = [parse_override(source).value for source in overrides]
+    old = _infra_rows(before)
+    for label, row in _infra_rows(after).items():
+        if isinstance(row, dict) and isinstance(old.get(label), dict):
+            refuse_retarget(old[label], row, values, where=f"CLI overrides: spec.{label}")
 
 
 class InfraResolveError(RuntimeError):
@@ -158,9 +180,14 @@ def resolve_infra_refs(
         from mas.ctl.overrides import apply_cli_overrides
         from mas.ctl.validate import validate_data
 
-        merged_document = apply_cli_overrides(merged.to_document(), tuple(overrides), root="infra")
-        validate_data(merged_document, source="CLI overrides", kind="infra").raise_if_failed()
-        merged = InfraManifest.from_document(merged_document)
+        before_document = merged.to_document()
+        try:
+            merged_document = apply_cli_overrides(before_document, tuple(overrides), root="infra")
+            _refuse_override_retarget(before_document.get("spec") or {}, merged_document.get("spec") or {}, overrides)
+            validate_data(merged_document, source="CLI overrides", kind="infra").raise_if_failed()
+            merged = InfraManifest.from_document(prepare_manifest(merged_document))
+        except ValueError as exc:
+            raise InfraResolveError([*errors, ("CLI overrides", exc)]) from None
         for entry in merged.pipeline:
             entry["params"] = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=root)
         for leaf in merged.providers.values():
@@ -261,7 +288,7 @@ def _load_ref(
     allow_runtime_engine: bool = False,
 ) -> InfraManifest:
     if ref.startswith(("http://", "https://")):
-        is_local = "localhost" in ref or "127.0.0.1" in ref
+        is_local = is_loopback_host(origin(ref)[1])
         return InfraManifest(
             name=f"inline:{ref}",
             kind="LLMLocal" if is_local else "LLMProxy",
@@ -461,7 +488,7 @@ def _load_file(
     data = cache.load_yaml(path) if cache is not None else load_yaml_file(path)
     if not isinstance(data, dict):
         raise ValueError(f"{path}: expected mapping")
-    data = resolve_manifest_values(data)
+    data = prepare_manifest(data)
     kind = data.get("kind", "")
     if kind not in _VALID_KINDS:
         raise ValueError(f"{path}: unsupported kind {kind!r}")
@@ -658,6 +685,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
                 tool_server_order.append(sid)
             previous = tool_servers_by_id.get(sid) or {}
             tool_servers_by_id[sid] = {**previous, **server}
+            refuse_retarget(previous, tool_servers_by_id[sid], server, where=f"tool server {sid!r}")
         applications.update(m.applications)
         if m.kind == "Stack" or m.stacks:
             stacks.update(m.stacks or {str(m.name): list(m.pipeline)})
@@ -681,7 +709,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
                 if existing is not None:
                     # Later file of the same name replaces the earlier one (D1).
                     logger.info(
-                        "LLMProxy %r listed twice; later file replaces api_base/api_key_env, allowed, and steps",
+                        "LLMProxy %r listed twice; later file replaces api_base/api_key, allowed, and steps",
                         leaf_name,
                     )
                 leaf_steps = list(stored.get("pipeline") or [])
@@ -695,9 +723,11 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
                         seen_allowed.clear()
                         allowed.clear()
                         mappings.clear()
+                    from mas.runtime.secrets.ref import parse_secret_ref_optional
+
                     proxy = ProxySpec(
                         api_base=str(leaf.get("api_base") or ""),
-                        api_key_env=str(leaf.get("api_key_env") or "OPENAI_API_KEY"),
+                        api_key=parse_secret_ref_optional(leaf.get("api_key"), field="api_key"),
                         timeout=float(leaf["timeout"]) if leaf.get("timeout") is not None else None,
                         extras=proxy_protocol_fields(leaf),
                     )
@@ -715,7 +745,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
         if m.proxy.timeout is not None:
             proxy = ProxySpec(
                 api_base=proxy.api_base,
-                api_key_env=proxy.api_key_env,
+                api_key=proxy.api_key,
                 timeout=m.proxy.timeout,
                 extras={**proxy.extras, **m.proxy.extras},
             )
@@ -850,7 +880,24 @@ def _hydrate_pipeline_cache_paths(pipeline: list[dict[str, Any]], *, cache_path:
             params["cache_path"] = str(cache_path)
 
 
-def api_key_for_infra(llm_proxy: dict[str, Any]) -> str:
-    """Read secret from env var named by the infra manifest ``api_key_env`` field."""
-    env_name = llm_proxy.get("api_key_env") or "OPENAI_API_KEY"
-    return hostenv.get(str(env_name), "").strip()
+def leaf_api_key_ref(llm_proxy: dict[str, Any]) -> Any:
+    """SecretRef for a leaf; else the protocol's default_secret when the leaf talks to that protocol's own
+    default endpoint; ``None`` for a leaf on another host with no key of its own."""
+    from mas.runtime.secrets.ref import parse_secret_ref_optional
+
+    ref = parse_secret_ref_optional(llm_proxy.get("api_key"), field="api_key")
+    if ref is not None:
+        return ref
+    from mas.runtime.registry.llm_provider_registry import (
+        default_secret_for,
+        leaf_api_base,
+        llm_provider_class,
+        protocol_kind_from_infra,
+    )
+
+    kind = protocol_kind_from_infra(llm_proxy)
+    try:
+        cls = llm_provider_class(kind)
+    except Exception:
+        return None
+    return default_secret_for(cls, leaf_api_base(llm_proxy))

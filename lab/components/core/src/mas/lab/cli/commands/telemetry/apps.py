@@ -1,11 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab telemetry apps`` commands."""
+
 from __future__ import annotations
 
 import json
 
 import click
+
+from ._clickhouse import check_host_option
 
 
 @click.group("apps")
@@ -14,10 +17,9 @@ def apps_group() -> None:
 
 
 @apps_group.command("list")
-@click.option("--host", default=None, help="ClickHouse host (overrides config/env).")
+@click.option("--host", default=None, callback=check_host_option, help="ClickHouse host (overrides config/env).")
 @click.option("--port", type=int, default=None, help="ClickHouse HTTP port (default 8123).")
 @click.option("--user", default=None, help="ClickHouse user (overrides config/env).")
-@click.option("--password", default=None, help="ClickHouse password (overrides config/env).")
 @click.option("--database", default=None, help="ClickHouse database (overrides config/env).")
 @click.option("--table", default="otel_traces", show_default=True, help="OTel traces table name.")
 @click.option("--start-service", is_flag=True, help="Start the 'clickhouse' service via mas-lab before querying.")
@@ -26,7 +28,6 @@ def list_apps_cmd(
     host: str | None,
     port: int | None,
     user: str | None,
-    password: str | None,
     database: str | None,
     table: str,
     start_service: bool,
@@ -40,19 +41,16 @@ def list_apps_cmd(
     included and displayed as ``(empty)``.
 
     Connection parameters are resolved: CLI flags → $XDG_CONFIG_HOME/mas/connections.yaml
-    → CLICKHOUSE_* env vars → built-in defaults (localhost:8123).
+    → CLICKHOUSE_* env vars → built-in defaults (localhost:8123). The password is the
+    ``password`` ref of the ``clickhouse`` connection (``{secret: NAME}``); none declared means empty.
 
     \b
     Examples:
         mas-lab telemetry apps list
-        mas-lab telemetry apps list --user admin --password admin
+        mas-lab telemetry apps list --user admin
         mas-lab telemetry apps list --start-service --json-output
     """
-    import base64
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-
+    from mas.lab.cli.commands.telemetry._clickhouse import ch_request
     from mas.lab.connections import ensure_service_running, resolve_clickhouse_conn
 
     if start_service:
@@ -64,8 +62,6 @@ def list_apps_cmd(
             click.secho(f"[WARNING] Could not start service: {exc}", fg="yellow", err=True)
 
     conn = resolve_clickhouse_conn(host=host, port=port, user=user, database=database)
-    if password is not None:
-        conn["password"] = password
 
     query = (
         f"SELECT ServiceName, application_id, count() AS n "
@@ -74,25 +70,7 @@ def list_apps_cmd(
         f"ORDER BY ServiceName, application_id "
         f"FORMAT TSV"
     )
-    params = urllib.parse.urlencode({"query": query})
-    url = f"http://{conn['host']}:{conn['port']}/?{params}"
-
-    req = urllib.request.Request(url)
-    if conn["user"] or conn["password"]:
-        creds = base64.b64encode(f"{conn['user']}:{conn['password']}".encode()).decode()
-        req.add_header("Authorization", f"Basic {creds}")
-
-    try:
-        with urllib.request.urlopen(req, timeout=15) as r:
-            body = r.read().decode().strip()
-    except urllib.error.URLError as exc:
-        click.secho(
-            f"[ERROR] Could not connect to ClickHouse at "
-            f"{conn['host']}:{conn['port']}: {exc}",
-            fg="red",
-        )
-        click.echo("Tip: run with --start-service, or check your connection config.")
-        raise SystemExit(1)  # noqa: B904
+    body = ch_request(conn, query).strip()
 
     rows = []
     for line in body.splitlines():
@@ -114,13 +92,11 @@ def list_apps_cmd(
         click.echo(json.dumps(rows, indent=2))
     else:
         if rows:
-            svc_w   = max(len("SERVICE_NAME"),   max(len(r["service_name"]) for r in rows))
-            app_w   = max(len("APPLICATION_ID"), max(len(r["application_id"] or "(empty)") for r in rows))
-            count_w = max(len("COUNT"),           max(len(str(r["count"])) for r in rows))
-            click.echo(
-                f"  {'SERVICE_NAME':<{svc_w}}  {'APPLICATION_ID':<{app_w}}  {'COUNT':>{count_w}}"
-            )
-            click.echo(f"  {'-'*svc_w}  {'-'*app_w}  {'-'*count_w}")
+            svc_w = max(len("SERVICE_NAME"), max(len(r["service_name"]) for r in rows))
+            app_w = max(len("APPLICATION_ID"), max(len(r["application_id"] or "(empty)") for r in rows))
+            count_w = max(len("COUNT"), max(len(str(r["count"])) for r in rows))
+            click.echo(f"  {'SERVICE_NAME':<{svc_w}}  {'APPLICATION_ID':<{app_w}}  {'COUNT':>{count_w}}")
+            click.echo(f"  {'-' * svc_w}  {'-' * app_w}  {'-' * count_w}")
             for r in rows:
                 app_id_disp = r["application_id"] if r["application_id"] is not None else "(empty)"
                 click.echo(f"  {r['service_name']:<{svc_w}}  {app_id_disp:<{app_w}}  {r['count']:>{count_w}}")
@@ -129,4 +105,3 @@ def list_apps_cmd(
                 f"No rows found in {table} — table may be empty or not yet created.",
                 fg="yellow",
             )
-

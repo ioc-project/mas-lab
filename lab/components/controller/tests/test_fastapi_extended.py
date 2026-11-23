@@ -34,7 +34,7 @@ def client(demo_lab, monkeypatch):
 
     monkeypatch.setattr("mas.lab.controller.deps.get_manifest_store", lambda: store)
     jobs._jobs.clear()
-    return TestClient(fastapi_app.app)
+    return TestClient(fastapi_app.create_app())
 
 
 def test_library_not_found(client):
@@ -213,7 +213,7 @@ async def test_lifespan_disabled_skips_discovery(monkeypatch):
 
     monkeypatch.setattr(fastapi_app, "get_manifest_store", _boom)
 
-    async with fastapi_app.lifespan(fastapi_app.app):
+    async with fastapi_app.lifespan(fastapi_app.create_app()):
         pass
 
 
@@ -236,7 +236,7 @@ async def test_lifespan_enabled_emits_discovery_report(monkeypatch):
 
     monkeypatch.setattr(fastapi_app, "get_manifest_store", lambda: _FakeStore())
 
-    async with fastapi_app.lifespan(fastapi_app.app):
+    async with fastapi_app.lifespan(fastapi_app.create_app()):
         pass
 
     assert calls["n"] == 1

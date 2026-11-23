@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from mas.lab.controller.deps import store_from_request
 from mas.lab.controller.item_service import ItemError, group_items
 from mas.lab.controller.kinds import LAB_KINDS, LIBRARY_BASE_KINDS
+from mas.lab.controller.manifest_validation import refuse_secret_text
 from mas.lab.controller.scope_catalog import get_scope_catalog
 from mas.lab.controller.scope_service import create_lab
 from pydantic import BaseModel, Field
@@ -34,6 +35,8 @@ async def list_scopes(request: Request):
 async def create_scope(req: CreateScopeRequest, request: Request):
     if req.kind != "lab":
         raise HTTPException(status_code=400, detail=f"cannot create scope kind {req.kind!r}")
+    if req.description:
+        refuse_secret_text(req.description, field="description")
     store = store_from_request(request)
     try:
         scope = create_lab(

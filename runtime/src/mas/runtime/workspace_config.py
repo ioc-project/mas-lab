@@ -12,9 +12,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.runtime import hostenv
 from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 from mas.runtime.xdg import mas_user_config_file
 
 _CONFIG_FILE = WORKSPACE_CONFIG_FILENAME
@@ -102,9 +102,12 @@ class RuntimeWorkspaceConfig:
         if path is None:
             return cls({})
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data = safe_yaml_load(path.read_text(encoding="utf-8"), source=str(path)) or {}
         except Exception:
             return cls({})
+        from mas.runtime.secrets.manifest import check_manifest
+
+        check_manifest(data, source=str(path))
         root = path.parent
         return cls(
             data if isinstance(data, dict) else {},

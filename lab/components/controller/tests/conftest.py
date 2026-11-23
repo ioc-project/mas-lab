@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+pytest_plugins = ["mas.runtime.hostenv_pytest", "lab_secret_state"]
+
 
 @pytest.fixture(autouse=True)
 def _reset_controller_api():

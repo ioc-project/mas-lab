@@ -24,6 +24,7 @@ from typing import TextIO
 
 from mas.library.standard.lib.stack import StackError, StackHandle
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+from mas.runtime.entrypoint import install_host_environment
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -70,6 +71,7 @@ def _stack(args: argparse.Namespace, answer: Callable[..., str], stdin: TextIO) 
 
 
 def main(argv: Sequence[str] | None = None, *, stop: threading.Event | None = None, stdin: TextIO | None = None) -> int:
+    install_host_environment()
     args = _parser().parse_args(argv)
     source = stdin if stdin is not None else sys.stdin
     try:

@@ -34,7 +34,7 @@ Verification (span contracts)
 Collector serialization
 ------------------------
 See :mod:`mas.library.telemetry.collector` — ``push_file``,
-``push_spans_to_collector``, ``dump_spans``.
+``push_spans_to_collector``; :mod:`~mas.library.telemetry.clickhouse_http` reads spans back.
 
 Pipeline steps
 --------------
@@ -42,10 +42,6 @@ See :mod:`mas.library.telemetry.steps` for artifact-based step functions.
 """
 
 from __future__ import annotations
-
-import os
-
-os.environ.setdefault("OBSERVE_REALTIME_OBSERVABILITY_ENABLED", "false")
 
 from pathlib import Path
 

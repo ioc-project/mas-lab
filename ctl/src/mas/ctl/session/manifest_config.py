@@ -141,22 +141,20 @@ def derive_observability_format(
 
 
 # What an Application row says about the endpoint itself. The rest of the row configures the sink's plugin.
-_ROW_STRUCTURE = frozenset(
-    {"protocol", "url", "identity", "secret_env", "usage", "expose", "headers", "timeout", "a2a"}
-)
+_ROW_STRUCTURE = frozenset({"protocol", "url", "identity", "secret", "usage", "expose", "headers", "timeout", "a2a"})
 
 
 def _bind_events_raw(flavour_spec: dict | None, resolved_infra: ResolvedInfra | None) -> list[Any] | None:
     """``bind.events`` as an observability plugin list, or ``None`` when unset.
 
     Each name is an Application row and its ``protocol`` names the plugin. The row's keys that describe the
-    endpoint (``url``, ``secret_env``, …) stay on infra; any other key is the plugin's own setting.
+    endpoint (``url``, ``secret``, …) stay on infra; any other key is the plugin's own setting.
     """
     bind = (flavour_spec or {}).get("bind") if isinstance(flavour_spec, dict) else None
     names = bind.get("events") if isinstance(bind, dict) else None
     if not names:
         return None
-    from mas.ctl.infra.bind import SECRET_KEY, BindError
+    from mas.ctl.infra.bind import BindError
 
     rows = (resolved_infra.applications or {}) if isinstance(resolved_infra, ResolvedInfra) else {}
     entries: list[Any] = []
@@ -167,7 +165,7 @@ def _bind_events_raw(flavour_spec: dict | None, resolved_infra: ResolvedInfra | 
         protocol = str(row.get("protocol") or "").strip()
         if not protocol:
             raise BindError(f"Application {name!r}: a row in bind.events needs protocol")
-        config = {key: value for key, value in row.items() if key not in _ROW_STRUCTURE and not SECRET_KEY.match(key)}
+        config = {key: value for key, value in row.items() if key not in _ROW_STRUCTURE}
         entries.append({protocol: config} if config else protocol)
     return entries
 

@@ -13,8 +13,9 @@ from mas.ctl.overlay.canvas import (
     overlay_has_canvas_extensions,
     overlay_is_layout_only,
     overlay_targets_mas,
-    persist_overlay_canvas_yaml,
     persist_ui_canvas_yaml,
+    plan_overlay_canvas_yaml,
+    plan_ui_canvas_yaml,
     project_ui_canvas,
     write_ui_canvas_overlay,
 )
@@ -326,10 +327,13 @@ def test_persist_overlay_peels_canvas_off_spec(tmp_path: Path):
         "spec:\n  target: {kind: MAS}\n  patch: {agents: {moderator: {}}}\n"
         "x-canvas-positions:\n  n: {x: 3, y: 4}\n"
     )
-    out = persist_overlay_canvas_yaml(tmp_path, yaml_text, overlay_name="react-moderator")
+    out, planned = plan_overlay_canvas_yaml(tmp_path, yaml_text, overlay_name="react-moderator")
     assert "x-canvas-positions" not in out
     assert "agents:" in out
     layout = tmp_path / "react-moderator.yaml"
+    assert planned is not None and planned.path == layout
+    assert not layout.exists()
+    planned.write()
     assert layout.is_file()
     text = layout.read_text(encoding="utf-8")
     assert "x-canvas-positions" in text
@@ -379,3 +383,29 @@ def test_apply_registered_overlays_skip_folder_scan(tmp_path: Path):
     assert path == registered_path
     assert "x: 9" in out_mas
     assert "x: 1" not in out_mas
+
+
+def test_plan_ui_canvas_writes_nothing(tmp_path: Path):
+    mas_yaml = "kind: MAS\nmetadata: {name: m}\nspec: {}\nx-canvas-positions: {n: {x: 1, y: 2}}\n"
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    out, agents, planned = plan_ui_canvas_yaml(app_dir, mas_yaml, {}, mas_name="m")
+    assert "x-canvas-positions" not in out
+    assert agents == {}
+    assert planned is not None and "x-canvas-positions" in planned.content
+    assert list(app_dir.rglob("*")) == []
+
+
+def test_an_unreadable_document_is_logged_without_its_text(tmp_path: Path, caplog) -> None:
+    # kills: a debug log of str(exc) of a PyYAML error, which quotes the source line or the tag's value
+    import logging
+
+    canary = "sk-CANARY-canvas"
+    caplog.set_level(logging.DEBUG, logger="mas.ctl.overlay.canvas")
+    for text in (f"a: {canary}\n\tb: x\n", f"a: !!int {canary}\n", f"a: !{canary} x\n"):
+        assert apply_ui_canvas_to_yaml(tmp_path, text, {}) == (text, {}, None)
+        assert apply_ui_canvas_to_overlay_yaml(tmp_path, text) == (text, None)
+        (tmp_path / "overlays").mkdir(exist_ok=True)
+        (tmp_path / "overlays" / "bad.yaml").write_text(text, encoding="utf-8")
+        find_layout_overlay(tmp_path, "m")
+    assert caplog.records and "CANARY" not in caplog.text

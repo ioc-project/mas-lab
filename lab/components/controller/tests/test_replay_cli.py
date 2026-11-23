@@ -828,3 +828,40 @@ def test_load_ui_folds_is_opt_in(monkeypatch) -> None:
     monkeypatch.delenv("MAS_UI_FOLDS", raising=False)
     folds = load_ui_folds()
     assert all(hasattr(item, "apply") for item in folds)
+
+
+def test_post_json_refuses_a_redirect_and_does_not_quote_the_server() -> None:
+    # kills: replay following a redirect with the ingest token, or quoting the server's status reason
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import pytest
+    from mas.lab.controller.ui_stream.replay_cli import post_json
+    from secret_fakes import bound_secrets
+
+    canary = "ui-canary-Rp31"
+    seen: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a) -> None:
+            return None
+
+        def do_POST(self) -> None:  # noqa: N802
+            self.rfile.read(int(self.headers.get("content-length") or 0))
+            seen.append(self.headers.get("Authorization", ""))
+            self.send_response(302, f"moved {canary}")
+            self.send_header("Location", "http://localhost:9/elsewhere")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
+    try:
+        with bound_secrets({"ui-ingest": canary}), pytest.raises(RuntimeError) as raised:
+            post_json(f"http://127.0.0.1:{server.server_port}/api/ingest?k={canary}", {"x": 1}, timeout=5)
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert seen == [f"Bearer {canary}"]
+    assert str(raised.value).endswith("/api/ingest: HTTP 302")
+    assert canary not in str(raised.value)

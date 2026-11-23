@@ -9,8 +9,8 @@ metadata:
 
 spec:
   proxy:
-    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openai}
 
   models:
     mappings:

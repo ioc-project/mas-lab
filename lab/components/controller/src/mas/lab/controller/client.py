@@ -187,11 +187,16 @@ def start_daemon(*, port: int = DEFAULT_HTTP_PORT, detach: bool = True, foregrou
     ]
     if hostenv.get("MAS_CONTROLLER_NO_HTTP", "1").strip().lower() in ("1", "true", "yes"):
         cmd.append("--no-http")
+    from mas.lab.secret_host import process_settings
+    from mas.runtime.secrets.process import child_env
+
+    cmd += (settings := process_settings()) and settings.args() or []
+
+    # The scheduler keys travel too: the daemon's fingerprint then matches this shell's.
+    env = child_env({"MAS_CONTROLLER_PORT": str(port)}, lab=True)
     if foreground:
-        subprocess.run(cmd, check=False)
+        subprocess.run(cmd, check=False, env=env)
         return
-    env = hostenv.snapshot()
-    env.setdefault("MAS_CONTROLLER_PORT", str(port))
     log_path = Path(hostenv.get("MAS_CONTROLLER_LOG", cfg.controller_dir() / "daemon.log"))
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_file = open(log_path, "a", encoding="utf-8")

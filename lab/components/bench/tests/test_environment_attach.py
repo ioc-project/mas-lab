@@ -50,3 +50,17 @@ def test_write_fixture_llm_infra_points_at_loopback(tmp_path: Path) -> None:
     assert "- any" in text
     assert "default: scripted" in text
     assert "any: scripted" in text
+
+
+def test_write_fixture_llm_infra_is_keyless_and_never_fills_the_store(tmp_path: Path) -> None:
+    """The proxy row names an optional secret: an empty store writes the row and stays empty."""
+    import yaml
+    from mas.runtime.secrets import SecretRef, prepare_manifest
+    from secret_fakes import bound_secrets
+
+    with bound_secrets({}) as resolver:
+        path = write_fixture_llm_infra(tmp_path / "m.yaml", "http://127.0.0.1:1")
+        assert not resolver.describe(SecretRef(name="lab")).present
+    doc = prepare_manifest(yaml.safe_load(path.read_text(encoding="utf-8")))
+    key = doc["spec"]["proxy"]["api_key"]
+    assert isinstance(key, SecretRef) and key.name == "lab" and key.optional

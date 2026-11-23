@@ -91,7 +91,7 @@ Before you push, run `task verify-lint` (`task install-hooks` installs that as a
   `ruff format --check` on the Python a branch changes. Format those files
   before you commit.
 - Match the naming and module layout of each package.
-- Keep secrets in environment variables. Never commit credentials.
+- Keep secrets in the secret store (`mas-ctl secrets set`), never in a manifest, `.env` or the shell. Never commit credentials.
 
 ## Package layout
 
@@ -103,7 +103,7 @@ package with its dependencies and extras.
 
 ## Secrets and credentials
 
-MAS Lab configuration holds environment variable names (for example `api_key_env: OPENAI_API_KEY`), not secret values. Never commit API keys, tokens, or private keys.
+MAS Lab configuration holds secret references (for example `api_key: {secret: openai}`), not secret values. See [secrets](docs/references/secrets.md). Never commit API keys, tokens, or private keys.
 
 ## Dependency updates
 
@@ -117,8 +117,8 @@ Your contributions are licensed under the Apache License 2.0. See [LICENSE](LICE
 
 ## Environment variables
 
-Library, runtime and lab code does not touch `os.environ`. The CLI entry points (`mas-ctl`, `mas-lab`) read the environment once and install it with `mas.runtime.hostenv.install`; other code calls `hostenv.get(name)` (or `hostenv.snapshot()` for a child process). Values that code exports for a run (a service's `env:` values, `MAS_EXECUTE_ROOT` for a sandboxed tool) go through `hostenv.overlay`, never into the process environment. In tests, the `mas.runtime.hostenv_pytest` plugin makes `monkeypatch.setenv` visible.
+Library, runtime and lab code does not touch `os.environ`. Every console entry point (`mas-ctl`, `mas-lab`, the controller daemon and API, the `python -m` services) calls `mas.runtime.entrypoint.install_host_environment()` first: hostenv keeps only the declared keys (`MAS_*` except `MAS_SECRET_*`, and `mas.runtime.envkeys.DECLARED_KEYS`), drops every other host variable, an API key among them, and the process environment is scrubbed to the same allowlist. Other code reads `hostenv.get(name)` for a listed key, and starts a child with `env=child_env(...)` (`child_env(..., lab=True)` for a lab or ctl child) from `mas.runtime.secrets`, never with the host environment. Plain values that code exports for a run (a service's plain `env` values, `MAS_EXECUTE_ROOT` for a sandboxed tool) go through `hostenv.overlay`, never into the process environment; the overlay refuses `MAS_SECRET_*`, the installer's index URLs and a proxy or OTLP URL with credentials in it. A secret is a `{secret: NAME}` ref revealed into one child's `env`, never an overlay value. In tests, the `mas.runtime.hostenv_pytest` plugin makes `monkeypatch.setenv` visible, binds the in-memory test secrets (mark a test `no_secrets` for an empty store) and puts the resolver and hostenv back as they were after each test.
 
 Explicit options come first: the scheduler and cache path take overrides the CLI installs (`mas.ctl.session.llm_scheduler_env`), live jobs of the controller carry the demo UI's choices in the run spec, and spawned run workers receive them in the job payload (`mas.lab.benchmark.host_overrides`).
 
-Exceptions, listed in `tests/test_no_env_reads_in_library.py`: CLI and daemon entry points, the two places that set flags a third-party SDK reads from the process environment (`third_party_otel`, telemetry `__init__`), and code that runs inside the skill sandbox process. `tests/test_no_env_reads_in_library.py` fails when a module outside that list uses `os.environ`.
+`tests/test_no_host_reads_outside_ctl.py` fails when a module outside ctl and its short list of entry points uses `os.environ`, a spawn's `env` is not built by `child_env`, a YAML file is loaded bare, or a client sets a credential header by hand.

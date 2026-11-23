@@ -155,9 +155,7 @@ def cache_route_from_engine(engine: Any) -> tuple[str, str, str, int]:
                 leaf_name = named
             else:
                 for name, item in leaves.items():
-                    if item.get("api_base") == leaf.get("api_base") and item.get("api_key_env") == leaf.get(
-                        "api_key_env"
-                    ):
+                    if item.get("api_base") == leaf.get("api_base") and item.get("api_key") == leaf.get("api_key"):
                         leaf_name = str(name)
                         break
     leaf_count = len(leaves) if leaves else 1

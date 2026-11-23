@@ -48,7 +48,7 @@ def _chat(provider: Any, **kwargs: Any) -> dict[str, Any]:
 def _anthropic(transport: _Transport, **params: Any) -> AnthropicLLMProvider:
     return AnthropicLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1", "api_key": "k", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "anthropic"}, **params},
         call_kinds=("llm",),
     )
 
@@ -56,7 +56,7 @@ def _anthropic(transport: _Transport, **params: Any) -> AnthropicLLMProvider:
 def _gemini(transport: _Transport, **params: Any) -> GeminiLLMProvider:
     return GeminiLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1beta", "api_key": "k", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1beta", "api_key": {"secret": "gemini"}, **params},
         call_kinds=("llm",),
     )
 
@@ -64,7 +64,7 @@ def _gemini(transport: _Transport, **params: Any) -> GeminiLLMProvider:
 def _bedrock(transport: _Transport, **params: Any) -> BedrockLLMProvider:
     return BedrockLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9", "api_key": "k", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9", "api_key": {"secret": "bedrock"}, **params},
         call_kinds=("llm",),
     )
 

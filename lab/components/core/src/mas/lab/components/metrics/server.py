@@ -82,6 +82,9 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()  # an entry point (python -m): hostenv first, process scrubbed
     host = hostenv.get("METRICS_HOST", "0.0.0.0")
     port = int(hostenv.get("METRICS_PORT", "8090"))
     server = ReusableThreadingHTTPServer((host, port), MetricsHandler)

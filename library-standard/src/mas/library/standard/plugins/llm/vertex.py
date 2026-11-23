@@ -11,6 +11,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from mas.library.standard.plugins.llm.gemini import GeminiLLMProvider, _model_id
+from mas.runtime.secrets.ref import SecretRef
 
 
 class VertexLLMProvider(GeminiLLMProvider):
@@ -19,7 +20,7 @@ class VertexLLMProvider(GeminiLLMProvider):
     provider_id = "vertex"
     kind = "vertex"
     default_api_base = "https://us-central1-aiplatform.googleapis.com"
-    default_api_key_env = "VERTEX_ACCESS_TOKEN"
+    default_secret = SecretRef(name="vertex")
 
     def _request_url(self, model: str, *, stream: bool) -> str:
         action = "streamGenerateContent" if stream else "generateContent"
@@ -43,5 +44,5 @@ class VertexLLMProvider(GeminiLLMProvider):
             f"/publishers/google/models/{_model_id(model)}:{action}"
         )
 
-    def _auth_headers(self, api_key: str) -> dict[str, str]:
-        return {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    def _auth_header(self) -> tuple[str, str]:
+        return "Authorization", "Bearer "

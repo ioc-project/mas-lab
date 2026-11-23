@@ -5,8 +5,8 @@ $id: "mas.config/config/v1"
 title: "config.yaml"
 description: >
   Project workspace configuration discovered by walking up from the current
-  directory (or from MAS_WORKSPACE_ROOT). Secrets belong in the file named by
-  mas_ctl.env (default .env) — never in this YAML.
+  directory (or from MAS_WORKSPACE_ROOT). Secrets belong in the file store
+  (`mas-ctl secrets set`), never in this YAML and never in the dotenv file.
 
 type: object
 additionalProperties: false
@@ -25,7 +25,9 @@ properties:
       env:
         type: string
         default: .env
-        description: Gitignored secrets file relative to workspace root.
+        description: >
+          Gitignored dotenv file relative to workspace root. Overlay for non-secret
+          scheduler keys (MAS_LLM_*). Secrets are `mas-ctl secrets set`, not this file.
       deployment:
         type: string
         description: Optional deployment manifest path (relative to workspace).

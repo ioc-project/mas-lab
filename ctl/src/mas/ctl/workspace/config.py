@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.runtime import hostenv
+from mas.runtime.secrets.manifest import check_manifest
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 from mas.runtime.workspace_config import (
     _user_config_path,
     find_workspace_file,
@@ -147,9 +148,10 @@ class WorkspaceConfig:
         if path is None:
             return cls({})
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except Exception:
+            data = safe_yaml_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):  # unreadable, or YamlLoadError
             return cls({})
+        check_manifest(data, source=str(path))
         return cls(
             data if isinstance(data, dict) else {},
             path.parent,
@@ -343,9 +345,10 @@ class UserConfig:
         if not config_path.is_file():
             return cls(default_infra="standard:production")
         try:
-            data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-        except Exception:
+            data = safe_yaml_load(config_path.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):  # unreadable, or YamlLoadError
             return cls(default_infra="standard:production")
+        check_manifest(data, source=str(config_path))
         if not isinstance(data, dict):
             data = {}
         cache = data.get("cache_dir")

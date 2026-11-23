@@ -17,7 +17,7 @@ from mas.library.standard.lib.stack.errors import StackError
 from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError, bound_inbound
 
-from library_ioa.plugins.slim.actor import MAX_READ_ERRORS
+from library_ioa.plugins.slim.actor import MAX_READ_ERRORS, SlimBindingError
 
 logger = logging.getLogger(__name__)
 # What a peer sees when a request or a reply could not be handled. It never carries the failure's text.
@@ -169,7 +169,7 @@ class SlimInbound:
                         continue
                     if _is_session_gone(exc):
                         return
-                    if _is_idle_timeout(exc, self._sb):
+                    if _is_idle_timeout(exc):
                         self._read_errors = 0
                         continue
                     self._note_read_error()
@@ -203,7 +203,7 @@ class SlimInbound:
             except AgentCommError as exc:
                 if self._stopped or _is_session_gone(exc):
                     return
-                if _is_idle_timeout(exc, self._sb):
+                if _is_idle_timeout(exc):
                     self._read_errors = 0
                     continue
                 self._note_read_error()
@@ -284,24 +284,13 @@ def _sender_id(source: Any, actor: Any) -> str:
     return actor.agent_of(ident) or ident
 
 
-# What the bindings say when a read found nothing before its deadline (slim-bindings 2.2: a ReceiveError).
-IDLE_READ_MESSAGES = ("listen_for_session timed out", "receive timeout")
-
-
-def _is_idle_timeout(exc: BaseException, sb: Any) -> bool:
-    """True when a read only found nothing in time: the binding's ``Timeout``, or one of its idle-read messages.
+def _is_idle_timeout(exc: BaseException) -> bool:
+    """True when a read only found nothing in time (the binding's ``Timeout``, or one of its idle-read messages).
 
     Any other failure, a connect or handshake timeout included, counts toward ``MAX_READ_ERRORS``.
     """
-    cause = exc.__cause__
-    if cause is not None and isinstance(cause, sb.SlimError.Timeout):
-        return True
-    text = str(cause if cause is not None else exc).lower()
-    return any(message in text for message in IDLE_READ_MESSAGES)
+    return isinstance(exc, SlimBindingError) and exc.kind == "idle_timeout"
 
 
 def _is_session_gone(exc: BaseException) -> bool:
-    text = str(exc).lower()
-    cause = exc.__cause__
-    cause_text = str(cause).lower() if cause is not None else ""
-    return "session closed" in text or "session closed" in cause_text
+    return isinstance(exc, SlimBindingError) and exc.kind == "session_closed"

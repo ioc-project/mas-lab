@@ -1,7 +1,7 @@
 # Infra manifest — local Neo4j instance (development / tutorial)
 #
-# Start the database:
-#   export NEO4J_PASSWORD=a-strong-password
+# Start the database, then set the password in the secret store:
+#   echo a-strong-password | mas-ctl secrets set neo4j
 #   mas-lab services start neo4j
 #   # or: docker compose -f mas-lab-services/.../neo4j/docker-compose.yml up -d
 #
@@ -9,8 +9,7 @@
 #   mas-lab graph push kg.json --to neo4j-local
 #   mas-lab graph dump SESSION_ID --from neo4j-local -o dumped.json
 #
-# password_env names the environment variable that holds the password;
-# the actual secret is never written to this file.
+# password is a SecretRef; the value is never written to this file.
 
 apiVersion: infra/v1
 kind: Datastore
@@ -27,7 +26,7 @@ spec:
       type: neo4j
       uri: bolt://localhost:7687
       user: neo4j
-      password_env: NEO4J_PASSWORD   # export NEO4J_PASSWORD=... before running
+      password: {secret: neo4j}   # echo PASS | mas-ctl secrets set neo4j
       database: neo4j
       description: >
         Local Neo4j 5 instance for development and tutorial use.

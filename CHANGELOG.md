@@ -14,9 +14,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - A dataset item can list the `scenarios` it applies to (one id or a non-empty list; an undeclared id is an error); the planner skips it in the other scenarios (no run and no run folder), including a coupling that names the item in a scenario it does not list, and reports `n items skipped by scenario` in the dry run and at the start of a run. Omitted means every scenario. See `docs/manifests/dataset.md`.
 - Native `transport.*` events for protocol-boundary telemetry (A2A, MCP, SLIM): typed hooks, optional SDK-span intake with per-protocol classifiers, native KG handlers for the facts SCOPE's norm already maps (`message.*`, agent card, tools discovered), and observe-sdk aliases on the otel sink so SCOPE sees the same A2A/MCP/SLIM records as other apps. Capture is `native.transport`; projection (`none`/`contract`) and aliases are `otel.transport`. Listing native turns capture on (hooks on, internals off); listing otel turns aliases on. `--transport-observability` flips a protocol. `propagate_metadata` (session id and sender name in A2A message metadata) is off unless turned on. See `docs/references/transport-observability.md`.
-- A governance plugin can check a HITL answer before an ALLOW takes effect: the optional `evaluate_hitl_resolve(request, resolve)` may return `BLOCK` (an exception also blocks; first deny in the chain wins), so an approval that did not verify never starts the call; an approval covers only its own call unless `hitl_once_per_turn` is set. `spec.governance.hitl_responder` hands a mapping (with `env:` refs resolved by `mas-ctl`) to the HITL responder `hitl_mode` names. A new user input clears every turn-scoped field of the kernel state (HITL block, skip and turn-wide approval, governance retry count, CoT pass) for every design pattern; only some patterns did, and the retry count was never cleared. Each field of `QProduct` now declares its scope. A run with no operator now refuses a hold unless the spec sets `hitl_mode: auto-approve` (it used to approve). See `docs/manifests/governance.md`.
+- A governance plugin can check a HITL answer before an ALLOW takes effect: the optional `evaluate_hitl_resolve(request, resolve)` may return `BLOCK` (an exception also blocks; first deny in the chain wins), so an approval that did not verify never starts the call; an approval covers only its own call unless `hitl_once_per_turn` is set. `spec.governance.hitl_responder` hands a mapping (SecretRef objects for secrets) to the HITL responder `hitl_mode` names. A new user input clears every turn-scoped field of the kernel state (HITL block, skip and turn-wide approval, governance retry count, CoT pass) for every design pattern; only some patterns did, and the retry count was never cleared. Each field of `QProduct` now declares its scope. A run with no operator now refuses a hold unless the spec sets `hitl_mode: auto-approve` (it used to approve). See `docs/manifests/governance.md`.
 - An agent loop seam: `spec.loop` names the plugin that runs an agent's tasks. Absent, the kernel main loop runs them exactly as before (a recorded two-turn run is compared byte for byte in a test). Present, a task goes to an `agent_loop` plugin, so MAS Lab can front another team's agent harness or run it in a lab experiment, keeping the A2A listener, the Controls and the events at the boundary. Two loops ship: `stdio-harness` (an allow-listed absolute command, no shell, an explicit environment, deadlines and size caps, line or JSON-RPC framing) and `a2a-harness` (a remote A2A agent through an `agent_comm` link). Controls judge each task as a `loop:<id>` tool call at the boundary; a third-party harness has no per-tool control. Honoured by `mas-ctl serve` and the lab runner for a standalone agent. The native `execution_start` event carries `loop` when one other than the kernel loop took the turn. See `docs/references/agent-loop.md`.
-- A production hardening profile. `spec.hardening.profile: production` in a Flavour makes a session refuse to start when a named check fails: a listener that verifies no caller, TLS checks off, a secret written as a literal, plain http to a remote host, HITL auto-approve, a replaying LLM cache, tool retry that is not idempotent, a wildcard MCP tool list, a message cap over the shared limit, no ingress governance. `waive: [{check, reason}]` accepts one failure and the report lists it. Omitted, nothing runs and no session changes. `mas-ctl hardening list` and `mas-ctl hardening check MANIFEST [--profile production] [--json]` list and run the checks (advisory by default), `mas-ctl validate --profile production` runs them over files, and the `gov_hardening_profile` governance plugin records the report at session start and blocks a tool call to a host outside `allowed_hosts`. An A2A row can verify callers with `a2a.admission.callers`, and a conversation is then keyed by (caller, `contextId`): before, a second caller that knew a `contextId` joined the first caller's conversation. Text a peer or server sent is cleaned (control characters dropped, 256 characters at most) wherever an A2A, SLIM, HTTP or MCP error or log line quotes it. The bundled `prod` Flavour selects the production posture and attaches the `with-hardened` Control to every agent; `local` and the default are unchanged, and a deployment overrides single checks with `waive`, reported in the admission log. See `docs/references/hardening.md`.
+- A production hardening profile. `spec.hardening.profile: production` in a Flavour makes a session refuse to start when a named check fails: a listener that verifies no caller, TLS checks off, plain http to a remote host, HITL auto-approve, a replaying LLM cache, tool retry that is not idempotent, a wildcard MCP tool list, a message cap over the shared limit, no ingress governance. `waive: [{check, reason}]` accepts one failure and the report lists it. Omitted, nothing runs and no session changes. `mas-ctl hardening list` and `mas-ctl hardening check MANIFEST [--profile production] [--json]` list and run the checks (advisory by default), `mas-ctl validate --profile production` runs them over files, and the `gov_hardening_profile` governance plugin records the report at session start and blocks a tool call to a host outside `allowed_hosts`. An A2A row can verify callers with `a2a.admission.callers`, and a conversation is then keyed by (caller, `contextId`): before, a second caller that knew a `contextId` joined the first caller's conversation. Text a peer or server sent is cleaned (control characters dropped, 256 characters at most) wherever an A2A, SLIM, HTTP or MCP error or log line quotes it. The bundled `prod` Flavour selects the production posture and attaches the `with-hardened` Control to every agent; `local` and the default are unchanged, and a deployment overrides single checks with `waive`, reported in the admission log. See `docs/references/hardening.md`.
 - `FigureStep`, the base class of every plot step: shared `theme` (`dark` for live HTML, `light` for file formats), `palette` (`pastel` for live HTML, `okabe-ito` for print), `format`, `labels`, `title`, `subtitle`, `xlabel` and `ylabel`, and `caption`. Each step declares the keys it implements; setting another one logs a warning. Series names come from `legend:` — a `$path` binding into scenario or item metadata, or free text.
 - Pipeline context: a step config value that is `$path` binds into experiment / scenario / test / run / artefact / row when the step runs (`title: $experiment.name`, `legend: $scenario.metadata.legend`). Anything else is free text; `$$foo` is a literal `$foo`. The same standalone pipeline file works across experiments. `gather_level` copies missing scope ids onto concatenated frames so later plots can still bind `$scenario.*`.
 - Step-level `realtime:` on a pipeline step: `true` folds `on_batch` as records arrive; `false` waits until every input has arrived. It is not a figure `config` key.
@@ -26,7 +26,7 @@ reconciling the release notes with the code and docs currently on that branch.
 - Anthropic, Bedrock and Gemini send `temperature` (Anthropic and Bedrock also `top_p` and `top_k`) only when the spec sets it and the model catalog does not mark it unsupported. The catalog gains `thinking_mode` (`none`, `budget`, `level`, `adaptive`, `always_on`), resolves hosted ids (`us.anthropic.claude-…-v1:0`, `…@20260101`) to their model, and has Claude and Gemini 3 entries with context, output limits, sampling support and pricing (figures are curated and to be re-verified).
 - `protocol: openresponses` posts [Open Responses](https://www.openresponses.org/) `/responses` through http: typed input items, stateless (`store: false`), `instructions`, flat function tools, `text.format` for structured output, `reasoning` effort, mode and summary, and a reasoning item's `encrypted_content` kept in `provider_state` and replayed with its tool call. Prompt cache key and retention, `cached_tokens` and `reasoning_tokens` follow the same names. Bundled infra: `standard:openresponses`. See `docs/standards/openresponses.md`.
 - Every LLM protocol layer lists its `features` in `library.yaml`, and `docs/manifests/llm-providers.md` gives the provider by feature matrix and the field mapping per provider.
-- Anthropic, Gemini, Azure, Bedrock, and Vertex ride http the way openai does: `protocol: anthropic` plus a url is `[http, anthropic]`, and the same sugar applies to `gemini`, `azure`, `bedrock`, and `vertex`. Groq, OpenRouter, xAI, LiteLLM, Cerebras, Mistral, vLLM, and Hugging Face inherit the openai chat-completions layer and only change the host and key name (`protocol: groq` is `[http, groq]`). Databricks posts that same body at `/serving-endpoints/{name}/invocations`. Each protocol layer posts through the http transport (plain httpx, no vendor SDK). Azure classic posts `/openai/deployments/{name}/chat/completions` with `api-key`; a host that already ends in `/v1` keeps `/chat/completions`; `proxy.auth: bearer` sends an Entra access token instead. Bedrock posts Converse with a bearer token. Vertex posts generateContent at the project path with a bearer token. The factory reads the env var named in `api_key_env` once and hands the token to the layer; the layer does not read the environment on a call. Bundled infra: `standard:groq`, `standard:openrouter`, `standard:xai`, `standard:azure`, `standard:bedrock`, `standard:vertex`, `standard:litellm`, `standard:cerebras`, `standard:mistral`, `standard:vllm`, `standard:huggingface`, `standard:databricks`.
+- Anthropic, Gemini, Azure, Bedrock, and Vertex ride http the way openai does: `protocol: anthropic` plus a url is `[http, anthropic]`, and the same sugar applies to `gemini`, `azure`, `bedrock`, and `vertex`. Groq, OpenRouter, xAI, LiteLLM, Cerebras, Mistral, vLLM, and Hugging Face inherit the openai chat-completions layer and only change the host and key name (`protocol: groq` is `[http, groq]`). Databricks posts that same body at `/serving-endpoints/{name}/invocations`. Each protocol layer posts through the http transport (plain httpx, no vendor SDK). Azure classic posts `/openai/deployments/{name}/chat/completions` with `api-key`; a host that already ends in `/v1` keeps `/chat/completions`; `proxy.auth: bearer` sends an Entra access token instead. Bedrock posts Converse with a bearer token. Vertex posts generateContent at the project path with a bearer token. The layer reveals `api_key` (a SecretRef) at the request and does not read the environment. Bundled infra: `standard:groq`, `standard:openrouter`, `standard:xai`, `standard:azure`, `standard:bedrock`, `standard:vertex`, `standard:litellm`, `standard:cerebras`, `standard:mistral`, `standard:vllm`, `standard:huggingface`, `standard:databricks`.
 - A `structured` wrap layer asks a model for schema-conforming JSON and returns a validated `parsed` object on the existing provider result path. A tool-call turn is left alone. Flavour `bind.llm` `{stack: NAME}` attaches it; omit it and the call is unchanged.
 - Thinking on Anthropic, Bedrock, Gemini and Vertex: the `reasoning` block becomes the vendor's thinking request from the catalog `thinking_mode` (`thinking: adaptive` plus `output_config.effort`, a budgeted `thinking`, `thinkingBudget`, or `thinkingLevel`). Signed thinking blocks and Gemini thought signatures of a tool turn travel in a new opaque `provider_state` on the completion, the engine return, the log row (checkpoints keep it) and the assistant tool-call message, and the same layer sends them back with the tool results; a loop that lost them runs with thinking off instead of failing. `provider_state` stays out of observability events and token counts. A failed tool result carries `is_error`, sent as `is_error` (Anthropic), `status: error` (Bedrock) or `{error}` (Gemini). See `docs/manifests/llm-reasoning.md`.
 - A server `Retry-After` (`retry-after-ms`, `retry-after`, or a Google `RetryInfo` delay) lengthens the wait before the next try; a hint above `max_retry_after_s` (default 60) ends the retries. `honor_retry_after` and `max_retry_after_s` join the retry policy. A prompt too long for the model fails once with code `CONTEXT_LENGTH_EXCEEDED` and is never retried.
@@ -41,7 +41,6 @@ reconciling the release notes with the code and docs currently on that branch.
 - Native memory calls name their store (`memory_name`, `memory_type`): a MEMORY_OP that names none uses the issuing agent's working memory, `<agent_id>.working_memory`.
 - Native `events.jsonl` records carry explicit dataflow State identity: `state_in` / `state_out` ids (`{exec_call_id}#{n}`, per visit) and `state_in_content` / `state_out_content` on LLM, tool, memory and context-assembly calls, agent start and end, and parallel group joins. Additive; nothing reads them yet.
 - A `health_probe` layer checks ahead of the model's next call that what the spec marks probeable still answers: a tool with a `probe`, a peer with `probe: true` in `spec.communication.peers` (an A2A link fetches the remote agent card afresh). A failing target is taken out of the running spec and put back when its probe passes. It acts where the circuit breaker only reacts.
-- `mas-lab init` writes `api_base: env:OPENAI_BASE_URL|<url>` so the file names the env var. `standard:openai` and the sample workspace do the same. A custom URL at init uses `<infra-name>_API_BASE` so a leftover `OPENAI_BASE_URL` does not steal the call.
 - Write a new tool as `async def on_execute_tool` (or `async def execute`). That one method is enough; the engine awaits it. A `def on_execute_tool` still works: the engine may run it in a worker thread. `on_aexecute_tool` still wins when present. The sync path finishes an async tool instead of returning a coroutine. Calling `call_tool` from a running loop raises; use `acall_tool`.
 - `gov_no_undeclared_peer` BLOCKs leftover `delegate_to_*` to a dest not in this agent's `delegates_to`. A user tool named `send` or a declared `delegate_to_<x>` tool is left alone. `with-hardened` names it. Send itself does not refuse.
 - openai and mcp ride http: `protocol: openai` plus a url is `[http, openai]`;
@@ -70,6 +69,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- A SLIM create-app failure is `slim binding error` and does not quote the bindings.
 - Keep one append handle per `events.jsonl` and stream log; emit or publish after close raises. See `docs/references/lab-throughput.md`.
 - Serialize a stream event once; `follow_worker` fetches only new log bytes; `reset_channel` restores the previous log. See `docs/references/lab-throughput.md`.
 - Cache parsed YAML by path and content hash for a lab batch, and memoize installed library roots. See `docs/references/lab-throughput.md`.
@@ -115,7 +115,57 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Breaking
 
-- Library and runtime code no longer read `os.environ`. `mas-ctl`, `mas-lab` and the controller install their environment once with `mas.runtime.hostenv.install(os.environ)`, and library code reads `hostenv.get`. A program that embeds the library (calls `run_mas_benchmark`, builds sessions itself) must make that call first; without it the library sees an empty environment (no `PATH`, no API keys). Values a service exports for a run travel through `hostenv.overlay`, not the process environment.
+#### Secret references
+
+- A manifest holds `{secret: NAME}` or `{secret: {name, key, optional, prefix}}`, never a value. A literal in a secret field or a credential header, and credentials in a URL, are load errors that name the field, never the value.
+- `SecretRef` names and keys match `[a-z0-9][a-z0-9._-]{0,127}`; `prefix` is one auth scheme word and a space, or empty.
+- `env:` strings and `*_env` keys (`api_key_env`, `secret_env`, `password_env`, `embed_api_key_env`, `otlp_endpoint_env`) are a load error that names the replacement.
+- Manifests refuse the `!!set`, `!!omap` and `!!pairs` tags and a document past 100 levels or 100,000 nodes with aliases expanded; a YAML error never quotes the document.
+- `standard:openai`, `mas-lab init`, `openai.example.yaml` and the sample workspace write `api_key: {secret: openai}`. Set the key with `mas-ctl secrets set openai`.
+- An LLM layer's default secret (`openai`, `anthropic`, ...) goes only to that provider's own endpoint. Any other `api_base` needs an explicit `api_key`; a keyless server (ollama, vllm, litellm) takes `{secret: {name: NAME, optional: true}}`.
+- `OPENAI_BASE_URL` / `OPENAI_API_BASE` apply only when the infra `api_base` is empty, and the leaf then needs an explicit `api_key`.
+- ClickHouse and Neo4j passwords are declared SecretRefs; none is assumed.
+- An override that moves the endpoint of a row holding SecretRefs must restate the credentials.
+- A2A `admission.callers` maps a caller name to a SecretRef. The tokens are read on every request, so a rotated token applies without a restart.
+- `mas-ctl infra show` prints a SecretRef as name, presence and size. A missing required secret refuses the start.
+
+#### Secret stores
+
+- The default is a file store (`<workspace>/.mas/secrets`, files `0400`, directory `0700`, owner checked, 1 MiB cap). The `env` store (`MAS_SECRET_<NAME>`) is for development only. `--secrets-dir` and `--secret-store file|env` select the store.
+- The file store refuses a symlink.
+- `mas-ctl secrets init|set|list|import-env` never print a value. `secrets set` reads a hidden prompt or stdin and refuses a value on the command line. `import-env` copies the known provider variables (`HF_TOKEN` as `hf`, ...) into the store.
+- Production hardening fails the env store (`secret-store-env`) and a file store with `allow_loose_permissions` (`secret-store-loose-permissions`).
+- One secret resolver per process (`set_process_resolver`, `current_resolver`).
+
+#### Host environment
+
+- Library and runtime code no longer read `os.environ`. An entry point calls `mas.runtime.entrypoint.install_host_environment()` once; it keeps declared non-secret keys in `mas.runtime.hostenv` and scrubs the process. An embedding program must make that call first (see `docs/references/secrets.md`).
+- Children (shell steps, skill scripts, `docker compose`, MCP stdio servers, lab spawn workers) get `child_env`: an allowlist plus declared keys, not the host environment.
+- A proxy, OTLP endpoint or `NEO4J_URI` variable that holds `user:password@host` or a credential parameter stops the entry point.
+- `.env` is no longer exported and holds non-secret `MAS_LLM_*` settings only; the shell wins over it. Move keys with `mas-ctl secrets import-env`.
+- The `env` of a service, fixture or shell step accepts `{secret: NAME}`, revealed only into that child; a plain value under a provider key name, a `MAS_SECRET_*` name or an installer index variable is refused. A shell step copies service-exported variables with `passthrough`.
+
+#### Network and transport
+
+- `LLM_PROXY_API_BASE` is removed. `standard:llm-proxy` sets `proxy.api_base` itself; change it with an overlay.
+- Plain http never carries a secret except to a loopback host; there is no setting to allow it. A remote A2A peer needs https.
+- A secret header goes only to the origin of the row's `url` (an A2A row may list `allowed_origins`). No redirect is followed with a secret outside that origin.
+- A request that carries a secret to a loopback host ignores the environment's proxy settings.
+- A failure with an HTTP response says `<Type>: HTTP <status>`; the body, the provider's message and its request id are never shown. A failed A2A call names a fixed reason and the JSON-RPC code. A tool server's own JSON-RPC error stays the tool result.
+- A ClickHouse connection or query error names the error class and the HTTP status, never the server's answer.
+
+#### Lab and docker
+
+- `mas-lab --secrets-dir` and `--secret-store`. One secret store per lab process; the controller daemon serves the store it started with and refuses a job for another store.
+- The `mas-lab telemetry` ClickHouse commands no longer take `--password`; they read the `password` ref of the user connection.
+- One ClickHouse client (`clickhouse_http`, stdlib HTTP): the `clickhouse` extra, `clickhouse-connect`, `collector.dump_spans`, `list_apps` and `run_dump_spans` are removed; read spans with `clickhouse_http.fetch_spans` or `OtelSpanSet.fetch_from_clickhouse(conn, key, ...)`. `mas-lab telemetry list-apps` is removed (use `apps list`); `dump` is core's (`--by run`, `--app-name`); `push` and `verify` are library-telemetry's.
+- `mas-lab otel` is removed; use `mas-lab telemetry`. The `mas.lab.telemetry` re-export package is removed; import `mas.library.telemetry.collector` (`push_file`, `convert_file_to_otlp_jsonl`) or `mas.library.telemetry.verification`.
+- A scripted-model fixture is keyless: its proxy row names the optional secret `lab`, so a fixture lab runs with an empty store.
+- The controller HTTP app is a factory: run `uvicorn --factory mas.lab.controller.fastapi_app:served_app`; the module-level `app` is removed.
+- Controller run requests (`run-mas`, `experiment/run`, `/api/commands`) no longer take `pre` shell steps, and the demo UI no longer sends a layout node's `pre`.
+- Docker: compose no longer uses `env_file`, and containers get only the variables `compose.yaml` lists. The secret store lives on the mounted workspace, the user config mount moved from `/root/.config/mas` to `/config/mas`, and the container runs as the owner of the workspace. After upgrading from an older image that wrote `docker/data` as root, run `sudo chown -R $USER docker/data` once (or the folder `MAS_DATA_MOUNT` names).
+
+#### Other
 
 - `EngineToolContract.claims` takes the turn context: `claims(tool_name, *, ctx=None)`. A custom engine tool that defines `claims(tool_name)` must accept `ctx`.
 - The runtime names no layer and ships no pipeline data: default steps, the `spec.control` bridge keys and the response-store layer come from attributes on library rows (`default_steps`, `control_key`, `retry_overlay`, `stores_llm_responses`). The fallback `openai` default protocol and the `mock` non-protocol name are gone; `protocol: mock` is no longer read as the default. `RetryPolicy` and the retry loop moved to `mas.library.standard.lib.retry`; `ReliabilitySettings` is gone (the `spec.control` keys are checked by the layer that answers to them). `--connect` / `--listen` schemes come from the protocol plugin's row (`protocol_name`, `url_schemes`, `connect_as`).
@@ -132,7 +182,6 @@ reconciling the release notes with the code and docs currently on that branch.
 - Code names the ontology SCOPE (`scope_models`, `ensure_scope_topology`, `scope_default`, `SCOPE_ONTOLOGY_EDITABLE`).
 - A pattern's next hop is this agent's `delegates_to`. The old fallbacks (`workflow.participants`, every other node, the agency list) are gone, and an agent with no `delegates_to` has no next hop (the pattern logs a warning and ends the turn). `behavior.delegation_style` does not affect a pattern's next hop.
 - `send` no longer refuses a target outside `delegates_to`; the model can only call peers that are offered, and `gov_no_undeclared_peer` (in `with-hardened`) blocks the rest. It does nothing when the kernel has no agent id.
-- `standard:openai` now reads `OPENAI_BASE_URL` when that env var is set (`api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1`). A hardcoded URL in that file used to ignore the env var. `openai.example.yaml` and the sample workspace use the same form; they used to read `OPENAI_API_BASE`. `OPENAI_API_BASE` is still used only when `api_base` is left empty.
 - LLM answers are stored only by the `llm_cache` infra step. `--cache-read` /
   `--cache-write` / `--cache-read-only` turn that step on or change its flags.
   The old provider wrap on the chat path is gone. A cache file written by that
@@ -205,7 +254,7 @@ reconciling the release notes with the code and docs currently on that branch.
   the earlier leaf (connection, `models.allowed`, mappings, and that leaf's
   steps). A different `api_base` on the same name is no longer an error.
 - With several LLMProxy leaves, a model none of them claims is an error.
-  Engine build requires every live leaf's `api_key_env`, including a leaf
+  Engine build requires every live leaf's `api_key`, including a leaf
   the run never calls.
 - The LLM cache key now includes the leaf name, model, and endpoint. A
   cache written on this branch will not hit after the leaf's `api_base`
@@ -293,7 +342,7 @@ reconciling the release notes with the code and docs currently on that branch.
 - The sync tool path (`call_tool`) finishes an async tool on one shared helper loop, so a client kept between calls stays valid. It used a new loop per call.
 - A `None` answer from `on_aexecute_tool` / an async `on_execute_tool` falls back to the legacy `execute` like the sync path does.
 - `mas-lab init` gives a second infra name with the same slug its own variable (`MY_PROVIDER_API_BASE_2`).
-- A LLM address taken from the shell (`OPENAI_BASE_URL`, `*_API_BASE`) logs one warning with its host: the API key is sent there.
+- A LLM address taken from the shell (`OPENAI_BASE_URL`, `*_API_BASE`) logs one warning with its host: the explicit `api_key` is sent there.
 - Closing an MCP session after the event loop is gone does not raise.
 - The http call transport under `openai` and `mcp` keeps what the old clients had: the row's headers (an MCP bearer token reaches the server), redirects, a 120s LLM and a 30s/300s MCP timeout, the `verify_ssl` / `ca_bundle` TLS settings, and plain `http://` on an internal host. It holds one async client per event loop and closes them on stop. An OpenAI transport failure drops that transport's client.
 - Closing an MCP provider stops its http transport. Engine stop closes the tool provider. An SSE or stdio MCP row gets no http transport.
@@ -521,7 +570,7 @@ reconciling the release notes with the code and docs currently on that branch.
   (`PipedLLMProvider` is that leaf call). `for: tool` `per: all` wraps the
   engine's tool call; destination tool steps wrap the tool server that
   claims the name (`PipedToolCall`). Callers keep `LiveLlmEngine`. Each
-  leaf uses its own `api_key_env`.
+  leaf uses its own `api_key`.
   Cache lookup tries the routed key, then the pre-routing preview hash when
   a single leaf is configured; several leaves never reuse an old-key hit.
   Writes use the routed key only. See
@@ -703,9 +752,9 @@ reconciling the release notes with the code and docs currently on that branch.
 - A `delegate_to_` name with a blank target is not a handoff. The helper
   strips whitespace and returns nothing.
 - `mas-lab benchmark publish-hf` and `import-hf` take `--token` or
-  `--token-file`. If neither is set, ctl reads `HF_TOKEN`. `import-hf
-  --dry-run` still uses `HF_TOKEN` when it is set, and does not require
-  a token when it is not.
+  `--token-file`. If neither is set, ctl reads secret `hf` from the store
+  (`HF_TOKEN` is not read). `import-hf --dry-run` uses a token when one
+  resolves and does not require one when none does.
 - `mas-lab benchmark export` builds `source/` from an allowlist of folders
   and file types, skips `.env*`, keys, and certificates, fails if a sensitive
   file is found, and writes archive-relative paths only to `MANIFEST.json`.

@@ -23,8 +23,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from mas.runtime import hostenv
-
 logger = logging.getLogger(__name__)
 
 # Environment variable names a caller-supplied `env_extra` override must never
@@ -448,8 +446,10 @@ def run_script_from_source(
         # HOME, PYTHONPATH, etc. and break most scripts.
         # Sanitized here (not just by callers) so this is safe even when
         # invoked directly, outside the RunSkillScriptPlugin tool-call path.
+        from mas.runtime.secrets import child_env
+
         safe_extra = sanitize_extra_env(env_extra)
-        env = {**hostenv.snapshot(), **safe_extra}  # the host's environment incl. what services export
+        env = child_env(safe_extra) if safe_extra else child_env()
 
         try:
             result = subprocess.run(

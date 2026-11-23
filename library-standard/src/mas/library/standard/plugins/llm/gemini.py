@@ -23,6 +23,8 @@ from mas.library.standard.plugins.llm.thinking import gemini_thinking_config
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
+from mas.runtime.reliability.classify import provider_failure
+from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +49,7 @@ class GeminiLLMProvider(HttpLlmProtocol):
     provider_id = "gemini"
     kind = "gemini"
     default_api_base = "https://generativelanguage.googleapis.com/v1beta"
-    default_api_key_env = "GEMINI_API_KEY"
+    default_secret = SecretRef(name="gemini")
 
     def _build_chat_request(
         self,
@@ -57,7 +59,6 @@ class GeminiLLMProvider(HttpLlmProtocol):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
-        api_key: str,
         reasoning: ReasoningSettings,
         max_completion_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
@@ -121,7 +122,7 @@ class GeminiLLMProvider(HttpLlmProtocol):
                 payload["generationConfig"] = gen
             gen["responseMimeType"] = "application/json"
             gen["responseJsonSchema"] = schema
-        headers = self._auth_headers(api_key)
+        headers = {**self._key_headers(), "Content-Type": "application/json"}
         if extra_headers:
             headers.update({str(k): str(v) for k, v in extra_headers.items()})
         query: dict[str, Any] = dict(extra_query) if extra_query else {}
@@ -133,8 +134,8 @@ class GeminiLLMProvider(HttpLlmProtocol):
         action = "streamGenerateContent" if stream else "generateContent"
         return f"{self.api_base.rstrip('/')}/models/{_model_id(model)}:{action}"
 
-    def _auth_headers(self, api_key: str) -> dict[str, str]:
-        return {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+    def _auth_header(self) -> tuple[str, str]:
+        return "x-goog-api-key", ""
 
     def _message_from_completion(self, data: dict[str, Any], reasoning: ReasoningSettings, **_: Any) -> dict[str, Any]:
         _raise_embedded_error(data)
@@ -191,13 +192,9 @@ def _raise_embedded_error(data: dict[str, Any]) -> None:
     err = data.get("error")
     if not isinstance(err, dict):
         return
-    code = int(err.get("code") or 0)
-    transient = code in {429, 500, 502, 503, 504}
-    raise ClassifiedFailure(
-        f"Gemini error {code or ''} {err.get('status') or ''}: {err.get('message') or 'no detail'}".replace("  ", " "),
-        failure_class=FailureClass.TRANSIENT if transient else FailureClass.APPLICATION,
-        code=str(err.get("status") or code or "error"),
-    )
+    code = err.get("code")
+    status = code if isinstance(code, int) and not isinstance(code, bool) and 100 <= code < 600 else None
+    raise provider_failure("Gemini", status=status, error=err)
 
 
 class _Parts:

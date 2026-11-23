@@ -184,7 +184,7 @@ Each `tool_call_end` at level N provides the facts available to the next `contex
 
 ## OTel export
 
-Pass `--events-format otel` (or `format: otel` in the manifest `observability` block) to write spans as OTLP JSON (`resourceSpans` envelope). Evaluation plugins in the OSS tree read the raw JSONL events directly. `mas-lab otel` and `mas-lab telemetry` convert between native events and OTLP spans.
+Pass `--events-format otel` (or `format: otel` in the manifest `observability` block) to write spans as OTLP JSON (`resourceSpans` envelope). Evaluation plugins in the OSS tree read the raw JSONL events directly. `mas-lab telemetry` converts between native events and OTLP spans.
 
 ```jsonc
 {

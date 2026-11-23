@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mas.runtime.secrets import SecretRef
+from mas.runtime.secrets.ref import parse_secret_ref_optional
+
 
 def _providers_from_document(raw: Any) -> dict[str, dict[str, Any]]:
     if not isinstance(raw, dict):
@@ -55,10 +58,21 @@ def proxy_protocol_fields(raw: dict[str, Any] | None) -> dict[str, Any]:
     return {key: src[key] for key in _protocol_proxy_fields() if key in src}
 
 
+def _manifest_form(node: Any) -> Any:
+    """*node* with every SecretRef as its manifest mapping (``{secret: ...}``), the form a schema accepts."""
+    if isinstance(node, SecretRef):
+        return node.to_manifest()
+    if isinstance(node, dict):
+        return {key: _manifest_form(value) for key, value in node.items()}
+    if isinstance(node, (list, tuple)):
+        return [_manifest_form(item) for item in node]
+    return node
+
+
 @dataclass
 class ProxySpec:
     api_base: str = ""
-    api_key_env: str = "OPENAI_API_KEY"
+    api_key: SecretRef | None = None
     timeout: float | None = None
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -103,14 +117,14 @@ class InfraManifest:
 
     @classmethod
     def load(cls, path: Path | str) -> InfraManifest:
-        from mas.ctl.infra.env_resolve import resolve_manifest_values
+        from mas.runtime.secrets import prepare_manifest
         from mas.runtime.spec.source import load_yaml_file
 
         p = Path(path).resolve()
         data = load_yaml_file(p)
         if not isinstance(data, dict):
             raise ValueError(f"{p}: expected mapping")
-        return cls.from_document(resolve_manifest_values(data))
+        return cls.from_document(prepare_manifest(data))
 
     @classmethod
     def from_document(cls, data: dict[str, Any]) -> InfraManifest:
@@ -128,10 +142,7 @@ class InfraManifest:
         proxy_raw = spec.get("proxy") or spec.get("server") or {}
         models_raw = spec.get("models") or {}
         defaults = models_raw.get("defaults") or spec.get("defaults") or {}
-        if "api_key_env" in proxy_raw:
-            api_key_env = str(proxy_raw.get("api_key_env") or "")
-        else:
-            api_key_env = "OPENAI_API_KEY"
+        api_key = parse_secret_ref_optional(proxy_raw.get("api_key"), field="api_key")
         name = str(meta.get("name", ""))
         pipeline = _pipeline_from_spec(spec, where=str(name or kind or "infra"))
         stacks: dict[str, list[dict[str, Any]]] = {}
@@ -148,7 +159,7 @@ class InfraManifest:
             kind=kind,
             proxy=ProxySpec(
                 api_base=str(proxy_raw.get("api_base", "") or ""),
-                api_key_env=api_key_env,
+                api_key=api_key,
                 timeout=float(proxy_raw["timeout"]) if proxy_raw.get("timeout") is not None else None,
                 extras=proxy_protocol_fields(proxy_raw if isinstance(proxy_raw, dict) else {}),
             ),
@@ -171,11 +182,15 @@ class InfraManifest:
         )
 
     def to_document(self) -> dict[str, Any]:
-        """Serialize the effective infra model for schema-backed CLI patching."""
+        """Serialize the effective infra model for schema-backed CLI patching.
+
+        Every SecretRef is written back as its ``{secret: ...}`` mapping, as in a manifest.
+        """
         proxy: dict[str, Any] = {
             "api_base": self.proxy.api_base,
-            "api_key_env": self.proxy.api_key_env,
         }
+        if self.proxy.api_key is not None:
+            proxy["api_key"] = self.proxy.api_key.to_manifest()
         if self.proxy.timeout is not None:
             proxy["timeout"] = self.proxy.timeout
         proxy.update(self.proxy.extras)
@@ -208,7 +223,7 @@ class InfraManifest:
             "apiVersion": "infra/v1",
             "kind": self.kind or "InfraBundle",
             "metadata": {"name": self.name},
-            "spec": spec,
+            "spec": _manifest_form(spec),
         }
 
     def _document_pipeline(self) -> list[dict[str, Any]]:
@@ -233,13 +248,14 @@ class InfraManifest:
     def to_llm_proxy_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
             "api_base": self.proxy.api_base,
-            "api_key_env": self.proxy.api_key_env,
             "default_model": self.models.default_llm,
             "mappings": dict(self.models.mappings),
             "allowed": list(self.models.allowed),
             "model_access": dict(self.model_access),
             "pipeline": list(self.pipeline),
         }
+        if self.proxy.api_key is not None:
+            out["api_key"] = self.proxy.api_key
         if self.proxy.timeout is not None:
             out["timeout"] = self.proxy.timeout
         if self.models.generation:

@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Any
 
 import click
-import yaml
 from mas.ctl.validate import validate_file, validate_tree, validation_enabled
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load
 
 
 @click.command("validate")
@@ -61,7 +61,7 @@ def validate_cmd(
         path = Path(raw)
         if path.is_file():
             if overlays and path.suffix in (".yaml", ".yml"):
-                data = yaml.safe_load(path.read_text(encoding="utf-8"))
+                data = _load(path)
                 # The manifest kind comes from the base document, not the overlay target.
                 from mas.ctl.validate.schemas import declared_kind
 
@@ -70,7 +70,7 @@ def validate_cmd(
 
                 for ov in overlays:
                     ov_path = resolve_overlay_path(ov, orig_cwd=Path.cwd(), manifest_dir=path.parent)
-                    ov_raw = yaml.safe_load(ov_path.read_text(encoding="utf-8"))
+                    ov_raw = _load(ov_path)
                     if is_control_document(ov_raw):
                         ov_result = validate_data(
                             ov_raw,
@@ -133,8 +133,8 @@ def _hardening_failed(paths: tuple[str, ...], profile: str) -> bool:
         files = [path] if path.is_file() else sorted([*path.rglob("*.yaml"), *path.rglob("*.yml")])
         for file in files:
             try:
-                loaded = yaml.safe_load(file.read_text(encoding="utf-8"))
-            except (OSError, yaml.YAMLError):
+                loaded = safe_yaml_load(file.read_text(encoding="utf-8"))
+            except (OSError, YamlLoadError):
                 continue
             if isinstance(loaded, dict):
                 documents.append((str(file), loaded))
@@ -145,6 +145,13 @@ def _hardening_failed(paths: tuple[str, ...], profile: str) -> bool:
             click.echo(f"  [{'error' if profile == 'production' else 'warning'}] {result.check}: {problem}")
         click.echo(f"      fix: {result.fix}")
     return profile == "production" and not report.ok
+
+
+def _load(path: Path) -> Any:
+    try:
+        return safe_yaml_load(path.read_text(encoding="utf-8"), source=str(path))
+    except YamlLoadError as exc:
+        raise click.ClickException(str(exc)) from None
 
 
 def _print_result(result: Any) -> None:

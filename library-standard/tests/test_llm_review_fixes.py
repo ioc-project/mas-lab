@@ -52,7 +52,7 @@ def _chat(provider: Any, **kwargs: Any) -> dict[str, Any]:
 
 
 def _wrap(cls: Any, transport: _Transport, base: str, **params: Any) -> Any:
-    return cls.wrap(transport, {"api_base": base, "api_key": "k", "api_key_env": "K", **params}, call_kinds=("llm",))
+    return cls.wrap(transport, {"api_base": base, "api_key": cls.default_secret, **params}, call_kinds=("llm",))
 
 
 _USER = [{"role": "user", "content": "q"}]

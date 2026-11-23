@@ -415,23 +415,76 @@ class BatchPipelineStep(PipelineStep, ABC):
         return self._merge_results(items, list(results), ctx)
 
 
-class YAMLIncludeLoader(yaml.SafeLoader):
-    """Custom YAML loader with !include support."""
+class PipelineLoadError(ValueError):
+    """A pipeline file or one of its ``!include`` files did not load.
 
-    def __init__(self, stream):
-        self._root = Path(stream.name).parent if hasattr(stream, "name") else Path.cwd()
+    The message is a fixed text with a YAML position, never text of the document: a value
+    written in the file (or an include path) may be a secret.
+    """
+
+
+MAX_INCLUDE_DEPTH = 8
+_INCLUDE_REFUSED = "!include must name a .yaml or .yml file under the pipeline file's directory"
+
+
+class YAMLIncludeLoader(yaml.SafeLoader):
+    """Safe loader with ``!include``: a relative ``.yaml``/``.yml`` path with no ``..`` that resolves under
+    the including pipeline's directory, nested at most :data:`MAX_INCLUDE_DEPTH` deep."""
+
+    def __init__(self, stream, *, here: Optional[Path] = None, depth: int = 0):
+        self._dir = here or (Path(stream.name).resolve().parent if hasattr(stream, "name") else Path.cwd().resolve())
+        self._depth = depth
         super().__init__(stream)
 
 
-def include_constructor(loader: YAMLIncludeLoader, node: yaml.Node) -> Any:
-    path = loader.construct_scalar(node)
-    include_path = loader._root / path
+def _refused(loader: YAMLIncludeLoader, node: yaml.Node, text: str) -> PipelineLoadError:
+    mark = node.start_mark
+    return PipelineLoadError(f"{loader.name}: {text} (line {mark.line + 1}, column {mark.column + 1})")
 
-    with open(include_path, "r") as f:
-        return yaml.load(f, YAMLIncludeLoader)
+
+def include_constructor(loader: YAMLIncludeLoader, node: yaml.Node) -> Any:
+    if loader._depth >= MAX_INCLUDE_DEPTH:
+        raise _refused(loader, node, f"!include nested more than {MAX_INCLUDE_DEPTH} deep")
+    name = Path(str(loader.construct_scalar(node)))
+    target = (loader._dir / name).resolve()
+    if name.is_absolute() or ".." in name.parts or not target.is_relative_to(loader._dir):
+        raise _refused(loader, node, _INCLUDE_REFUSED)
+    if target.suffix.lower() not in (".yaml", ".yml") or not target.is_file():
+        raise _refused(loader, node, _INCLUDE_REFUSED)
+    with open(target, "r", encoding="utf-8") as f:
+        nested = YAMLIncludeLoader(f, here=target.parent, depth=loader._depth + 1)
+        try:
+            return nested.get_single_data()
+        finally:
+            nested.dispose()
 
 
 YAMLIncludeLoader.add_constructor("!include", include_constructor)
+
+
+def _load_pipeline_yaml(path: Path) -> Any:
+    """The pipeline document with its includes expanded, refused if it holds a secret value.
+
+    A file that does not load raises :class:`PipelineLoadError` with the YAML position only.
+    """
+    from mas.runtime.secrets.manifest import check_manifest
+    from mas.runtime.spec.yaml_errors import yaml_error_text
+
+    with open(path, "r", encoding="utf-8") as f:
+        loader = YAMLIncludeLoader(f)
+        try:
+            raw = loader.get_single_data()
+            message = None
+        except PipelineLoadError:
+            raise
+        except Exception as exc:  # a tag constructor raises ValueError, TypeError, ... quoting the value
+            message = yaml_error_text(exc)
+        finally:
+            loader.dispose()
+    if message is not None:
+        raise PipelineLoadError(f"{path}: {message}")
+    check_manifest(raw, source=str(path))
+    return raw
 
 
 class Pipeline:
@@ -481,8 +534,7 @@ class Pipeline:
     def step_dicts_from_yaml(cls, path: Union[str, Path]) -> List[Dict[str, Any]]:
         """Parse step dicts from pipeline YAML without dependency validation."""
         path = Path(path)
-        with open(path, "r") as f:
-            raw = yaml.load(f, YAMLIncludeLoader)
+        raw = _load_pipeline_yaml(path)
 
         from mas.lab.manifests import normalize_manifest_version
 
@@ -501,9 +553,7 @@ class Pipeline:
     @classmethod
     def from_yaml(cls, path: Union[str, Path]) -> Pipeline:
         path = Path(path)
-
-        with open(path, "r") as f:
-            raw = yaml.load(f, YAMLIncludeLoader)
+        raw = _load_pipeline_yaml(path)
 
         from mas.lab.manifests import normalize_manifest_version
 
@@ -551,6 +601,7 @@ class Pipeline:
 __all__ = [
     "PipelineStep",
     "BatchPipelineStep",
+    "PipelineLoadError",
     "YAMLIncludeLoader",
     "include_constructor",
     "Pipeline",

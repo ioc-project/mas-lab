@@ -189,7 +189,7 @@ _Used by:_ `spec.models[]`
 A row also accepts these static Chat Completions sampling fields: `top_p`, `top_k`, `min_p`, `min_tokens`, `presence_penalty`, `frequency_penalty`, `repetition_penalty`, `seed`, `n`, `stop`, `logit_bias`, `logprobs`, `top_logprobs`, `parallel_tool_calls`, `response_format`, `verbosity`, `service_tier`, `store`, `metadata`, `modalities`, `prediction`, `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_breakpoints`, and `user`. The schema is [`llm-sampling.schema.yaml`](../schemas/runtime/fragments/llm-sampling.schema.yaml).
 The [model catalog](llm-model-catalog.md) records which fields each model honours. The three `prompt_cache_*` fields are explained in [llm-prompt-cache.md](llm-prompt-cache.md); how each protocol maps these fields is in [llm-providers.md](llm-providers.md).
 
-Do **not** put `api_base` or `api_key_env` here. They belong in the flavour or infra manifest.
+Do **not** put `api_base` or `api_key` here. They belong in the flavour or infra manifest (`api_key` is a SecretRef).
 
 **Example:**
 
@@ -1011,7 +1011,8 @@ observability:
 | `native` | `path`, `events_file` | Output directory and file name for `events.jsonl`. |
 | `native` | `categories` | Filters which record categories (`control`, `tool`, `model`, `execution`) are written: a list of prefixes, or `{include, exclude, enable, disable}`. Sinks still receive every event. |
 | `otel` | `output_path`, `otel_file` | Where span JSONL is written (default next to `events.jsonl`). |
-| `otel` | `otlp_endpoint_env` | Environment variable holding the OTLP endpoint (default `OTEL_EXPORTER_OTLP_ENDPOINT`); unset means file export only. |
+| `otel` | `otlp_endpoint` | Plain overlay URL for the OTLP collector; omit for file export only. |
+| `otel` | `headers` | Headers for every OTLP export request: name to a string or a SecretRef (`Authorization: {secret: {name: otlp, prefix: "Bearer "}}`). A credential header (`Authorization`, `X-Api-Key`, `Cookie`, ...) must be a SecretRef; a plain string there is refused. Revealed when the exporter is built, so a rotated secret reaches the next run. `OTEL_EXPORTER_OTLP_HEADERS` is not read: entry points drop it (and `OTEL_EXPORTER_OTLP_{TRACES,LOGS}_HEADERS`) from the process. The OpenTelemetry SDK merges those variables into every export, so a program that embeds the plugin without a MAS Lab entry point must not set them. |
 | `otel` | `app_name` / `mas_id` | Declared MAS name, used as the service identity (not a path). `service_name` is ignored. |
 | `otel` | `converter_profile`, `realtime`, `extensions` | Span conversion profile (default `observe_sdk`), live incremental export (default `false`), and MAS span extensions. |
 

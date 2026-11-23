@@ -6,15 +6,15 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-
 from mas.lab.controller.constants import WEB_SEARCH_CACHE_DIR
+from mas.lab.controller.manifest_validation import refuse_secret_fields, refuse_secret_values
 from mas.lab.controller.models import MultiTurnRequest, RunAgentRequest, RunMASRequest
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from mas.lab.controller.path_safety import validate_name
+from mas.lab.controller.routes._api import deps, jobs
 
 router = APIRouter()
 
@@ -30,11 +30,7 @@ def _resolve_overlay_arg(lib_dir: Path, ov: str) -> str:
     if candidate.is_file():
         return str(candidate.relative_to(lib_dir))
     stem = raw.stem
-    hits = [
-        path
-        for path in lib_dir.rglob(f"{stem}.yaml")
-        if "overlays" in path.parts and "versions" not in path.parts
-    ]
+    hits = [path for path in lib_dir.rglob(f"{stem}.yaml") if "overlays" in path.parts and "versions" not in path.parts]
     hits.sort(key=lambda path: (0 if path.parent.name == "overlays" else 1, str(path)))
     if hits:
         return str(hits[0].relative_to(lib_dir))
@@ -64,6 +60,8 @@ def _infra_args(lib_dir: Path, infra_refs: list[str]) -> list[str]:
 async def run_agent(library_name: str, req: RunAgentRequest):
     """Run an agent with a single query in-process. Returns a job_id for polling."""
     lib_dir = deps.get_library_path(library_name)
+    refuse_secret_values(req.manifest_yaml)
+    refuse_secret_fields(req.model_dump(exclude={"manifest_yaml"}))
 
     if req.no_cache and WEB_SEARCH_CACHE_DIR.exists():
         shutil.rmtree(WEB_SEARCH_CACHE_DIR, ignore_errors=True)
@@ -91,9 +89,8 @@ async def run_agent_multi_turn(library_name: str, req: MultiTurnRequest):
     """Run an agent with multiple sequential queries. Returns a job_id for polling."""
     lib_dir = deps.get_library_path(library_name)
 
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", prefix="agent-mt-", delete=False, dir=str(lib_dir)
-    )
+    refuse_secret_values(req.manifest_yaml)
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="agent-mt-", delete=False, dir=str(lib_dir))
     tmp.write(req.manifest_yaml)
     tmp.close()
     tmp_path = Path(tmp.name)
@@ -121,9 +118,8 @@ async def run_agent_multi_turn(library_name: str, req: MultiTurnRequest):
 @router.post("/api/libraries/{library_name}/run-mas", tags=["Libraries"], status_code=202)
 async def run_mas(library_name: str, req: RunMASRequest):
     """Run a MAS with a single query. Returns a job_id for polling."""
-    import yaml
-
     lib_dir = deps.get_library_path(library_name)
+    refuse_secret_fields(req.model_dump(exclude={"manifest_yaml"}))
     cleanup_paths: list[Path] = []
     mas_rel: str
 
@@ -133,14 +129,12 @@ async def run_mas(library_name: str, req: RunMASRequest):
             raise HTTPException(status_code=404, detail=f"MAS not found: {req.mas_path}")
         mas_rel = req.mas_path
     elif req.manifest_yaml.strip():
+        manifest_data = refuse_secret_values(req.manifest_yaml)
         manifest_dir = lib_dir
-        try:
-            manifest_data = yaml.safe_load(req.manifest_yaml)
-            mas_name = (manifest_data or {}).get("metadata", {}).get("name", "")
-            if mas_name:
-                app_dir = lib_dir / "apps" / mas_name
-                if app_dir.is_dir():
-                    manifest_dir = app_dir
+        try:  # the manifest name is a path segment: the allow-list first
+            app_dir = lib_dir / "apps" / validate_name(manifest_data.get("metadata", {}).get("name", ""))
+            if app_dir.is_dir():
+                manifest_dir = app_dir
         except Exception:
             pass
         tmp = tempfile.NamedTemporaryFile(
@@ -172,7 +166,6 @@ async def run_mas(library_name: str, req: RunMASRequest):
     events_file = Path(tempfile.mkdtemp(prefix="mas-demo-ui-")) / "traces" / "events.jsonl"
     events_file.parent.mkdir(parents=True, exist_ok=True)
     env_override["MAS_EVENTS_FILE"] = str(events_file)
-    _run_pre_steps(lib_dir, req.pre)
     job = jobs.submit_job(
         endpoint=f"/api/libraries/{library_name}/run-mas",
         cmd=cmd,
@@ -193,23 +186,3 @@ async def run_mas(library_name: str, req: RunMASRequest):
         "command": job.command,
         "events_path": str(events_file),
     }
-
-
-def _run_pre_steps(lib_dir: Path, steps: list[dict]) -> None:
-    for step in steps or []:
-        kind = str(step.get("type") or "shell")
-        command = str(step.get("command") or (step.get("config") or {}).get("command") or "").strip()
-        if kind != "shell" or not command:
-            continue
-        completed = subprocess.run(
-            ["/bin/sh", "-c", command],
-            cwd=str(lib_dir),
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        if completed.returncode != 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"pre shell failed ({completed.returncode}): {command}\n{completed.stderr}",
-            )

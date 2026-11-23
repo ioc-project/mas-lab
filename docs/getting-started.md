@@ -28,17 +28,15 @@ uv venv
 --8<-- "docs/includes/pypi-names.md:install-meta"
 export PATH="$PWD/.venv/bin:$PATH"
 mas-lab init
-export OPENAI_API_KEY=<your-key>
+echo KEY | mas-ctl secrets set openai
 ```
 
 ## What you need
 
 - A clone of the repository: `git clone https://github.com/ioc-project/mas-lab.git && cd mas-lab`
-- An `OPENAI_API_KEY` for live LLM runs. Offline, only `mas-ctl validate` works.
+- A secret named `openai` for live LLM runs (`echo KEY | mas-ctl secrets set openai`). Offline, only `mas-ctl validate` works.
 
-Keep secrets out of YAML. The infra manifest names the environment variables
-(`api_base: env:OPENAI_BASE_URL|…`, `api_key_env`); the values live in
-`docker/.env` or a gitignored `.env`. `mas-lab init` writes that `api_base` form.
+Keep secrets out of YAML. The infra manifest holds `{secret: openai}`; the value lives in the file store (`<workspace>/.mas/secrets`). See [secrets](references/secrets.md).
 
 ## First run
 

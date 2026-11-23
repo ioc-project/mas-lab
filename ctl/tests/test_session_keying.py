@@ -56,41 +56,44 @@ def test_an_anonymous_context_id_cannot_forge_a_callers_key() -> None:
 
 def test_over_http_two_admitted_callers_on_one_context_id_stay_apart() -> None:
     # kills: the listener passing no caller to the handler, so the fix never applies on the wire
+    from secret_fakes import bound_secrets
+
     handler = make_runtime_handler(_stop_instance())
     endpoint = {
         "protocol": "a2a",
         "usage": "listen",
         "url": "http://127.0.0.1:8124",
-        "a2a": {"admission": {"callers": {"alice": ALICE, "bob": BOB}}},
+        "a2a": {"admission": {"callers": {"alice": {"secret": "alice"}, "bob": {"secret": "bob"}}}},
     }
-    app = A2AExposure(endpoint=endpoint).build_app(
-        {"metadata": {"name": "solo"}, "spec": {"description": "l"}}, handler
-    )
-
-    def send(client: TestClient, token: str, text: str) -> dict:
-        response = client.post(
-            "/",
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "SendMessage",
-                "params": {
-                    "message": {
-                        "role": "ROLE_USER",
-                        "parts": [{"text": text}],
-                        "messageId": f"m-{text}",
-                        "contextId": "shared",
-                    }
-                },
-            },
-            headers={"A2A-Version": "1.0", "Authorization": f"Bearer {token}"},
+    with bound_secrets({"alice": ALICE, "bob": BOB}):
+        app = A2AExposure(endpoint=endpoint).build_app(
+            {"metadata": {"name": "solo"}, "spec": {"description": "l"}}, handler
         )
-        assert response.status_code == 200, response.text
-        return response.json()
 
-    with TestClient(app) as client:
-        send(client, ALICE, "from alice")
-        send(client, BOB, "from bob")
+        def send(client: TestClient, token: str, text: str) -> dict:
+            response = client.post(
+                "/",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "SendMessage",
+                    "params": {
+                        "message": {
+                            "role": "ROLE_USER",
+                            "parts": [{"text": text}],
+                            "messageId": f"m-{text}",
+                            "contextId": "shared",
+                        }
+                    },
+                },
+                headers={"A2A-Version": "1.0", "Authorization": f"Bearer {token}"},
+            )
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        with TestClient(app) as client:
+            send(client, ALICE, "from alice")
+            send(client, BOB, "from bob")
     alice = handler.manager.get(session_key("alice", "shared"))
     bob = handler.manager.get(session_key("bob", "shared"))
     assert [u for u, _ in alice.instance.driver.ctx.turn_history] == ["from alice"]

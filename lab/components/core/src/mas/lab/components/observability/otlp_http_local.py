@@ -47,6 +47,9 @@ class OtlpLocalHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()  # an entry point (python -m): hostenv first, process scrubbed
     host = hostenv.get("OTLP_LOCAL_HOST", "0.0.0.0")
     port = int(hostenv.get("OTLP_LOCAL_PORT", "4318"))
     storage_path = Path(hostenv.get("OTLP_LOCAL_LOG", "logs/otel_otlp.jsonl"))

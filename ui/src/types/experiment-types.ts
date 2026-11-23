@@ -28,7 +28,6 @@ export interface ExperimentEvaluationConfig {
   metric_kwargs?: {
     model?: string;
     threshold?: number;
-    api_key_env?: string;
   };
 }
 

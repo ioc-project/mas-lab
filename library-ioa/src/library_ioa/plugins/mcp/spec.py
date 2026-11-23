@@ -4,7 +4,7 @@
 
 Connection fields are resolved from infra before this adapter is constructed.
 Unknown ``params`` keys are kept so a later SDK version can consume them without
-a runtime code change.
+a runtime code change. Headers and stdio env hold strings or SecretRef objects.
 """
 
 from __future__ import annotations
@@ -12,38 +12,26 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from mas.runtime import hostenv
+from mas.runtime.secrets import SecretRef
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.ref import check_http_header_secrets, is_ref, parse_secret_ref
 
 
-def _expand_env_ref(value: str) -> str:
-    """Expand ``env:VAR`` / ``env:VAR|default`` without logging the result.
-
-    Manifests hold the value. ``env:VAR|default`` is an optional override.
-    ``env:VAR`` is for secrets: unset means empty (the caller omits the key).
-    """
-    if not value.startswith("env:"):
-        return value
-    rest = value[4:].strip()
-    if not rest:
-        return ""
-    var, sep, default = rest.partition("|")
-    var = var.strip()
-    default = default.strip() if sep else ""
-    if not var:
-        return default
-    resolved = hostenv.get(var)
-    if resolved:
-        return resolved
-    return default
+def _as_header_value(key: str, value: Any) -> str | SecretRef:
+    if is_ref(value):
+        return parse_secret_ref(value, field=key)
+    if isinstance(value, str) and value.startswith("env:"):
+        raise SecretRefError(f"{key}: env: prefix is removed; write a SecretRef ({{secret: NAME}}) for a secret")
+    return str(value) if value is not None else ""
 
 
-def _expand_str_map(raw: dict[str, Any]) -> dict[str, str]:
-    """Expand env refs and drop empty values so unset secrets are omitted."""
-    out: dict[str, str] = {}
+def _map_values(raw: dict[str, Any]) -> dict[str, str | SecretRef]:
+    out: dict[str, str | SecretRef] = {}
     for key, value in raw.items():
-        resolved = _expand_env_ref(str(value))
-        if resolved:
-            out[str(key)] = resolved
+        mapped = _as_header_value(str(key), value)
+        if mapped == "":
+            continue
+        out[str(key)] = mapped
     return out
 
 
@@ -57,9 +45,9 @@ class MCPProviderSpec:
     url: str | None = None
     command: str | None = None
     args: tuple[str, ...] = ()
-    env: dict[str, str] = field(default_factory=dict)
+    env: dict[str, str | SecretRef] = field(default_factory=dict)
     cwd: str | None = None
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str | SecretRef] = field(default_factory=dict)
     timeout: float | None = None
     follow_pagination: bool = True
     cache_ttl_ms: int | None = None
@@ -78,12 +66,11 @@ class MCPProviderSpec:
             claim = tuple(str(n) for n in tools)
 
         url = spec.get("url") or spec.get("endpoint") or params.get("url") or params.get("endpoint")
-        if url:
-            url = _expand_env_ref(str(url))
         timeout_raw = spec.get("timeout", params.get("timeout"))
         timeout = float(timeout_raw) if timeout_raw is not None else None
-        headers = _expand_str_map(dict(spec.get("headers") or params.get("headers") or {}))
-        env = _expand_str_map(dict(spec.get("env") or params.get("env") or {}))
+        headers = _map_values(dict(spec.get("headers") or params.get("headers") or {}))
+        check_http_header_secrets(headers)
+        env = _map_values(dict(spec.get("env") or params.get("env") or {}))
         args = tuple(str(a) for a in (spec.get("args") or params.get("args") or []))
         cwd = spec.get("cwd") or params.get("cwd")
         command = spec.get("command") or params.get("command")
@@ -108,3 +95,16 @@ class MCPProviderSpec:
             cache_scope=str(cache_scope) if cache_scope else None,
             params=params,
         )
+
+
+def http_params(url: str, headers: Any, timeout: Any) -> dict[str, Any]:
+    """Params of the ``http`` layer under an MCP layer. MCP endpoints redirect (``/mcp`` to ``/mcp/``) and the
+    SDK's own client followed them."""
+    params: dict[str, Any] = {"follow_redirects": True}
+    if url:
+        params["url"] = url
+    if headers:
+        params["headers"] = dict(headers)
+    if timeout is not None:
+        params["timeout"] = float(timeout)
+    return params

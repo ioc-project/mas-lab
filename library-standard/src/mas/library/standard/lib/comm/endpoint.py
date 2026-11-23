@@ -4,15 +4,11 @@
 
 from __future__ import annotations
 
-import re
 from urllib.parse import urlsplit
 
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
-
-LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
-# A backslash, white space or a control character is read differently by different URL parsers
-# (a browser or a Rust parser takes ``\`` as ``/``), so the host could differ from the one checked here.
-_UNSAFE = re.compile(r"[\\\s\x00-\x1f\x7f]")
+from mas.runtime.secrets import is_loopback_host
+from mas.runtime.secrets.url import has_unsafe_chars
 
 
 def split_url(url: str, *, what: str, default_scheme: str = "") -> tuple[str, str]:
@@ -25,7 +21,7 @@ def split_url(url: str, *, what: str, default_scheme: str = "") -> tuple[str, st
     text = str(url or "").strip()
     if not text:
         raise AgentCommError(f"{what} requires url")
-    if _UNSAFE.search(text):
+    if has_unsafe_chars(text):
         raise AgentCommError(f"{what} url has a backslash, a space or a control character")
     parsed = urlsplit(text)
     if "@" in parsed.netloc:
@@ -36,6 +32,8 @@ def split_url(url: str, *, what: str, default_scheme: str = "") -> tuple[str, st
     host = (parsed.hostname or "").lower()
     if not host:
         raise AgentCommError(f"{what} url is missing a host")
-    if scheme == "http" and host not in LOOPBACK:
-        raise AgentCommError(f"plain http for {what} is only allowed on 127.0.0.1, localhost, or ::1; use https")
+    if scheme == "http" and not is_loopback_host(host):
+        raise AgentCommError(
+            f"plain http for {what} is only allowed on a loopback host (127.0.0.0/8, localhost, ::1); use https"
+        )
     return scheme, host

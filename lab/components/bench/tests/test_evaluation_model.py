@@ -2,11 +2,8 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-import inspect
-
 import pytest
 from mas.lab.benchmark.experiment import EvaluationSpec
-from mas.lab.lab.config import experiment_base
 from mas.lab.lab.config.experiment_base import MASRunBase
 
 
@@ -174,13 +171,6 @@ def test_experiment_does_not_guess_when_agents_disagree(tmp_path) -> None:
     loaded = MASRunBase._load_base_fields(data, tmp_path, yaml_path=tmp_path / "experiment.yaml")
     step = loaded["levels"]["experiment"].pipeline[0]
     assert "model" not in step.config
-
-
-def test_experiment_base_does_not_read_model_env() -> None:
-    src = inspect.getsource(experiment_base)
-    assert "os.environ" not in src
-    assert "MAS_CTL_MODEL" not in src
-    assert "MAS_LLM_MODEL" not in src
 
 
 def test_model_override_also_sets_the_judge_default(tmp_path) -> None:

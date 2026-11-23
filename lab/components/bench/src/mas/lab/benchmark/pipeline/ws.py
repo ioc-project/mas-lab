@@ -12,13 +12,13 @@ import ssl
 from typing import Any
 
 from mas.lab.benchmark.pipeline.channel import StreamFrame, TelemetryChannel
+from mas.runtime.secrets import is_loopback_host
 
 logger = logging.getLogger(__name__)
 
 # RFC 6455 tokens cannot contain `/`. Hello JSON still names the contract mas-stream/1.
 SUBPROTOCOL = "mas-stream-1"
 CONTRACT = "mas-stream/1"
-_LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1"})
 
 
 def check_token(provided: str, expected: str) -> bool:
@@ -48,7 +48,7 @@ async def serve_channel(
     ``token`` (or ``Authorization`` on the handshake). Resume uses ``from_offset``.
     Application-level ``credit`` / ``ack`` provides backpressure.
     """
-    if require_tls and ssl_context is None and host not in _LOOPBACK:
+    if require_tls and ssl_context is None and not is_loopback_host(host):
         raise RuntimeError("TLS required for non-loopback stream servers")
 
     from websockets.asyncio.server import serve

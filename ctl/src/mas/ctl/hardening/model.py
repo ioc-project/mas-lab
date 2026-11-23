@@ -46,7 +46,9 @@ class Exposure:
 
     @property
     def loopback(self) -> bool:
-        return self.host.lower().strip("[]") in {"127.0.0.1", "localhost", "::1"}
+        from mas.runtime.secrets import is_loopback_host
+
+        return is_loopback_host(self.host)
 
 
 @dataclass(frozen=True)
@@ -66,8 +68,8 @@ class HardeningInput:
     # every settings mapping a transport or a layer reads, as (where, mapping)
     settings: tuple[tuple[str, dict[str, Any]], ...] = ()
     engine_cache: dict[str, Any] = field(default_factory=dict)
-    # documents as written, before ``env:`` is expanded, as (source, document)
-    raw_documents: tuple[tuple[str, dict[str, Any]], ...] = ()
+    secret_store: str = "file"
+    allow_loose_permissions: bool = False
 
 
 @dataclass(frozen=True)

@@ -14,8 +14,8 @@ from mas.runtime.spec.endpoint_usage import usage_connects
 from library_ioa.plugins.mcp.client import MCPClient
 from library_ioa.plugins.mcp.client.wrapper import MCPClientWrapper, run_sync
 from library_ioa.plugins.mcp.contract import as_mas_tool_result, as_mas_tool_spec
-from library_ioa.plugins.mcp.spec import MCPProviderSpec
-from library_ioa.utils import translate_mcp_error
+from library_ioa.plugins.mcp.spec import MCPProviderSpec, http_params
+from library_ioa.utils import mcp_error_text, translate_mcp_error
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +28,7 @@ def _http_inner(binding: MCPProviderSpec) -> Any:
         from mas.runtime.layers.compose import LayerLoadError, apply_layer
     except ImportError:
         return None
-    params: dict[str, Any] = {"url": binding.url, "follow_redirects": True}
-    if binding.headers:
-        params["headers"] = dict(binding.headers)
-    if binding.timeout is not None:
-        params["timeout"] = float(binding.timeout)
+    params = http_params(binding.url, binding.headers, binding.timeout)
     try:
         return apply_layer(None, {"layer": "http", "for": ["tool"], "params": params})
     except LayerLoadError:
@@ -202,8 +198,7 @@ class MCPToolProvider(ToolProvider):
             tools = self._run(self._list_coro(ctx))
             return [as_mas_tool_spec(item) for item in (tools or []) if isinstance(item, dict)]
         except Exception as exc:
-            logger.error("Failed to list tools from MCP client: %s", safe_text(exc))
-            logger.debug("MCP tool list traceback", exc_info=True)
+            logger.error("Failed to list tools from MCP client: %s", mcp_error_text(exc))
             raise
 
     def list_tools(self, *, ctx: Any = None) -> List[Dict[str, Any]]:
@@ -239,6 +234,5 @@ class MCPToolProvider(ToolProvider):
                 mapped.setdefault("tool", tool_name)
             return mapped
         except Exception as exc:
-            logger.error("Error calling MCP tool %s: %s", safe_text(tool_name), safe_text(exc))
-            logger.debug("MCP tool call traceback", exc_info=True)
+            logger.error("Error calling MCP tool %s: %s", safe_text(tool_name), mcp_error_text(exc))
             return translate_mcp_error(exc)

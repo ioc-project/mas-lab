@@ -20,7 +20,7 @@ def test_health_wait_backs_off_from_a_short_first_pause(monkeypatch):
             raise URLError("not yet")
         return SimpleNamespace(status=200)
 
-    monkeypatch.setattr("mas.lab.benchmark.environment.fixtures.open_url", fake_open)
+    monkeypatch.setattr(service_start, "opener_for", lambda url: SimpleNamespace(open=fake_open))
     monkeypatch.setattr(service_start.time, "sleep", pauses.append)
     assert service_start._wait_for_url("http://127.0.0.1:1/health", 30)
     assert pauses == [0.05, 0.1, 0.2]
@@ -34,6 +34,6 @@ def test_health_wait_gives_up_at_the_deadline(monkeypatch):
     def refuse(url, timeout):
         raise URLError("down")
 
-    monkeypatch.setattr("mas.lab.benchmark.environment.fixtures.open_url", refuse)
+    monkeypatch.setattr(service_start, "opener_for", lambda url: SimpleNamespace(open=refuse))
     assert service_start._wait_for_url("http://127.0.0.1:1/health", 3) is False
     assert clock["t"] <= 3.0 + 1e-9

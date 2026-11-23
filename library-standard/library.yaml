@@ -41,6 +41,7 @@ types:
   - checkpoint_store
   - agent_loop
   - runtime
+  - secret_store
 
 plugins:
   - type: engine_tool_provider
@@ -941,6 +942,20 @@ plugins:
       explicit environment, deadlines and size caps, line or JSON-RPC framing.
     shortcuts:
       - stdio-harness
+  - type: secret_store
+    name: file
+    urn: mas.secret_store.file
+    module: mas.library.standard.plugins.secrets.file_store
+    class: FileSecretStore
+    shortcuts:
+      - file
+  - type: secret_store
+    name: env
+    urn: mas.secret_store.env
+    module: mas.library.standard.plugins.secrets.env_store
+    class: EnvSecretStore
+    shortcuts:
+      - env
 
 defaults:
   tool_provider: local
@@ -949,3 +964,4 @@ defaults:
   agent_comm: local
   hitl_contract: registry
   user_io_contract: registry
+  secret_store: file

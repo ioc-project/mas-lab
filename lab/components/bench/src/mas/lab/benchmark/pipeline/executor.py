@@ -14,14 +14,9 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
-
-try:
-    import yaml as _yaml
-except ImportError:  # pragma: no cover
-    _yaml = None  # type: ignore[assignment]
-from datetime import datetime
 
 from mas.lab import paths as _paths
 from mas.lab.benchmark.pipeline.artifact_paths import (
@@ -41,6 +36,7 @@ from mas.lab.benchmark.pipeline.resources import (
 from mas.lab.benchmark.pipeline.schema_validation import validate_payload
 from mas.library_roots import find_ancestor_with_file
 from mas.runtime.constants import LAB_CONFIG_FILENAME
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 logger = logging.getLogger(__name__)
 
@@ -512,13 +508,12 @@ def _find_lab_meta(
     if candidate is not None:
         lab_yaml = candidate / LAB_CONFIG_FILENAME
         name = override_name
-        if not name and _yaml is not None:
+        if not name:
             try:
-                with open(lab_yaml, encoding="utf-8") as fh:
-                    data = _yaml.safe_load(fh) or {}
+                data = safe_yaml_load(lab_yaml.read_text(encoding="utf-8")) or {}
                 name = (data.get("lab") or {}).get("name", "")
-            except Exception as exc:
-                logger.debug("Could not read lab name from %s: %s", lab_yaml, exc)
+            except (OSError, ValueError, AttributeError) as exc:  # a YamlLoadError is position only
+                logger.debug("Could not read lab name from %s: %s", lab_yaml, type(exc).__name__)
         if not name:
             # Fallback: strip .lab suffix from directory name
             name = candidate.name.removesuffix(".lab")

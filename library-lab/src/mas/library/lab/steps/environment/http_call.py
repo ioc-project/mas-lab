@@ -9,28 +9,18 @@ import asyncio
 import json
 import time
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from urllib.request import Request
 
-from mas.lab.benchmark.environment.limits import LOOPBACK_HOSTS, assert_url_allowed
+from mas.lab.benchmark.environment.limits import assert_url_allowed
 from mas.lab.benchmark.environment.step import ActionResult, EnvironmentContext, EnvironmentStep
-
-
-class _NoRedirect(HTTPRedirectHandler):
-    """A redirect would leave the allow-list unchecked; report it as the status it is."""
-
-    def redirect_request(self, *args, **kwargs):  # type: ignore[no-untyped-def]
-        return None
-
-
-_OPENER = build_opener(_NoRedirect)
-_LOOPBACK_OPENER = build_opener(_NoRedirect, ProxyHandler({}))  # a fixture is local: never through a proxy
+from mas.runtime.secrets.transport import opener_for
 
 
 def _send(req: Request, timeout: float) -> int:
-    opener = _LOOPBACK_OPENER if (urlparse(req.full_url).hostname or "").lower() in LOOPBACK_HOSTS else _OPENER
+    """The status of *req*. A redirect is not followed (it would leave the allow-list unchecked) and a
+    loopback fixture is reached without a proxy (:func:`mas.runtime.secrets.transport.opener_for`)."""
     try:
-        with opener.open(req, timeout=timeout) as resp:
+        with opener_for(req.full_url).open(req, timeout=timeout) as resp:
             return int(resp.status)
     except HTTPError as exc:
         return int(exc.code)

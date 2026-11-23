@@ -30,8 +30,8 @@ metadata:
 spec:
   protocol: openresponses
   proxy:
-    api_base: env:OPENRESPONSES_API_BASE|https://api.openai.com/v1
-    api_key_env: OPENRESPONSES_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openresponses}
 ```
 
 Pass `--infra-ref standard:openresponses` and set the key. The layer is

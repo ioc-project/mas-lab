@@ -44,7 +44,7 @@ spec:
         # NEO4J_PASSWORD / NEO4J_DB_AGENT when not set here.
         # uri:      bolt://localhost:7687
         # username: neo4j
-        # password_env: NEO4J_PASSWORD
+        # password: {secret: neo4j}
         # database: neo4j
         batch_size: 200
         ensure_indexes: true

@@ -39,28 +39,28 @@ class _Transport:
 
 
 @pytest.mark.parametrize(
-    ("cls", "kind", "host", "env_name"),
+    ("cls", "kind", "host", "secret"),
     [
-        (GroqLLMProvider, "groq", "https://api.groq.com/openai/v1", "GROQ_API_KEY"),
-        (OpenRouterLLMProvider, "openrouter", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
-        (XaiLLMProvider, "xai", "https://api.x.ai/v1", "XAI_API_KEY"),
-        (LiteLLMLLMProvider, "litellm", "http://localhost:4000/v1", "LITELLM_API_KEY"),
-        (CerebrasLLMProvider, "cerebras", "https://api.cerebras.ai/v1", "CEREBRAS_API_KEY"),
-        (MistralLLMProvider, "mistral", "https://api.mistral.ai/v1", "MISTRAL_API_KEY"),
-        (VllmLLMProvider, "vllm", "http://localhost:8000/v1", "VLLM_API_KEY"),
-        (HuggingFaceLLMProvider, "huggingface", "https://router.huggingface.co/v1", "HF_TOKEN"),
+        (GroqLLMProvider, "groq", "https://api.groq.com/openai/v1", "groq"),
+        (OpenRouterLLMProvider, "openrouter", "https://openrouter.ai/api/v1", "openrouter"),
+        (XaiLLMProvider, "xai", "https://api.x.ai/v1", "xai"),
+        (LiteLLMLLMProvider, "litellm", "http://localhost:4000/v1", "litellm"),
+        (CerebrasLLMProvider, "cerebras", "https://api.cerebras.ai/v1", "cerebras"),
+        (MistralLLMProvider, "mistral", "https://api.mistral.ai/v1", "mistral"),
+        (VllmLLMProvider, "vllm", "http://localhost:8000/v1", "vllm"),
+        (HuggingFaceLLMProvider, "huggingface", "https://router.huggingface.co/v1", "hf"),
     ],
 )
-def test_named_host_inherits_openai(cls: type[OpenAILLMProvider], kind: str, host: str, env_name: str) -> None:
+def test_named_host_inherits_openai(cls: type[OpenAILLMProvider], kind: str, host: str, secret: str) -> None:
     assert issubclass(cls, OpenAICompatibleLLMProvider)
     assert issubclass(cls, OpenAILLMProvider)
     assert cls.kind == kind
     assert cls.default_api_base == host
-    assert cls.default_api_key_env == env_name
+    assert cls.default_secret.name == secret
     steps = cls.protocol_layers({"api_base": "http://127.0.0.1:9/v1"})
     assert [step["layer"] for step in steps] == ["http", kind]
     transport = _Transport()
-    provider = cls.wrap(transport, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret"})
+    provider = cls.wrap(transport, {"api_base": "http://127.0.0.1:9/v1", "api_key": cls.default_secret})
     out = asyncio.run(provider.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))
     req = transport.requests[0]
     assert req.url.path.endswith("/chat/completions")
@@ -71,7 +71,7 @@ def test_named_host_inherits_openai(cls: type[OpenAILLMProvider], kind: str, hos
 @pytest.mark.parametrize("cls", [GroqLLMProvider, CerebrasLLMProvider, MistralLLMProvider])
 def test_hosts_that_reject_max_completion_tokens_send_max_tokens(cls: type[OpenAILLMProvider]) -> None:
     transport = _Transport()
-    provider = cls.wrap(transport, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret"})
+    provider = cls.wrap(transport, {"api_base": "http://127.0.0.1:9/v1", "api_key": cls.default_secret})
     asyncio.run(
         provider.achat_completion(
             model="m",
@@ -88,7 +88,7 @@ def test_databricks_posts_invocations_path() -> None:
     transport = _Transport()
     provider = DatabricksLLMProvider.wrap(
         transport,
-        {"api_base": "https://demo.cloud.databricks.com", "api_key": "secret"},
+        {"api_base": "https://demo.cloud.databricks.com", "api_key": {"secret": "databricks"}},
     )
     out = asyncio.run(provider.achat_completion(model="chat-ep", messages=[{"role": "user", "content": "q"}]))
     req = transport.requests[0]
@@ -102,6 +102,6 @@ def test_databricks_posts_invocations_path() -> None:
 
 
 def test_databricks_missing_host_is_runtime_error() -> None:
-    provider = DatabricksLLMProvider.wrap(_Transport(), {"api_key": "secret"})
+    provider = DatabricksLLMProvider.wrap(_Transport(), {})
     with pytest.raises(RuntimeError, match="api_base"):
         asyncio.run(provider.achat_completion(model="chat-ep", messages=[{"role": "user", "content": "q"}]))

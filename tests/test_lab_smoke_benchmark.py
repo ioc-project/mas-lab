@@ -48,6 +48,13 @@ def smoke_env(tmp_path, monkeypatch):
 
     monkeypatch.setitem(_llm_cache._PATHS, "cli", str(tmp_path / "llm_cache.json"))
     monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(_SAMPLE_WS))
+    # Spawn workers rebuild their store from settings, so the smoke key lives in a real file store.
+    from mas.ctl.secrets import init_secrets_dir, write_file_secret
+    from mas.lab.secret_host import SecretHostSettings
+
+    secrets_dir = init_secrets_dir(tmp_path / "secrets")
+    write_file_secret(secrets_dir, "openai", "smoke-key-not-real")
+    SecretHostSettings(directory=str(secrets_dir)).install_process()
     require_ci_cache()
     preexisting = {p.name for p in _DEFAULT_GLOBAL_CACHE.iterdir()} if _DEFAULT_GLOBAL_CACHE.exists() else set()
     return out, trace_cache, preexisting

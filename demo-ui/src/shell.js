@@ -89,9 +89,7 @@ export function collectBoundRefs(node, inherited, into) {
   if (!node) return;
   const ref = mergeRef(inherited, node.dataSource);
   if (node.plugin || node.type === "panel") {
-    const bound = { ...ref };
-    if (node.pre) bound.pre = node.pre;
-    into.push(bound);
+    into.push({ ...ref });
   }
   for (const child of node.children || []) collectBoundRefs(child, ref, into);
   if (node.content) collectBoundRefs(node.content, ref, into);

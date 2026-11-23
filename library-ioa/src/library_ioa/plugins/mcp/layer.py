@@ -10,7 +10,7 @@ from mas.library.standard.lib.stack.call import LayerLifecycle
 
 from library_ioa.plugins.mcp.client import MCPClient
 from library_ioa.plugins.mcp.client.wrapper import MCPClientWrapper
-from library_ioa.plugins.mcp.spec import MCPProviderSpec
+from library_ioa.plugins.mcp.spec import MCPProviderSpec, http_params
 
 
 class McpLayer(LayerLifecycle):
@@ -63,18 +63,11 @@ class McpLayer(LayerLifecycle):
         url = str(raw.get("url") or raw.get("endpoint") or "").strip()
         if str(raw.get("transport") or "streamable-http") not in {"streamable-http", "http"}:
             url = ""
-        # MCP endpoints redirect (``/mcp`` to ``/mcp/``) and the SDK's own client followed them.
-        http_params: dict[str, Any] = {"follow_redirects": True}
-        if url:
-            http_params["url"] = url
-        if raw.get("headers"):
-            http_params["headers"] = dict(raw.get("headers") or {})
-        if raw.get("timeout") is not None:
-            http_params["timeout"] = float(raw["timeout"])
         mcp_params = {k: v for k, v in raw.items() if k not in {"pipeline", "layer", "middleware", "for", "per"}}
         steps = []
         if url:
-            steps.append({"layer": "http", "for": ["tool"], "params": http_params})
+            params = http_params(url, raw.get("headers"), raw.get("timeout"))
+            steps.append({"layer": "http", "for": ["tool"], "params": params})
         steps.append({"layer": "mcp", "for": ["tool"], "params": mcp_params})
         return steps
 

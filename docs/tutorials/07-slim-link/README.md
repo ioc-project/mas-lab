@@ -163,18 +163,17 @@ what they share (here, one in-process fabric) is created once per session.
 ## Step 3 — Swap the medium for a SLIM node
 
 The node row says where the node is (`url`), the same `identity`, and how to join
-(`secret_env`, the *name* of an environment variable that holds a shared secret of
-at least 32 bytes; the manifest never holds the secret):
+(`secret: {secret: slim}`, a SecretRef; the manifest never holds the secret):
 
 ```yaml
 # infra/slim-node.yaml
 spec:
   endpoints:
-    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret_env: SLIM_SECRET,
+    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
                 usage: [connect, listen]}
     desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
     desk-node-a2a: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk-a2a,
-                    secret_env: SLIM_SECRET, usage: [connect, listen]}
+                    secret: {secret: slim}, usage: [connect, listen]}
 ```
 
 `flavours/slim.yaml` binds `[desk-node]`. The MAS and the agents stay as they are.
@@ -198,7 +197,8 @@ YAML
 docker run -d --name mas-lab-slim-node -p 127.0.0.1:46357:46357 \
   -v "$SLIM_DIR/slim-node.yaml:/config.yaml:ro" \
   ghcr.io/agntcy/slim:latest /slim --config /config.yaml
-export SLIM_SECRET='a secret at least 32 bytes long....'
+SLIM_SECRET='a secret at least 32 bytes long....'
+printf %s "$SLIM_SECRET" | mas-ctl secrets set slim
 ```
 
 Plain HTTP is only allowed on `127.0.0.1`, `localhost`, and `::1`. Any other node
@@ -546,8 +546,8 @@ same MAS, same agents, in one process.
 - A row above the transport changes every send without touching the agents:
   `a2a-framing` frames it as an A2A request. A chain of one `a2a` server row is the A2A
   SDK client.
-- A mistake in a Flavour or a row fails before anything connects, and only ctl reads
-  the secret from the environment.
+- A mistake in a Flavour or a row fails before anything connects, and secrets come
+  from the secret store.
 
 Reference: [Flavour bind](../../manifests/flavour.md#bind),
 [Rows a Flavour binds](../../manifests/infra.md#rows-a-flavour-binds),

@@ -224,7 +224,7 @@ class _StubProvider:
     kind = "openai"
     provider_id = "openai"
     api_base = "https://arm.example/v1"
-    api_key_env = "ARM_KEY"
+    api_key = {"secret": "arm"}
 
     def __init__(self) -> None:
         self.calls = 0
@@ -327,8 +327,8 @@ async def test_legacy_middleware_cache_misses_with_several_leaves(tmp_path) -> N
         model="m-a",
         api_base="https://a.example/v1",
         llm_proxies={
-            "arm": {"api_base": "https://a.example/v1", "api_key_env": "A_KEY", "allowed": ["m-a"]},
-            "judge": {"api_base": "https://b.example/v1", "api_key_env": "B_KEY", "allowed": ["m-b"]},
+            "arm": {"api_base": "https://a.example/v1", "api_key": {"secret": "a"}, "allowed": ["m-a"]},
+            "judge": {"api_base": "https://b.example/v1", "api_key": {"secret": "b"}, "allowed": ["m-b"]},
         },
     )
     engine = wrap_call_stack(

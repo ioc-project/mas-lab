@@ -4,13 +4,55 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from fastapi import HTTPException
 from mas.ctl.validate.schemas import declared_kind, schema_path_for_kind
 from mas.ctl.validate.validator import validate_data
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.manifest import check_manifest
+from mas.runtime.spec.yaml_errors import YAML_ERROR_PREFIX, YamlLoadError, safe_yaml_load
+
+
+def _document(content: str) -> Any:
+    """The request document, or a 422 ``YAML does not parse: ...`` (position only, never the document)."""
+    try:
+        return safe_yaml_load(content)
+    except YamlLoadError as exc:
+        raise HTTPException(status_code=422, detail=f"{YAML_ERROR_PREFIX} {exc}") from None
+
+
+def _refuse(doc: Any, *, source: str) -> None:
+    try:
+        check_manifest(doc, source=source)
+    except SecretRefError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+def refuse_secret_values(content: str, *, source: str = "request") -> Any:
+    """The request document; a 422 when it holds a secret value or a credential in a URL, or cannot be
+    read (so nothing unchecked is ever written or run). The detail names the field, never the value."""
+    doc = _document(content)
+    _refuse(doc, source=source)
+    return doc
+
+
+def refuse_secret_fields(fields: Mapping[str, Any], *, source: str = "request") -> None:
+    """Raise a 422 when a plain request field (a name, path, URL or nested reference) holds a secret
+    field with a value or a credential in a URL. The detail names the field, never the value."""
+    _refuse(dict(fields), source=source)
+
+
+def refuse_secret_text(text: str, *, field: str, source: str = "request") -> None:
+    """Raise a 422 when kept free text (a description) holds a secret: text that reads as YAML is checked
+    as the data it holds (``api_key: sk-...``), other text as one string."""
+    try:
+        doc = safe_yaml_load(text)
+    except YamlLoadError:
+        doc = text
+    _refuse({field: doc}, source=source)
 
 
 def validate_manifest_yaml_content(
@@ -20,17 +62,11 @@ def validate_manifest_yaml_content(
     kind: str | None = None,
     resolve_refs: bool = True,
 ) -> dict[str, Any]:
-    """Validate inline YAML; return legacy CLI-shaped dict for API compatibility."""
-    try:
-        data = yaml.safe_load(manifest_yaml)
-    except yaml.YAMLError as exc:
-        return {
-            "exit_code": 1,
-            "stdout": "",
-            "stderr": f"YAML parse error: {exc}",
-            "command": "validate_data",
-            "valid": False,
-        }
+    """Validate inline YAML; return legacy CLI-shaped dict for API compatibility.
+
+    YAML that cannot be read, or holds a secret value, is refused (422) as :func:`refuse_secret_values` does.
+    """
+    data = refuse_secret_values(manifest_yaml)
 
     if not isinstance(data, dict):
         return {

@@ -11,7 +11,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-import yaml
 from mas.ctl.compose.models import EffectiveBindManifest, ResolvedInfra
 from mas.ctl.compose.pattern_registry import resolve_design_pattern_registry_id
 from mas.ctl.compose.placement_registry import get_placement_backend
@@ -28,6 +27,7 @@ from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.boundary.agentcomm.routing import AgentCommRoute, build_agent_comm_routes
 from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRegistry
 from mas.runtime.boundary.delegation.policy import communication_peers, delegation_targets
+from mas.runtime.secrets import load_checked_document
 
 logger = logging.getLogger(__name__)
 
@@ -245,9 +245,7 @@ def load_agent_manifest_from_bind(bind: EffectiveBindManifest, agent_id: str) ->
     mp = agent_manifest_path(bind, agent_id)
     if mp is None or not mp.is_file():
         return None
-    doc = yaml.safe_load(mp.read_text(encoding="utf-8"))
-    if not isinstance(doc, dict):
-        return None
+    doc = load_checked_document(mp)
     composed = bind.composed_application
     if composed is None:
         return doc

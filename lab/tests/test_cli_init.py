@@ -21,8 +21,9 @@ def test_init_yes_creates_config_and_default_infra(monkeypatch, tmp_path: Path):
     assert cfg.exists()
     assert infra.exists()
     assert "infra_refs" in cfg.read_text(encoding="utf-8")
-    assert "OPENAI_API_KEY" in infra.read_text(encoding="utf-8")
-    assert "env:OPENAI_BASE_URL|https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
+    assert "{secret: openai}" in infra.read_text(encoding="utf-8")
+    assert "https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
+    assert "env:" not in infra.read_text(encoding="utf-8")
     assert "Next:" in result.output
 
 
@@ -41,8 +42,9 @@ def test_init_local_creates_self_contained_project_config(tmp_path: Path):
         assert infra.exists()
         assert "infra/llmprovider.yaml" in cfg_text
         assert "~/.config/mas/infra" not in cfg_text
-        assert "OPENAI_API_KEY" in infra.read_text(encoding="utf-8")
-        assert "env:OPENAI_BASE_URL|https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
+        assert "{secret: openai}" in infra.read_text(encoding="utf-8")
+        assert "https://api.openai.com/v1" in infra.read_text(encoding="utf-8")
+        assert "env:" not in infra.read_text(encoding="utf-8")
         assert "Initialized MAS project configuration." in result.output
 
 
@@ -70,7 +72,7 @@ def test_init_interactive_custom_provider(monkeypatch, tmp_path: Path):
     result = runner.invoke(
         app,
         ["init"],
-        input="y\nmyprovider\nhttps://example.llm/v1\nMY_API_KEY\ntrip-model\nopenai/gpt-4o-mini\n",
+        input="y\nmyprovider\nhttps://example.llm/v1\ntrip-model\nopenai/gpt-4o-mini\n",
     )
 
     assert result.exit_code == 0, result.output
@@ -82,11 +84,12 @@ def test_init_interactive_custom_provider(monkeypatch, tmp_path: Path):
     cfg_text = cfg.read_text(encoding="utf-8")
     infra_text = infra.read_text(encoding="utf-8")
     assert "myprovider" in cfg_text
-    assert "env:MYPROVIDER_API_BASE|https://example.llm/v1" in infra_text
-    assert "MY_API_KEY" in infra_text
+    assert "https://example.llm/v1" in infra_text
+    assert "{secret: openai}" in infra_text
+    assert "env:" not in infra_text
     assert "trip-model: openai/gpt-4o-mini" in infra_text
     assert "mas-ctl run-mas library-samples/apps/trip-planner/mas.yaml" in result.output
-    assert "export MY_API_KEY=<your-key>" in result.output
+    assert "mas-ctl secrets set openai" in result.output
     assert "trip-model -> openai/gpt-4o-mini" in result.output
     assert "--events-file" in result.output
     assert "--trace full" in result.output
@@ -143,18 +146,6 @@ def test_init_config_lists_every_option_commented_out(monkeypatch, tmp_path: Pat
         assert f"# {section}:" in text
 
 
-def test_api_base_for_file_names_the_env_var():
-    from mas.lab.cli.commands.init import _api_base_for_file
-
-    assert _api_base_for_file("https://api.openai.com/v1") == "env:OPENAI_BASE_URL|https://api.openai.com/v1"
-    assert _api_base_for_file("env:MY_BASE|http://localhost/v1") == "env:MY_BASE|http://localhost/v1"
-    assert _api_base_for_file("") == "env:OPENAI_BASE_URL|https://api.openai.com/v1"
-    assert (
-        _api_base_for_file("https://example.llm/v1", infra_name="myprovider")
-        == "env:MYPROVIDER_API_BASE|https://example.llm/v1"
-    )
-
-
 def test_render_without_infra_drops_infra_block_but_keeps_options():
     from mas.lab.cli.commands.init import _render_config_yaml
 
@@ -175,23 +166,19 @@ def test_init_quiet_prints_nothing_but_writes_files(monkeypatch, tmp_path: Path)
     assert (tmp_path / "mas" / "infra" / "llmprovider.yaml").exists()
 
 
-def test_api_base_env_name_is_a_shell_name_and_never_the_legacy_one():
-    from mas.lab.cli.commands.init import _api_base_for_file
+def test_init_writes_the_api_base_as_given(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    result = CliRunner().invoke(app, ["init", "-q"], input="\nmyprovider\n  https://x.io/v1  \n\n\n")
 
-    assert _api_base_for_file("https://x.io/v1", infra_name="openai").startswith("env:OPENAI_PROXY_API_BASE|")
-    assert _api_base_for_file("https://x.io/v1", infra_name="1abc").startswith("env:LLM_1ABC_API_BASE|")
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / "mas" / "infra" / "myprovider.yaml").read_text()
+    assert "https://x.io/v1" in text
+    assert "  https://x.io/v1  " not in text
 
 
-def test_two_infra_names_with_the_same_slug_do_not_share_a_variable(tmp_path: Path):
-    from mas.lab.cli.commands.init import _api_base_for_file, _taken_api_base_names
+def test_init_yes_writes_the_default_api_base(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    result = CliRunner().invoke(app, ["init", "--yes", "-q"])
 
-    (tmp_path / "my-provider.yaml").write_text(
-        "spec:\n  proxy:\n    api_base: env:MY_PROVIDER_API_BASE|https://a/v1\n", encoding="utf-8"
-    )
-    taken = _taken_api_base_names(tmp_path, "my_provider")
-    assert taken == {"MY_PROVIDER_API_BASE"}
-    assert _api_base_for_file("https://b/v1", infra_name="my_provider", taken=taken).startswith(
-        "env:MY_PROVIDER_API_BASE_2|"
-    )
-    # rewriting the infra file itself does not collide with its own variable
-    assert _taken_api_base_names(tmp_path, "my-provider") == frozenset()
+    assert result.exit_code == 0, result.output
+    assert "https://api.openai.com/v1" in (tmp_path / "mas" / "infra" / "llmprovider.yaml").read_text()

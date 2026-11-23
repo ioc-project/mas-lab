@@ -15,10 +15,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mas.runtime import hostenv
 from mas.runtime.contracts.tool_semantics import existing_attr
 from mas.runtime.layers.lifecycle import Lifecycle
 from mas.runtime.registry.llm_provider_protocol import adapt_llm_provider, require_achat_completion
+from mas.runtime.secrets.url import origin_text, same_origin
 
 
 def _non_protocol_kinds() -> frozenset[str]:
@@ -48,6 +48,64 @@ def leaf_llm_kind(provider: Any) -> str:
             return kind
         current = existing_attr(current, "inner")
     return ""
+
+
+def leaf_api_base(leaf: dict[str, Any] | None) -> str:
+    """The ``api_base`` a leaf names (its ``proxy`` block first), or ``""``."""
+    raw = dict(leaf or {})
+    proxy = raw.get("proxy") if isinstance(raw.get("proxy"), dict) else {}
+    return str(proxy.get("api_base") or raw.get("api_base") or raw.get("url") or "").strip()
+
+
+def default_secret_for(cls: Any, api_base: str) -> Any:
+    """The class's ``default_secret`` when the leaf talks to the class's own default endpoint, else ``None``.
+
+    The default secret is the key of the provider's public endpoint (``openai`` for ``api.openai.com``); it is
+    never sent to another host. A leaf with no ``api_base`` uses the default endpoint. Any other host needs its
+    own ``api_key``: a SecretRef, optional (``{secret: {name: NAME, optional: true}}``) for a server that may
+    take none, in which case no auth header is sent while the secret is not set.
+    """
+    default = getattr(cls, "default_secret", None)
+    if default is None:
+        return None
+    base = str(api_base or "").strip()
+    if not base:
+        return default
+    default_base = str(getattr(cls, "default_api_base", "") or "").strip()
+    if default_base and same_origin(base, default_base):
+        return default
+    return None
+
+
+def provider_key_ref(api_key: Any, api_base: Any, cls: Any, *, field: str = "api_key") -> Any:
+    """The SecretRef a client of provider class *cls* sends to *api_base*: the one default-key policy.
+
+    An explicit *api_key* (a SecretRef) wins. Without one, the class's ``default_secret`` applies only when
+    *api_base* is unset or the class's own default endpoint (:func:`default_secret_for`); any other host
+    raises ``SecretRefError`` naming that origin (scheme, host, port) and the two ways to fix it. An LLM
+    layer, a judge, an embedding or a dataset step that talks the provider's wire calls this.
+    """
+    from mas.runtime.secrets import SecretRef, SecretRefError
+    from mas.runtime.secrets.ref import parse_secret_ref_optional
+
+    ref = parse_secret_ref_optional(api_key, field=field)
+    if ref is not None:
+        return ref
+    base = str(api_base or "").strip()
+    default = default_secret_for(cls, base)
+    if default is not None:
+        return default if isinstance(default, SecretRef) else SecretRef(name=str(default))
+    kind = str(getattr(cls, "kind", "") or getattr(cls, "provider_id", "") or getattr(cls, "__name__", "the"))
+    remedy = (
+        f"Set {field}: {{secret: NAME}} for that server's key, or "
+        f"{field}: {{secret: {{name: NAME, optional: true}}}} for a server that takes none."
+    )
+    if getattr(cls, "default_secret", None) is None:
+        raise SecretRefError(f"{field}: the {kind} provider has no default secret. {remedy}")
+    raise SecretRefError(
+        f"{field}: the call goes to {origin_text(base)}, which is not the default endpoint of the "
+        f"{kind} provider, so its default secret is not sent there. {remedy}"
+    )
 
 
 def llm_provider_class(kind: str) -> type:
@@ -95,27 +153,19 @@ def instantiate_llm_provider(
     cls = llm_provider_class(kind)
     require_achat_completion(cls, name=kind)
     payload = dict(spec or {})
-    default_env = str(getattr(cls, "default_api_key_env", None) or "")
-    if default_env and not str(payload.get("api_key_env") or "").strip():
-        payload["api_key_env"] = default_env
-    _fill_api_key(payload)
+    if payload.get("api_key") is None or payload.get("api_key") == "":
+        default = default_secret_for(cls, leaf_api_base(payload))
+        if default is not None:
+            payload["api_key"] = default
+    if payload.get("secret_resolver") is None:
+        from mas.runtime.secrets import current_resolver
+
+        payload["secret_resolver"] = current_resolver()
     for name in ("from_provider_spec", "from_infra_spec"):
         factory = getattr(cls, name, None)
         if callable(factory):
             return adapt_llm_provider(factory(payload), name=kind)
     return adapt_llm_provider(cls(), name=kind)
-
-
-def _fill_api_key(spec: dict[str, Any]) -> None:
-    """Copy the token from the env var named in ``api_key_env``. The protocol layer never reads the environment."""
-    if str(spec.get("api_key") or "").strip():
-        return
-    env_name = str(spec.get("api_key_env") or "").strip()
-    if not env_name:
-        return
-    value = hostenv.get(env_name, "").strip()
-    if value:
-        spec["api_key"] = value
 
 
 def canonical_model_name(model: str, leaf: dict[str, Any] | None) -> str:
@@ -219,11 +269,8 @@ def apply_llm_endpoint_defaults(
     out = dict(spec)
     if not str(out.get("api_base") or "").strip() and proxy.get("api_base"):
         out["api_base"] = proxy["api_base"]
-    if not str(out.get("api_key_env") or "").strip() and proxy.get("api_key_env"):
-        out["api_key_env"] = proxy["api_key_env"]
-    if not str(out.get("api_key") or "").strip() and proxy.get("api_key"):
+    if out.get("api_key") in (None, "") and proxy.get("api_key") not in (None, ""):
         out["api_key"] = proxy["api_key"]
-    _fill_api_key(out)
     if out.get("timeout") is None and proxy.get("timeout") is not None:
         out["timeout"] = proxy["timeout"]
     if "llm_proxy" not in out:
@@ -286,7 +333,7 @@ def iter_model_provider_specs(
                 f"spec.models[].kind {kind!r} is not a wire protocol; "
                 "cache wraps the routed provider and is not claimed here"
             )
-        conn = (kind, str(leaf_dict.get("api_base") or ""), str(leaf_dict.get("api_key_env") or ""))
+        conn = (kind, str(leaf_dict.get("api_base") or ""), str(leaf_dict.get("api_key") or ""))
         slot = groups.setdefault(
             conn,
             {

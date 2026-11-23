@@ -119,14 +119,6 @@ def test_the_schedule_parse_checks_worker_max_runs_structure(bad: object) -> Non
     assert validate_worker_max_runs(None) is None
 
 
-def test_workers_module_reads_no_environment_variables() -> None:
-    text = Path(__file__).resolve().parents[1] / "src/mas/lab/benchmark/schedule/run_batch/workers.py"
-    source = text.read_text(encoding="utf-8")
-    assert "os.environ" not in source
-    assert "getenv" not in source
-    assert "environ[" not in source
-
-
 def test_run_input_payload_carries_every_run_input_field() -> None:
     run_input = RunInput(
         user=[{"role": "user", "content": "hi"}],
@@ -347,8 +339,10 @@ _ORPHAN_SCRIPT = textwrap.dedent(
     """
     import sys, time
     from mas.lab.benchmark.schedule.run_batch.workers import RunWorkerPool
+    from mas.runtime.entrypoint import install_host_environment
 
     if __name__ == "__main__":
+        install_host_environment()
         pool = RunWorkerPool(2, timeout_s=30)
         print(" ".join(str(p) for p in pool.pids), flush=True)
         time.sleep(120)

@@ -41,7 +41,9 @@ async def start_grpc_server(request_handler: Any, *, host: str, port: int) -> An
                 str(key).lower(): value.decode("utf-8") if isinstance(value, bytes) else str(value)
                 for key, value in metadata
             }
-            server_context.state["headers"] = headers
+            from library_ioa.plugins.a2a.server.app import without_credential_headers
+
+            server_context.state["headers"] = without_credential_headers(headers)
             actual_version = headers.get(VERSION_HEADER.lower()) or "0.3"
             try:
                 supported = Version(actual_version).major == Version("1.0").major

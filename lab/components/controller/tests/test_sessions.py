@@ -54,3 +54,19 @@ def test_ensure_running_registers_session(temp_mas_home, monkeypatch):
     client = client_mod.ControllerClient()
     client.ensure_running(auto_start=False)
     assert "acquire_session" in calls
+
+
+def test_idle_setting_is_read_when_asked(monkeypatch):
+    from mas.lab.controller import sessions
+    from mas.runtime import hostenv
+
+    monkeypatch.setattr(
+        hostenv, "get", lambda key, default=None: "100000" if key == "MAS_CONTROLLER_IDLE_SEC" else default
+    )
+    assert sessions.idle_shutdown_sec() == 100000.0
+    reg = SessionRegistry()
+    api = ControllerAPI()
+    assert reg.should_shutdown(api) is False
+    reg._idle_since = sessions.time.time() - 60  # idle for a minute: past the 30 s default
+    assert reg.should_shutdown(api) is False
+    assert reg.status()["idle_shutdown_sec"] == 100000.0

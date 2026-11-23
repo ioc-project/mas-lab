@@ -20,7 +20,7 @@ def _proxy(path: Path, *, name: str, api_base: str) -> Path:
         "  protocol: openai\n"
         "  proxy:\n"
         f"    api_base: {api_base}\n"
-        "    api_key_env: KEY\n"
+        "    api_key: {secret: openai}\n"
         "  models:\n"
         "    allowed: [m]\n",
         encoding="utf-8",
@@ -129,7 +129,7 @@ def test_pipeline_and_interceptors_mix_is_an_error(tmp_path: Path) -> None:
         "metadata: {name: arm}\n"
         "spec:\n"
         "  protocol: openai\n"
-        "  proxy: {api_base: https://arm.example/v1, api_key_env: KEY}\n"
+        "  proxy: {api_base: https://arm.example/v1, api_key: {secret: openai}}\n"
         "  models: {allowed: [m]}\n"
         "  pipeline:\n"
         "    - layer: llm_scheduler\n"

@@ -10,7 +10,7 @@ import shutil
 import subprocess
 
 import pytest
-from mas.library.standard.plugins.llm import http
+from mas.library.standard.lib import tls
 from mas.library.standard.plugins.related_state.git_worktree import GitWorktreeRelatedState
 from mas.library.standard.plugins.sandbox.workdir import WorkdirSandbox
 from mas.runtime import hostenv
@@ -20,7 +20,7 @@ def test_ca_bundle_comes_from_the_host_environment(tmp_path) -> None:
     bundle = tmp_path / "ca.pem"
     bundle.write_text("pem", encoding="utf-8")
     with hostenv.overlay({"SSL_CERT_FILE": str(bundle)}):
-        assert http._default_ca_bundle() == str(bundle)
+        assert tls._default_ca_bundle() == str(bundle)
 
 
 def test_workdir_sandbox_exports_its_root_only_through_the_overlay(tmp_path) -> None:

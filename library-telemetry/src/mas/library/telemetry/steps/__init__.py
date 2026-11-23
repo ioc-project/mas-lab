@@ -19,7 +19,6 @@ run_compare_spans_multi  one reference vs many candidate span files
 Collector steps
 ---------------
 run_push_otlp       spans/events file → OTLP collector
-run_dump_spans      ClickHouse otel_traces → spans JSONL (needs ``clickhouse`` extra)
 """
 
 from mas.library.telemetry.steps.compare_spans import (
@@ -27,7 +26,7 @@ from mas.library.telemetry.steps.compare_spans import (
     run_compare_spans_multi,
 )
 from mas.library.telemetry.steps.convert import run_convert
-from mas.library.telemetry.steps.push_otlp import run_dump_spans, run_push_otlp
+from mas.library.telemetry.steps.push_otlp import run_push_otlp
 from mas.library.telemetry.steps.verify_spans import run_verify_spans
 
 __all__ = [
@@ -36,5 +35,4 @@ __all__ = [
     "run_compare_spans",
     "run_compare_spans_multi",
     "run_push_otlp",
-    "run_dump_spans",
 ]

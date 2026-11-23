@@ -106,7 +106,7 @@ export interface AgentManifest {
      */
     description: string;
     /**
-     * Preferred model(s) for this agent. Structural intent only — the active flavour selects the actual provider at runtime. Do NOT put api_base or api_key_env here.
+     * Preferred model(s) for this agent. Structural intent only — the active flavour selects the actual provider at runtime. Do NOT put api_base or an API key here.
      *
      */
     models?: {

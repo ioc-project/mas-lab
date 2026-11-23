@@ -17,6 +17,7 @@ from typing import Any
 from mas.lab.controller import config as cfg
 from mas.lab.controller.api import ControllerAPI, set_controller_api
 from mas.lab.controller.config import DEFAULT_HTTP_PORT, ensure_mas_dirs
+from mas.lab.controller.jobs import job_error_text, yaml_error_in_chain
 from mas.lab.controller.sessions import SessionRegistry
 from mas.runtime import hostenv
 from mas.runtime.aio import new_thread
@@ -68,8 +69,11 @@ def _handle_request(payload: dict) -> dict:
     try:
         return {"result": dispatch[method](params)}
     except Exception as exc:
-        logger.exception("RPC %s failed", method)
-        return {"error": str(exc)}
+        if yaml_error_in_chain(exc) is None:
+            logger.exception("RPC %s failed", method)
+        else:
+            logger.error("RPC %s failed: %s", method, job_error_text(exc))
+        return {"error": job_error_text(exc)}
 
 
 def _serve_socket(path: Path) -> None:
@@ -78,6 +82,8 @@ def _serve_socket(path: Path) -> None:
         path.unlink()
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(path))
+    # Owner only, before listen(): any process that can connect can submit jobs.
+    os.chmod(path, 0o600)
     server.listen(5)
     logger.info("Controller IPC listening on %s", path)
 
@@ -114,7 +120,9 @@ def _serve_socket(path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    hostenv.install(os.environ)  # the daemon is an entry point: its environment is the host's
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()  # an entry point: snapshot into hostenv, process reduced to the allowlist
     parser = argparse.ArgumentParser(description="MAS Lab controller daemon")
     parser.add_argument("--port", type=int, default=int(hostenv.get("MAS_CONTROLLER_PORT", DEFAULT_HTTP_PORT)))
     parser.add_argument("--host", default="127.0.0.1")
@@ -124,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--token-file", type=Path, default=None)
     parser.add_argument("--state-dir", type=Path, default=None)
     parser.add_argument("--workspace", type=Path, default=None)
+    parser.add_argument("--secrets-dir", default=None, help="File-store directory (default <workspace>/.mas/secrets)")
+    parser.add_argument("--secret-store", default=None, help="file (default) or env")
     args = parser.parse_args(argv)
     if args.workspace is not None:
         hostenv.set_overlay({"MAS_WORKSPACE_ROOT": str(Path(args.workspace).expanduser().resolve())})
@@ -152,6 +162,10 @@ def main(argv: list[str] | None = None) -> int:
         workspace = WorkspaceConfig.load()
     except Exception:
         workspace = None
+    from mas.lab.secret_host import SecretHostSettings
+
+    # The one store of the daemon; a job that names another is refused.
+    SecretHostSettings.from_workspace(workspace, directory=args.secrets_dir, store=args.secret_store).install_process()
     _api = ControllerAPI(workspace)
     set_controller_api(_api)
 

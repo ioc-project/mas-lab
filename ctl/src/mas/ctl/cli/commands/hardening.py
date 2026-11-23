@@ -12,8 +12,9 @@ import click
 import yaml
 from mas.ctl.cli.bind_flags import control_option, middleware_option
 from mas.ctl.hardening import BY_ID, CHECKS, DEFAULT, PRODUCTION, HardeningError, Report
-from mas.ctl.hardening.collect import from_session, raw_infra_documents
+from mas.ctl.hardening.collect import from_session
 from mas.ctl.hardening.posture import evaluate, posture_of
+from mas.runtime.spec.yaml_errors import safe_yaml_load, yaml_error_text
 
 CHECK_EPILOG = """
 Exit status: 0 when no check failed, or under the default posture (advisory: failures are printed,
@@ -84,7 +85,7 @@ def _session_report(
     from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
 
     path = Path(manifest).expanduser().resolve()
-    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    loaded = safe_yaml_load(path.read_text(encoding="utf-8"), source=manifest)
     if not isinstance(loaded, dict):
         raise click.ClickException(f"{manifest}: expected a mapping")
     start = path.parent
@@ -110,9 +111,7 @@ def _session_report(
         agent_id: spec_with_control_lists(spec, flavour_spec, agent_id=agent_id)
         for agent_id, spec in _agent_specs(loaded, path).items()
     }
-    documents = raw_infra_documents(infra.refs, start) + ((str(path.name), loaded),)
-    report = evaluate(from_session(agents, infra, raw_documents=documents), profile or posture, waivers)
-    return report
+    return evaluate(from_session(agents, infra), profile or posture, waivers)
 
 
 def _render(report: Report) -> str:
@@ -172,7 +171,9 @@ def hardening_check(
             profile=profile,
         )
     except (ValueError, OSError, InfraResolveError, StackError, HardeningError) as exc:
-        raise click.ClickException(str(exc)) from exc
+        raise click.ClickException(str(exc)) from None
+    except yaml.YAMLError as exc:
+        raise click.ClickException(yaml_error_text(exc)) from None
     click.echo(json.dumps(report.as_dict(), indent=2) if as_json else _render(report))
     if report.posture == PRODUCTION and not report.ok:
         raise SystemExit(1)

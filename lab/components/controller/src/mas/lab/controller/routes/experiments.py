@@ -8,9 +8,9 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from mas.lab.controller.api import get_controller_api
+from mas.lab.controller.manifest_validation import refuse_secret_fields, refuse_secret_values
 from mas.lab.controller.models import ExperimentRunRequest, SaveExperimentRequest
 from mas.lab.controller.routes._api import deps
-from mas.lab.controller.routes.run import _run_pre_steps
 
 router = APIRouter()
 
@@ -46,7 +46,7 @@ def resolve_experiment_path(lib_dir: Path, name: str) -> Path:
             return path
         if _experiment_yaml_name(path) == wanted:
             return path
-    raise HTTPException(status_code=404, detail=f"Experiment '{name}' not found")
+    raise HTTPException(status_code=404, detail="experiment not found")
 
 
 def _experiment_yaml_files(lib_dir: Path):
@@ -80,7 +80,7 @@ def _experiment_yaml_name(path: Path) -> str:
 async def experiment_run(library_name: str, req: ExperimentRunRequest):
     """Start an in-process experiment worker that streams live to demo-ui."""
     lib_dir = deps.get_library_path(library_name)
-    _run_pre_steps(lib_dir, req.pre)
+    refuse_secret_fields(req.model_dump())
     experiment_path = resolve_experiment_path(lib_dir, req.experiment_yaml)
     spec = {
         "experiment_yaml": str(experiment_path),
@@ -123,6 +123,7 @@ async def create_experiment(library_name: str, req: SaveExperimentRequest):
     if file_path.exists():
         raise HTTPException(status_code=409, detail=f"Experiment '{req.name}' already exists")
 
+    refuse_secret_values(req.content)
     file_path.write_text(req.content, encoding="utf-8")
     deps.get_manifest_store().invalidate()
     return {"name": req.name, "filename": filename}
@@ -139,8 +140,7 @@ async def get_library_experiment(library_name: str, experiment_name: str):
         lib_dir / filename,
     ]
     candidates.extend(
-        p for p in store._registry._iter_experiment_files(lib_dir)
-        if p.name == filename or p.stem == experiment_name
+        p for p in store._registry._iter_experiment_files(lib_dir) if p.name == filename or p.stem == experiment_name
     )
     file_path = next((p for p in candidates if p.exists()), None)
 
@@ -172,6 +172,7 @@ async def update_experiment(library_name: str, experiment_name: str, req: SaveEx
     if req.name != experiment_name and new_path.exists():
         raise HTTPException(status_code=409, detail=f"Experiment '{req.name}' already exists")
 
+    refuse_secret_values(req.content)
     if old_path != new_path:
         old_path.unlink()
     new_path.write_text(req.content, encoding="utf-8")

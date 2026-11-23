@@ -18,6 +18,10 @@ mas-lab telemetry apps list [OPTIONS]
 
 List ServiceName × application_id pairs from the OTel ClickHouse table.
 
+The ClickHouse password is the `password` ref of the `clickhouse` user connection
+(for example `password: {secret: clickhouse}`); store its value with `mas-ctl secrets set clickhouse`.
+With none declared, the password is empty.
+
 ## OPTIONS
 
 | Flag | Meaning |
@@ -25,7 +29,6 @@ List ServiceName × application_id pairs from the OTel ClickHouse table.
 | `--host` | ClickHouse host (overrides config/env). |
 | `--port` | ClickHouse HTTP port (default 8123). |
 | `--user` | ClickHouse user (overrides config/env). |
-| `--password` | ClickHouse password (overrides config/env). |
 | `--database` | ClickHouse database (overrides config/env). |
 | `--table` | OTel traces table name. |
 | `--start-service` | Start the 'clickhouse' service via mas-lab before querying. |
@@ -34,5 +37,4 @@ List ServiceName × application_id pairs from the OTel ClickHouse table.
 ## SEE ALSO
 
 - `mas-lab telemetry apps`
-- `mas-lab telemetry list-apps`
 - `mas-lab telemetry`

@@ -9,6 +9,8 @@ import logging
 import re
 from typing import Any
 
+from mas.library.eval.errors import JudgeCallFailed, judge_error_text
+
 logger = logging.getLogger(__name__)
 
 _JSON_OBJECT = re.compile(r"\{.*\}", re.DOTALL)
@@ -44,18 +46,30 @@ def complete_json(
 ) -> dict[str, Any]:
     """Complete a chat on the shared judge client and parse a JSON object.
 
-    Uses :func:`mas.library.eval.mce.runner.get_openai_client` (installed by
-    ``install_openai_llm_service``). Retries on malformed JSON by appending a
-    "JSON only" turn. Does not construct a second HTTP client.
+    Uses :func:`mas.library.eval.mce.runner.judge_client` (configured by
+    ``install_openai_llm_service``): the client of the current judge run, or one
+    opened for this call. Retries on malformed JSON by appending a "JSON only" turn.
     """
     from mas.library.eval.mce.runner import (
         get_effective_judge_model,
-        get_openai_client,
-        paced_live_call,
+        judge_client,
     )
 
-    client = get_openai_client()
     model = get_effective_judge_model()
+    with judge_client() as client:
+        return _complete_json_on(client, model, messages, temperature, max_tokens, retries)
+
+
+def _complete_json_on(
+    client: Any,
+    model: str,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_tokens: int,
+    retries: int,
+) -> dict[str, Any]:
+    from mas.library.eval.mce.runner import paced_live_call
+
     conversation: list[dict[str, str]] = list(messages)
     last_error: Exception | None = None
     last_text = ""
@@ -69,14 +83,18 @@ def complete_json(
 
         def _create(call_kwargs: dict[str, Any] = kwargs) -> Any:
             try:
-                return client.chat.completions.create(
-                    **call_kwargs, response_format={"type": "json_object"}
-                )
+                return client.chat.completions.create(**call_kwargs, response_format={"type": "json_object"})
             except Exception:
                 logger.debug("JSON response_format unsupported; retrying without it")
                 return client.chat.completions.create(**call_kwargs)
 
-        response = paced_live_call(_create, model=model)
+        failure: JudgeCallFailed | None = None
+        try:
+            response = paced_live_call(_create, model=model)
+        except Exception as exc:
+            failure = JudgeCallFailed(f"judge call failed (model={model!r}): {judge_error_text(exc)}")
+        if failure is not None:
+            raise failure
         last_text = ""
         try:
             last_text = response.choices[0].message.content or ""
@@ -94,6 +112,6 @@ def complete_json(
                     "content": "Retry. Return a single JSON object only, no markdown.",
                 },
             ]
-    raise ValueError(
+    raise JudgeCallFailed(
         f"LLM did not return valid JSON after {retries + 1} attempt(s): {last_error}; last_text={last_text[:200]!r}"
     )

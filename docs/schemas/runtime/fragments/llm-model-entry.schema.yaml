@@ -5,7 +5,7 @@ $id: "mas/v1#llm-model-entry"
 title: LlmModelEntry
 description: >
   One spec.models[] row. Identity + static sampling/reasoning. Connection
-  (api_base, api_key_env) belongs on infra, not here. Per-call dynamic
+  (api_base, api_key) belongs on infra, not here. Per-call dynamic
   fields belong on LLMProvider.chat_completion.
 type: object
 additionalProperties: false

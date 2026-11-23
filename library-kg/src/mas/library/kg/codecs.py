@@ -43,12 +43,12 @@ def _conn(store: Any) -> dict:
         uri=str(getattr(store, "uri", None) or ""),
         username=str(getattr(store, "user", None) or ""),
         database=str(getattr(store, "database", None) or ""),
-        password_env=str(getattr(store, "password_env", None) or "NEO4J_PASSWORD"),
+        password=getattr(store, "password", None) or None,
     )
     return {
         "uri": target.resolved_uri(),
         "username": target.resolved_username(),
-        "password": target.password(),
+        "password": target.password_value(),
         "database": target.resolved_database(),
     }
 

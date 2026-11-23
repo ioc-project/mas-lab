@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """Versioned manifest loader.
 
 Loads experiment and pipeline YAML, validates the declared format version, and
@@ -8,15 +7,17 @@ returns the parsed document. Only the current format version is supported in thi
 release.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
 from mas.lab.manifests.versions import assert_supported, detect_version
-from mas.runtime.spec.source import load_yaml_file
+from mas.runtime.secrets import load_checked_document
 
 
 def load_experiment_data(path: Path) -> Tuple[Dict[str, Any], str]:
-    """Parse an experiment YAML file."""
+    """Parse an experiment YAML file. A literal secret or a credential in a URL is refused."""
     raw = _read_yaml(path)
     version = detect_version(raw)
     assert_supported(version, path)
@@ -43,7 +44,4 @@ def normalize_manifest_version(
 
 
 def _read_yaml(path: Path) -> Dict[str, Any]:
-    raw = load_yaml_file(path)
-    if not isinstance(raw, dict):
-        raise ValueError(f"{path}: manifest must be a YAML mapping")
-    return raw
+    return load_checked_document(path)

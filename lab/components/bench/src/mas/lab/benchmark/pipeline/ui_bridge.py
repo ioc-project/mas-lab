@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import urllib.request
 from collections import Counter
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -16,7 +17,6 @@ from typing import Any
 from mas.lab.benchmark.pipeline.channel import get_channel, get_stream_id
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.lab.benchmark.pipeline.kinds import is_control_kind, is_lifecycle_kind
-from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -151,10 +151,31 @@ def scope_progress_envelope(
     return record
 
 
+class IngestRefused(RuntimeError):
+    """A demo-ui ingest request that would expose its token was not sent."""
+
+
+def open_ingest(request: urllib.request.Request, *, timeout: float) -> Any:
+    """Send ``request`` to the demo-ui: no redirect is followed, a loopback host is reached without the
+    environment's proxy, and a request carrying the token goes over plain http only to a loopback host
+    (else :class:`IngestRefused`, naming the host, never the token)."""
+    from mas.runtime.secrets import check_plain_http
+    from mas.runtime.secrets.transport import PlainHttpRefused, opener_for
+
+    if request.has_header("Authorization"):
+        try:
+            check_plain_http(request.full_url, what="demo-ui ingest token")
+        except PlainHttpRefused as exc:
+            raise IngestRefused(str(exc)) from None
+    return opener_for(request.full_url).open(request, timeout=timeout)
+
+
+_REFUSED_WARNED: set[str] = set()
+
+
 def post_ingest(record: dict[str, Any], url: str | None = None, ref: dict[str, Any] | None = None) -> None:
     """Subscriber adapter: channel records → demo-ui ``POST /api/ingest``."""
     import json
-    import urllib.request
 
     bound = _BOUND.get() or DemoUiBinding()
     with _BINDING_LOCK:
@@ -171,13 +192,19 @@ def post_ingest(record: dict[str, Any], url: str | None = None, ref: dict[str, A
         stamped.setdefault(key, value)
     body = json.dumps({"ref": extra_ref, "record": stamped, "replay": False}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
-    token = str(hostenv.get("MAS_DEMO_UI_TOKEN") or "").strip()
+    from mas.lab.ui_ingest import ui_ingest_token
+
+    token = ui_ingest_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(dest, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=0.4) as resp:
+        with open_ingest(req, timeout=0.4) as resp:
             resp.read()
+    except IngestRefused as exc:
+        if dest not in _REFUSED_WARNED:
+            _REFUSED_WARNED.add(dest)
+            logger.warning("%s", exc)
     except Exception:
         return
 

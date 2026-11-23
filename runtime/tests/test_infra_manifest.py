@@ -14,7 +14,6 @@ metadata:
 spec:
   server:
     api_base: http://localhost:11434/v1
-    api_key_env: ""
   models:
     available:
       - qwen2.5:latest
@@ -31,7 +30,7 @@ spec:
 
     assert infra.kind == "LLMLocal"
     assert infra.proxy.api_base == "http://localhost:11434/v1"
-    assert infra.proxy.api_key_env == ""
+    assert infra.proxy.api_key is None
     assert infra.models.allowed == ["qwen2.5:latest", "nomic-embed-text:latest"]
     assert infra.models.defaults.llm == "qwen2.5:latest"
     assert infra.models.defaults.embed == "nomic-embed-text:latest"
@@ -46,7 +45,7 @@ def test_llm_proxy_yaml_retry_is_not_a_proxy_field() -> None:
             "spec": {
                 "proxy": {
                     "api_base": "https://x.example/v1",
-                    "api_key_env": "X_KEY",
+                    "api_key": {"secret": "x"},
                     "retry": {"max_attempts": 9, "jitter": False},
                 }
             },
@@ -67,7 +66,7 @@ def test_vertex_proxy_project_reaches_the_leaf() -> None:
                 "protocol": "vertex",
                 "proxy": {
                     "api_base": "https://us-central1-aiplatform.googleapis.com",
-                    "api_key_env": "VERTEX_ACCESS_TOKEN",
+                    "api_key": {"secret": "vertex"},
                     "project": "demo-proj",
                     "location": "us-central1",
                     "retry": {"max_attempts": 9},

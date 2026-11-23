@@ -36,8 +36,7 @@ Parent-span correlation uses ``call_id`` / ``parent_call_id``; accurate
 timestamps come from ``event["timestamp"]`` (float seconds → nanoseconds).
 
 ``OBSERVE_REALTIME_OBSERVABILITY_ENABLED`` is pinned to ``false`` by default
-in :mod:`mas.library.telemetry` (the package ``__init__.py``, always
-imported before this submodule) — not repeated here.
+in :mod:`mas.third_party_otel` — not repeated here.
 """
 
 from __future__ import annotations

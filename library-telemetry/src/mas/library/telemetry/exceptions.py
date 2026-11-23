@@ -33,8 +33,7 @@ class OtelSdkUnavailableError(ConversionError):
     def __init__(self, detail: str = "") -> None:
         super().__init__(
             "opentelemetry-sdk is not installed. Install the conversion extra: "
-            f"{_extra_hint('convert')}"
-            + (f" ({detail})" if detail else "")
+            f"{_extra_hint('convert')}" + (f" ({detail})" if detail else "")
         )
 
 
@@ -59,8 +58,7 @@ class MissingRequiredFieldError(ConversionError):
         self.field = field
         self.kind = kind
         super().__init__(
-            f"[kind={kind}] Required field {field!r} is missing or empty"
-            + (f" ({detail})" if detail else "")
+            f"[kind={kind}] Required field {field!r} is missing or empty" + (f" ({detail})" if detail else "")
         )
 
 
@@ -98,14 +96,18 @@ class CollectorPushError(SerializationError):
         super().__init__(f"OTLP push to {endpoint!r} failed: {detail}")
 
 
-class ClickHouseUnavailableError(SerializationError):
-    """``clickhouse-connect`` is required for dump but is not installed."""
+class ClickHouseQueryError(SerializationError):
+    """A ClickHouse connection or query failed.
 
-    def __init__(self) -> None:
-        super().__init__(
-            "clickhouse-connect is not installed. Install the clickhouse extra: "
-            f"{_extra_hint('clickhouse')}"
-        )
+    The text is the error class and the HTTP status, never the server's answer: it may repeat the credentials
+    it received.
+    """
+
+    def __init__(self, what: str, error: BaseException, *, hint: str = "") -> None:
+        code = getattr(error, "code", None)
+        self.code = code if isinstance(code, int) and not isinstance(code, bool) else None
+        shown = f" (code {self.code})" if self.code is not None else ""
+        super().__init__(f"ClickHouse {what} failed: {type(error).__name__}{shown}" + (f"; {hint}" if hint else ""))
 
 
 __all__ = [
@@ -118,5 +120,5 @@ __all__ = [
     "SpecNotFoundError",
     "SerializationError",
     "CollectorPushError",
-    "ClickHouseUnavailableError",
+    "ClickHouseQueryError",
 ]

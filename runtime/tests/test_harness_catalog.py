@@ -50,6 +50,7 @@ def test_related_state_sandbox_are_library_not_boundary() -> None:
     assert "control_protocol" in LIBRARY_TYPES
     assert "checkpoint_store" in LIBRARY_TYPES
     assert "eval_metric" in LIBRARY_TYPES
+    assert "secret_store" in LIBRARY_TYPES
     assert classify_plugin_type("related_state") == "library"
     assert classify_plugin_type("execute_sandbox") == "library"
     assert classify_plugin_type("circuit_breaker") == "library"

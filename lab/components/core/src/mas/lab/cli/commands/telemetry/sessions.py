@@ -1,14 +1,14 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab telemetry sessions`` commands."""
+
 from __future__ import annotations
 
 import json
 
 import click
 
-from ._clickhouse import ch_conn_options as _ch_conn_options
-from ._clickhouse import ch_request as _ch_request
+from ._clickhouse import ch_conn_options, ch_request
 
 
 @click.group("sessions")
@@ -19,11 +19,13 @@ def sessions_group() -> None:
 @sessions_group.command("list")
 @click.option("--app-name", default=None, help="Filter by ServiceName.")
 @click.option(
-    "--attr-key", default="mas.session.id", show_default=True,
+    "--attr-key",
+    default="mas.session.id",
+    show_default=True,
     help="SpanAttribute key holding the session ID (e.g. 'session.id').",
 )
 @click.option("--limit", default=20, show_default=True, help="Max rows to return.")
-@_ch_conn_options
+@ch_conn_options
 def list_sessions_cmd(
     app_name: str | None,
     attr_key: str,
@@ -31,7 +33,6 @@ def list_sessions_cmd(
     host: str | None,
     port: int | None,
     user: str | None,
-    password: str | None,
     database: str | None,
     table: str,
     json_out: bool,
@@ -50,8 +51,6 @@ def list_sessions_cmd(
     from mas.lab.connections import resolve_clickhouse_conn
 
     conn = resolve_clickhouse_conn(host=host, port=port, user=user, database=database)
-    if password is not None:
-        conn["password"] = password
 
     app_filter = f" AND ServiceName = '{app_name}'" if app_name else ""
     db_table = f"{conn['database']}.{table}"
@@ -66,7 +65,7 @@ def list_sessions_cmd(
         f"LIMIT {limit} FORMAT JSONEachRow"
     )
 
-    body = _ch_request(conn, query)
+    body = ch_request(conn, query)
     rows = [json.loads(line) for line in body.splitlines() if line.strip()]
 
     if json_out:
@@ -80,13 +79,6 @@ def list_sessions_cmd(
         )
         return
 
-    click.echo(
-        f"Found {len(rows)} session(s) in {conn['host']}:{conn['port']}"
-        f"/{db_table} [attr={attr_key}]:"
-    )
+    click.echo(f"Found {len(rows)} session(s) in {conn['host']}:{conn['port']}/{db_table} [attr={attr_key}]:")
     for row in rows:
-        click.echo(
-            f"  [{row['last'][:19]}]  {row['sid']:<50}  "
-            f"n={row['n']}  app={row['ServiceName']}"
-        )
-
+        click.echo(f"  [{row['last'][:19]}]  {row['sid']:<50}  n={row['n']}  app={row['ServiceName']}")

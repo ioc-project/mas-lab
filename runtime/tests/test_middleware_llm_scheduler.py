@@ -317,10 +317,3 @@ def test_default_user_never_replaces_an_override() -> None:
 def test_unknown_override_is_refused() -> None:
     with pytest.raises(ValueError, match="unknown llm_scheduler override"):
         install_overrides({"rpmm": 1})
-
-
-def test_runtime_scheduler_module_reads_no_environment() -> None:
-    import mas.runtime.engine.llm_scheduler as mod
-
-    text = Path(mod.__file__).read_text(encoding="utf-8")
-    assert "os.environ" not in text and "getenv" not in text

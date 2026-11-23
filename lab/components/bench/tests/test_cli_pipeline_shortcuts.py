@@ -100,6 +100,9 @@ def test_shortcut_click_commands_are_registered() -> None:
         "kg": _click_command_names(root / "library-kg" / "src" / "mas" / "library" / "kg" / "lab_cli.py"),
     }
     from mas.lab.cli.commands.plot import plot_group
+    from mas.lab.cli.commands.telemetry import telemetry_group
+
+    names["telemetry"] |= set(telemetry_group.commands)  # core's ClickHouse commands (`dump`, ...)
 
     names["plot"] = set(plot_group.commands)
     missing: list[str] = []

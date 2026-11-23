@@ -134,7 +134,8 @@ async def test_failure_isolation(tmp_path: Path) -> None:
     )
     assert scores["toy_echo"]["value"] == 1.0
     assert scores["toy_fail"]["value"] is None
-    assert "intentional failure" in (scores["toy_fail"]["error"] or "")
+    # The type name only: a metric's exception text may be a provider's body.
+    assert scores["toy_fail"]["error"] == "RuntimeError"
 
 
 @pytest.mark.asyncio

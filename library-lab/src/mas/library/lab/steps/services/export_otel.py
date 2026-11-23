@@ -115,7 +115,7 @@ class ExportOtelStep(PipelineStep):
     ]
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
-        from mas.lab.telemetry.otlp_push import convert_to_jsonl, push_file
+        from mas.library.telemetry.collector.otlp import convert_file_to_otlp_jsonl, push_file
 
         events_file = _resolve_events_file(self.config, ctx)
         if events_file is None or not events_file.exists():
@@ -134,7 +134,7 @@ class ExportOtelStep(PipelineStep):
             if out_file.exists() and not overwrite:
                 logger.debug("export_otel[json]: already exists, skipping %s", out_file)
                 return StepOutput(metadata={"status": "skipped", "output": str(out_file)})
-            result = convert_to_jsonl(events_file, out_file, service_name)
+            result = convert_file_to_otlp_jsonl(events_file, out_file, service_name)
             if result["status"] == "ok":
                 logger.info("export_otel[json]: %d spans → %s", result["spans"], out_file)
                 return StepOutput(

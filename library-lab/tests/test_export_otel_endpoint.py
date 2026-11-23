@@ -29,7 +29,7 @@ def test_a_push_reports_its_status(monkeypatch, tmp_path) -> None:
         pushed.update(kw)
         return {"status": "ok", "spans": 3}
 
-    monkeypatch.setattr("mas.lab.telemetry.otlp_push.push_file", fake_push)
+    monkeypatch.setattr("mas.library.telemetry.collector.otlp.push_file", fake_push)
     step = eo.ExportOtelStep(name="x", config={"destination": "otlp", "events_jsonl": "events.jsonl", "dry_run": True})
     ctx = SimpleNamespace(output_dir=tmp_path, template_vars={})
     with hostenv.overlay({"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector:4318"}):

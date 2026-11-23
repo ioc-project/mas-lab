@@ -37,8 +37,11 @@ and [`../components/bench/src/mas/lab/plots/`](../components/bench/src/mas/lab/p
 
 ## Use in pipeline YAML
 
+A `type: processor` step goes in a level hook of the experiment (here the experiment-root `post:`), or in a
+pipeline file attached on the command line with `mas-lab benchmark run EXPERIMENT.yaml --pipeline LEVEL:PHASE:REF`.
+
 ```yaml
-pipeline:
+post:
   - name: plot-trajectory
     type: processor
     config:
@@ -71,7 +74,7 @@ Arguments are `NAME=VALUE` pairs:
 It adds a Governance lane when the trace has governance events. The lane shows decisions, human-in-the-loop (HITL) exchanges, blocked-action ghost markers, and retry chains. The HTML viewer hides it by default. The "Gov" button toggles it.
 
 ```yaml
-pipeline:
+post:
   - name: plot-multilevel
     type: processor
     config:

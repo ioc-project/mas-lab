@@ -18,12 +18,12 @@ from mas.lab.benchmark.environment.step import ActionResult, EnvironmentContext,
 
 
 def _run(command: str, cwd: Path, timeout: float, cancel: threading.Event, base_env: Any) -> int:
-    from mas.lab.benchmark.environment.fixtures import scrubbed_environ
+    from mas.runtime.envkeys import CHILD_KEYS
 
     proc = subprocess.Popen(
         ["/bin/sh", "-c", command],
         cwd=str(cwd),
-        env=scrubbed_environ(base_env or {}),
+        env={k: v for k, v in (base_env or {}).items() if k in CHILD_KEYS},
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

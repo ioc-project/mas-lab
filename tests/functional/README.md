@@ -18,4 +18,4 @@ task test-functional
 pytest tests/functional -m functional
 ```
 
-Docker steps that call a live LLM also read `docker/.env` (and `OPENAI_API_KEY` where the scenario needs it).
+Docker steps that call a live LLM need `echo KEY | mas-ctl secrets set openai` (file store on the mounted workspace).

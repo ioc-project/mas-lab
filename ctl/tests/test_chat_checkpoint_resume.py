@@ -56,3 +56,20 @@ def test_checkpoint_resume_rejects_tampered_embedded_manifest(tmp_path) -> None:
     )
     with pytest.raises(Exception, match="hash mismatch"):
         _embedded_checkpoint_manifest(path)
+
+
+def test_resume_without_manifest_or_workspace_root_anchors_at_checkpoint_directory(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from mas.ctl.infra.resolve import resolution_anchor
+    from mas.ctl.session.bootstrap import _infra_anchor
+
+    ckpt = tmp_path / "ckpt" / "c.json"
+    ckpt.parent.mkdir()
+    options = SimpleNamespace(manifest_dir=None, checkpoint_path=ckpt)
+    ws = SimpleNamespace(root=None)
+    anchor = _infra_anchor(options, ws)
+    assert resolution_anchor(anchor, ws) == ckpt.parent.resolve()
+    # A workspace root or a manifest directory still wins.
+    assert _infra_anchor(options, SimpleNamespace(root=tmp_path)) is None
+    assert _infra_anchor(SimpleNamespace(manifest_dir=tmp_path, checkpoint_path=ckpt), ws) == tmp_path

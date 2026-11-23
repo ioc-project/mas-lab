@@ -483,6 +483,7 @@ async def test_eval_mce_degrades_gracefully_on_scoring_failure(tmp_path: Path, m
         raise RuntimeError("judge LLM proxy timed out")
 
     # Stock MCE metrics batch through runner.compute_session_metrics.
+    monkeypatch.setattr("mas.library.eval.mce.runner.install_openai_llm_service", lambda *a, **k: "gpt-4o")
     monkeypatch.setattr("mas.library.eval.mce.runner.compute_session_metrics", _boom)
 
     step = mce_module.EvalMceStep(
@@ -508,7 +509,9 @@ async def test_eval_mce_degrades_gracefully_on_scoring_failure(tmp_path: Path, m
     assert out.data["computed"] == 1
     doc = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
     assert doc["run_quality"]["status"] == "error"
-    assert any("judge LLM proxy timed out" in e for e in doc["run_quality"]["errors"])
+    errors = doc["run_quality"]["errors"]
+    assert any("RuntimeError" in e for e in errors)
+    assert not any("judge LLM proxy timed out" in e for e in errors)
 
 
 def test_eval_mce_judge_semaphore_sized_by_max_workers() -> None:

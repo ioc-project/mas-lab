@@ -23,7 +23,6 @@ from mas.lab.benchmark.environment.fixtures import (
     _fixture_env,
     _same_command,
     command_digest,
-    looks_secret,
     reap_stale_fixtures,
 )
 from mas.lab.benchmark.environment.model import (
@@ -245,11 +244,9 @@ def test_empty_session_id_is_nobody_not_everybody() -> None:
     assert cap.allows("steer", "other") is False
 
 
-def test_secret_filter_covers_password_urls_without_a_user_and_known_names(
+def test_fixture_env_does_not_copy_the_host_snapshot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert looks_secret("MYSQL_PWD")
-    assert looks_secret("AUTHORIZATION")
     spec = compile_fixture({"name": "x", "command": ["true"]})
     monkeypatch.setenv("MYSQL_PWD", "hunter2")
     monkeypatch.setenv("REDIS_URL", "redis://:hunter2@localhost:6379")

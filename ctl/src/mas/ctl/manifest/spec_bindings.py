@@ -28,8 +28,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.runtime import hostenv
-
 # ObservabilityBinding and GovernanceBinding now live in the runtime — import
 # and re-export so all existing ctl importers continue to work unchanged.
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
@@ -57,13 +55,10 @@ def normalize_obs_plugin(name: str) -> str:
 
 
 def resolve_manifest_cfg_value(cfg: dict[str, Any], key: str, *, default: str = "") -> str:
-    """Resolve a manifest config value from inline field or ``{key}_env`` reference."""
+    """Return the inline manifest config value. Secrets are SecretRef objects, not env names."""
     direct = cfg.get(key)
     if direct is not None and str(direct).strip():
         return str(direct).strip()
-    env_key = cfg.get(f"{key}_env")
-    if env_key:
-        return hostenv.get(str(env_key), default).strip()
     return default
 
 

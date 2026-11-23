@@ -8,16 +8,9 @@ import logging
 from pathlib import Path
 from typing import Optional, Union
 
-from mas.runtime import hostenv
-
 from mas.library.kg.artifact import KGArtifact
 
 logger = logging.getLogger(__name__)
-
-_ENV_URI = "NEO4J_URI"
-_ENV_USER = "NEO4J_USER"
-_ENV_PASSWORD = "NEO4J_PASSWORD"
-_ENV_DATABASE = "NEO4J_DB_AGENT"
 
 
 def run_neo4j_dump(
@@ -27,14 +20,14 @@ def run_neo4j_dump(
     output_path: Optional[Union[str, Path]] = None,
     uri: Optional[str] = None,
     username: Optional[str] = None,
-    password: Optional[str] = None,
-    password_env: Optional[str] = None,
+    password: object = None,
     database: Optional[str] = None,
 ) -> KGArtifact:
     """Fetch a session KG from Neo4j and return it as a KGArtifact.
 
-    Connection params fall back to environment variables
-    (``NEO4J_URI``, ``NEO4J_USER``, ``NEO4J_PASSWORD``, ``NEO4J_DB_AGENT``).
+    Connection params fall back to host values
+    (``NEO4J_URI``, ``NEO4J_USER``, ``NEO4J_DB_AGENT``). The password is a
+    SecretRef (required unless optional); none declared means no password.
 
     Args:
         session_id: Session ID to retrieve (preferred over run_id).
@@ -42,8 +35,7 @@ def run_neo4j_dump(
         output_path: If given, also save the KGArtifact to this path.
         uri: Bolt URI.
         username: Neo4j username.
-        password: Literal password (prefer ``password_env``).
-        password_env: Name of the env var holding the password.
+        password: SecretRef for the password (none: no password).
         database: Target database name.
 
     Returns:
@@ -57,26 +49,13 @@ def run_neo4j_dump(
     if not session_id and not run_id:
         raise ValueError("Either session_id or run_id must be provided")
 
-    resolved_uri = uri or hostenv.get(_ENV_URI, "bolt://localhost:7687")
-    resolved_user = username or hostenv.get(_ENV_USER, "neo4j")
-    resolved_password = password or hostenv.get(password_env or _ENV_PASSWORD, "")
-    resolved_database = database or hostenv.get(_ENV_DATABASE, "neo4j")
+    from mas.library.kg.steps.neo4j_push import _resolve_conn
 
+    conn = _resolve_conn(uri, username, password, database)
     logger.info(
-        "neo4j_dump: fetching session_id=%s run_id=%s from %s",
-        session_id,
-        run_id,
-        resolved_uri,
+        "neo4j_dump: fetching session_id=%s run_id=%s from %s", session_id, run_id, conn["uri"]
     )
-
-    doc = fetch_kg_from_neo4j(
-        session_id=session_id,
-        run_id=run_id,
-        uri=resolved_uri,
-        username=resolved_user,
-        password=resolved_password,
-        database=resolved_database,
-    )
+    doc = fetch_kg_from_neo4j(session_id=session_id, run_id=run_id, **conn)
 
     artifact = KGArtifact.from_doc(doc)
 

@@ -54,8 +54,8 @@ export PATH="$PWD/.venv/bin:$PATH"
 # 2 — Configure LLM access (interactive, writes ~/.config/mas/config.yaml)
 mas-lab init
 
-# 3 — Export the API key printed by init
-export OPENAI_API_KEY=<your-key>
+# 3 — Store the API key (never in YAML)
+echo KEY | mas-ctl secrets set openai
 
 # 4 — Run the trip-planner sample
 #    (`samples:` resolves the app shipped in library-samples/; from a source

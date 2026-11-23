@@ -122,13 +122,7 @@ def apply_experiment_overlays(
     if not overlay_paths:
         return experiment_data
 
-    try:
-        from mas.runtime.spec.source import load_yaml_file
-    except ImportError:
-        import yaml
-
-        def load_yaml_file(p: Path) -> Dict[str, Any]:  # type: ignore[misc]
-            return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    from mas.runtime.secrets import load_checked_document
 
     result = experiment_data
     for raw_path in overlay_paths:
@@ -136,11 +130,9 @@ def apply_experiment_overlays(
         if not p.is_absolute() and base_dir is not None:
             p = (base_dir / p).resolve()
         if not p.exists():
-            raise FileNotFoundError(
-                f"Experiment overlay not found: {p}"
-            )
+            raise FileNotFoundError(f"Experiment overlay not found: {p}")
         try:
-            overlay_data = load_yaml_file(p)
+            overlay_data = load_checked_document(p)
         except Exception as exc:
             raise ValueError(f"Cannot load experiment overlay {p}: {exc}") from exc
 
@@ -148,7 +140,8 @@ def apply_experiment_overlays(
         if kind and kind not in ("ExperimentOverlay", "Experiment"):
             logger.warning(
                 "Experiment overlay %s has unexpected kind %r (expected ExperimentOverlay)",
-                p, kind,
+                p,
+                kind,
             )
 
         logger.info("Applying experiment overlay: %s", p)

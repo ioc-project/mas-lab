@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -18,20 +17,32 @@ _MAX_TIMEOUT = 120
 
 # Environment variables that are safe to pass through to scripts.
 # All other env vars (API keys, tokens, credentials, etc.) are stripped.
-_SAFE_ENV_KEYS: frozenset[str] = frozenset({
-    "PATH",
-    "HOME",
-    "TMPDIR", "TMP", "TEMP",
-    "LANG", "LC_ALL", "LC_CTYPE", "LC_MESSAGES",
-    "PYTHONPATH", "PYTHONDONTWRITEBYTECODE", "PYTHONUNBUFFERED",
-    "VIRTUAL_ENV", "VIRTUAL_ENV_PROMPT", "LD_LIBRARY_PATH",
-    "UV_PROJECT_ENVIRONMENT",
-    "PWD",
-    "USER", "LOGNAME",
-})
+_SAFE_ENV_KEYS: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "TMP",
+        "TEMP",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LC_MESSAGES",
+        "PYTHONPATH",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONUNBUFFERED",
+        "VIRTUAL_ENV",
+        "VIRTUAL_ENV_PROMPT",
+        "LD_LIBRARY_PATH",
+        "UV_PROJECT_ENVIRONMENT",
+        "PWD",
+        "USER",
+        "LOGNAME",
+    }
+)
 
 # POSIX resource limits (best-effort — ignored on platforms without resource module)
-_POSIX_CPU_LIMIT_SECS = 60        # hard upper bound on CPU time
+_POSIX_CPU_LIMIT_SECS = 60  # hard upper bound on CPU time
 _POSIX_MEM_LIMIT_BYTES = 512 * 1024 * 1024  # 512 MiB address space
 
 
@@ -41,13 +52,14 @@ class ScriptResult:
 
     The `ok` field is automatically set based on exit_code during __post_init__.
     """
+
     exit_code: int
     stdout: str
     stderr: str
     ok: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, 'ok', self.exit_code == 0)
+        object.__setattr__(self, "ok", self.exit_code == 0)
 
 
 def run_script(
@@ -99,7 +111,9 @@ def run_script(
 
     logger.info(
         "Executing script: %s (args=%s, timeout=%ds)",
-        script_path, args, timeout_val,
+        script_path,
+        args,
+        timeout_val,
     )
 
     try:
@@ -162,6 +176,7 @@ def guard_path_traversal(script_name: str, base_dir: Path) -> Path | None:
 # Private helpers
 # ---------------------------------------------------------------------------
 
+
 def _build_command(script_path: Path, args: list[str]) -> list[str]:
     """Return the subprocess command list for *script_path*."""
     suffix = script_path.suffix.lower()
@@ -175,20 +190,24 @@ def _build_command(script_path: Path, args: list[str]) -> list[str]:
 
 
 def _build_safe_env(cwd: Path, extra_env: dict[str, str]) -> dict[str, str]:
-    """Build a sanitized environment for the subprocess."""
-    safe = {k: v for k, v in os.environ.items() if k in _SAFE_ENV_KEYS}
-    safe["PWD"] = str(cwd)
-    # Caller-provided overrides — validated to be non-empty strings only
+    """Build a sanitized environment for the subprocess. Host secrets stay out."""
+    from mas.runtime import hostenv
+    from mas.runtime.secrets import child_env
+
+    snap = hostenv.snapshot()
+    declared = {k: snap[k] for k in _SAFE_ENV_KEYS if k in snap}
     for k, v in extra_env.items():
         if isinstance(k, str) and k and isinstance(v, str):
-            safe[k] = v
-    return safe
+            declared[k] = v
+    declared["PWD"] = str(cwd)
+    return child_env(declared)
 
 
 def _posix_set_limits() -> None:
     """Apply POSIX resource limits before exec (called in child process)."""
     try:
         import resource as _resource
+
         # CPU time — hard cap prevents spin-loops from consuming indefinitely
         try:
             _resource.setrlimit(

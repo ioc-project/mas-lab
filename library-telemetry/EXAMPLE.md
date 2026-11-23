@@ -117,10 +117,10 @@ run:
 
 ## 4. Read back
 
-Collectors persist to ClickHouse. Fetching a session needs the `clickhouse` extra and a reachable ClickHouse:
+Collectors persist to ClickHouse. Fetching a session needs a reachable ClickHouse:
 
 ```bash
-mas-lab telemetry list-apps
+mas-lab telemetry apps list
 mas-lab telemetry dump trip-042 -o traces/roundtrip.otel.jsonl
 ```
 

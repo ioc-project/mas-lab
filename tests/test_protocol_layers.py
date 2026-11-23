@@ -41,14 +41,12 @@ async def test_openai_over_http_matches_direct(monkeypatch: pytest.MonkeyPatch) 
     recorded = {"choices": [{"message": {"role": "assistant", "content": "hi"}, "finish_reason": "stop"}]}
     monkeypatch.setenv("K", "secret")
     transport = httpx.MockTransport(_chat_handler(recorded))
-    direct = OpenAILLMProvider(api_base="http://127.0.0.1:9/v1", api_key="secret", api_key_env="K")
+    direct = OpenAILLMProvider(api_base="http://127.0.0.1:9/v1", api_key={"secret": "openai"})
     direct._aclient = httpx.AsyncClient(transport=transport)
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     assert isinstance(http, HttpCallTransport)
     _use_async_transport(http, transport)
-    layered = OpenAILLMProvider.wrap(
-        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
-    )
+    layered = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}})
     kwargs = {"model": "m", "messages": [{"role": "user", "content": "q"}]}
     assert (await layered.achat_completion(**kwargs)) == (await direct.achat_completion(**kwargs))
 
@@ -59,7 +57,7 @@ async def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: p
     transport = httpx.MockTransport(_chat_handler(recorded))
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     _use_async_transport(http, transport)
-    inner = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"})
+    inner = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}})
     cache_path = tmp_path / "c.json"
     from mas.runtime.registry.llm_provider_registry import wrap_llm_provider_cache
 
@@ -71,9 +69,7 @@ async def test_openai_http_cache_fixture_matches_direct(tmp_path, monkeypatch: p
         raise AssertionError("cache hit must not POST")
 
     reader_http._client = httpx.Client(transport=httpx.MockTransport(boom))
-    reader_inner = OpenAILLMProvider.wrap(
-        reader_http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
-    )
+    reader_inner = OpenAILLMProvider.wrap(reader_http, {"api_base": "http://127.0.0.1:9/v1"})
     reader = wrap_llm_provider_cache(reader_inner, cache_path=cache_path, cache_read=True, cache_write=False)
     cached = await reader.achat_completion(model="m", messages=[{"role": "user", "content": "q"}])
     assert cached["content"] == written["content"]
@@ -154,9 +150,7 @@ async def test_anthropic_over_http_uses_the_transport_aclient(monkeypatch: pytes
 
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1"}, call_kinds=("llm",))
     _use_async_transport(http, httpx.MockTransport(handler))
-    layered = AnthropicLLMProvider.wrap(
-        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
-    )
+    layered = AnthropicLLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "anthropic"}})
     assert (await layered.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))["content"] == "hi"
 
 
@@ -172,9 +166,7 @@ async def test_gemini_over_http_uses_the_transport_aclient(monkeypatch: pytest.M
 
     http = HttpLayer.wrap(None, {"url": "http://127.0.0.1:9/v1beta"}, call_kinds=("llm",))
     _use_async_transport(http, httpx.MockTransport(handler))
-    layered = GeminiLLMProvider.wrap(
-        http, {"api_base": "http://127.0.0.1:9/v1beta", "api_key": "secret", "api_key_env": "K"}
-    )
+    layered = GeminiLLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1beta", "api_key": {"secret": "gemini"}})
     assert (await layered.achat_completion(model="m", messages=[{"role": "user", "content": "q"}]))["content"] == "hi"
 
 
@@ -327,7 +319,7 @@ async def test_wrap_llm_provider_cache_is_the_cache_layer_and_keys_on_the_chat(t
 
 def test_openai_from_infra_does_not_leave_a_second_live_http_inner(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("K", "secret")
-    spec = {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K", "kind": "openai"}
+    spec = {"api_base": "http://127.0.0.1:9/v1", "kind": "openai"}
     created: list[HttpCallTransport] = []
     original = HttpCallTransport.from_params
 
@@ -387,13 +379,11 @@ def test_http_layer_wrap_keeps_an_existing_call_transport() -> None:
 def test_openai_wrap_http_is_kept_when_pipeline_binds_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("K", "secret")
     http = HttpCallTransport.from_params({"url": "http://127.0.0.1:9/v1"})
-    provider = OpenAILLMProvider.wrap(
-        http, {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K"}
-    )
+    provider = OpenAILLMProvider.wrap(http, {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}})
     from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
     from mas.runtime.layers.compose import merge_protocol_layers
 
-    spec = {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K", "kind": "openai"}
+    spec = {"api_base": "http://127.0.0.1:9/v1", "kind": "openai"}
     pipeline = merge_protocol_layers([], plugin_type="llm_provider", kind="openai", spec=spec)
     wrap_llm_provider_pipeline(provider, pipeline)
     assert provider.inner is http
@@ -444,7 +434,6 @@ def test_engine_stop_closes_the_tool_provider() -> None:
     engine = LiveLlmEngine(
         ctx=AutoCtxAssembler(),
         api_base="http://127.0.0.1:9/v1",
-        api_key_env="K",
         model="m",
         tool_provider=_Provider(),
     )
@@ -455,7 +444,7 @@ def test_engine_stop_closes_the_tool_provider() -> None:
 def _inner_for(api_base: str, **extra: object):
     from mas.runtime.engine.infra_pipeline import wrap_llm_provider_pipeline
 
-    spec = {"api_base": api_base, "api_key_env": "K", "kind": "openai", **extra}
+    spec = {"api_base": api_base, "kind": "openai", **extra}
     provider = OpenAILLMProvider.from_infra_spec(spec)
     wrap_llm_provider_pipeline(
         provider, merge_protocol_layers([], plugin_type="llm_provider", kind="openai", spec=spec)

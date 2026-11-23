@@ -191,14 +191,18 @@ def test_from_binding_uses_mas_id_not_agent_or_runtime(tmp_path: Path) -> None:
     plugin.close()
 
 
-def test_from_binding_honours_env_otlp_endpoint(tmp_path: Path, monkeypatch) -> None:
+def test_from_binding_honours_otlp_endpoint(tmp_path: Path, monkeypatch) -> None:
     from mas.library.telemetry.plugins.otel_plugin import OtelObservabilityPlugin
 
-    monkeypatch.setenv("MY_OTLP", "http://localhost:4318")
     binding = ObservabilityBinding(
         plugins=["otel"],
-        plugin_configs={"otel": {"output_path": str(tmp_path / "out.jsonl"), "app_name": "sample-app"}},
-        otlp_endpoint_env="MY_OTLP",
+        plugin_configs={
+            "otel": {
+                "output_path": str(tmp_path / "out.jsonl"),
+                "app_name": "sample-app",
+                "otlp_endpoint": "http://localhost:4318",
+            }
+        },
     )
     plugin = OtelObservabilityPlugin.from_binding(binding, base_dir=tmp_path, agent_id="a")
     assert plugin is not None

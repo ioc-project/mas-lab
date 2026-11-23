@@ -24,23 +24,22 @@ def _assert_clean(text: str) -> None:
     assert len(text) <= MAX_ERROR_TEXT + 80  # the fixed words around the quoted text
 
 
-def test_a2a_error_object_from_a_peer_is_cleaned() -> None:
-    # kills: a peer's JSON-RPC error message copied into the error unbounded
+def test_a2a_error_object_from_a_peer_is_its_code_only() -> None:
+    # kills: a peer's JSON-RPC error message (which may echo the caller's credential) copied into the error
     raw = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": HOSTILE}})
     with pytest.raises(AgentCommError) as raised:
         decode_response(raw)
-    _assert_clean(str(raised.value))
-    assert str(raised.value).startswith("A2A error -32000: line one ERROR forged")
+    assert str(raised.value) == "A2A error -32000"
 
 
 def test_a2a_error_code_that_is_not_a_number_cannot_smuggle_text() -> None:
     raw = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": HOSTILE, "message": "m"}})
     with pytest.raises(AgentCommError) as raised:
         decode_response(raw)
-    _assert_clean(str(raised.value))
+    assert str(raised.value) == "A2A error"
 
 
-def test_failed_remote_task_status_text_is_cleaned() -> None:
+def test_failed_remote_task_status_text_is_not_carried() -> None:
     # kills: the failed-task status text of a peer copied into the error unbounded
     raw = json.dumps(
         {
@@ -59,7 +58,7 @@ def test_failed_remote_task_status_text_is_cleaned() -> None:
     )
     with pytest.raises(AgentCommError) as raised:
         decode_response(raw)
-    _assert_clean(str(raised.value))
+    assert str(raised.value) == "remote A2A task failed"
 
 
 def test_mcp_error_result_is_cleaned() -> None:
@@ -104,6 +103,71 @@ def test_http_transport_error_is_cleaned() -> None:
         asyncio.run(layer.asend(Envelope(payload=b"x")))
     _assert_clean(str(raised.value))
     assert str(raised.value).startswith("http transport: ConnectError: line one ERROR forged")
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected"),
+    [
+        ("task-not-found", "remote A2A peer answered an error: TASK_NOT_FOUND (-32001)"),
+        ("json-rpc", "remote A2A peer answered JSON-RPC error -32099"),
+        ("status", "remote A2A peer: HTTPStatusError: HTTP 401"),
+        ("timeout", "remote A2A peer timed out"),
+        ("card", "remote A2A agent card could not be read: HTTP 403"),
+        ("sse", "remote A2A peer sent an answer that is not valid A2A"),
+    ],
+)
+def test_an_sdk_error_of_an_a2a_peer_is_a_closed_reason(kind: str, expected: str) -> None:
+    # kills: the SDK's exception text (the peer's JSON-RPC message, an HTTP body) carried into the send result
+    import httpx
+    from a2a.client.errors import A2AClientError, A2AClientTimeoutError, AgentCardResolutionError
+    from a2a.utils.errors import TaskNotFoundError
+    from library_ioa.plugins.a2a.client import peer_error
+
+    canary = "Bearer sk-canary-A2a7"
+    if kind == "task-not-found":
+        exc: Exception = TaskNotFoundError(f"bad {canary}", data={"token": canary})
+    elif kind == "json-rpc":
+        exc = A2AClientError(f"JSON-RPC Error -32099: bad {canary}")
+    elif kind == "status":
+        request = httpx.Request("POST", "http://127.0.0.1:9/")
+        response = httpx.Response(401, text=f"bad {canary}", request=request)
+        try:
+            try:
+                raise httpx.HTTPStatusError(f"bad {canary}", request=request, response=response)
+            except httpx.HTTPStatusError as cause:
+                raise A2AClientError(f"HTTP Error 401: {cause}") from cause
+        except A2AClientError as raised:
+            exc = raised
+    elif kind == "timeout":
+        exc = A2AClientTimeoutError("Client Request timed out")
+    elif kind == "card":
+        exc = AgentCardResolutionError(f"card refused: {canary}", status_code=403)
+    else:
+        exc = A2AClientError(f"SSE stream error: {canary}")
+    error = peer_error(exc)
+    assert isinstance(error, AgentCommError)
+    assert str(error) == expected
+
+
+def test_a2a_comm_raises_the_closed_reason_without_the_sdk_error_in_its_chain() -> None:
+    # kills: ``AgentCommError(...) from exc``: the peer's message printed again in the traceback's cause
+    import asyncio
+    import traceback
+
+    from a2a.utils.errors import TaskNotFoundError
+    from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
+
+    canary = "Bearer sk-canary-A2a8"
+    comm = A2AAgentComm("http://127.0.0.1:9")
+
+    async def fail(*_a, **_k):
+        raise TaskNotFoundError(f"bad {canary}")
+
+    comm._client.asend_message = fail  # type: ignore[method-assign]
+    with pytest.raises(AgentCommError) as raised:
+        asyncio.run(comm.asend("peer", "hi"))
+    assert canary not in "".join(traceback.format_exception(raised.value))
+    assert str(raised.value) == "remote A2A peer answered an error: TASK_NOT_FOUND (-32001)"
 
 
 def _quotes_raw_exception(node: ast.AST) -> bool:

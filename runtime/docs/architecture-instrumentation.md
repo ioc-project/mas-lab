@@ -51,7 +51,7 @@ is an ingress that is validated and recorded. See [dev/schemas/tool-definition.m
 
 - Native recording: every envelope crossing is written to `events.jsonl`
   (see [trajectory-schema.md](trajectory-schema.md) and [plugin-and-tool-authoring.md](plugin-and-tool-authoring.md#6-observability)).
-- OpenTelemetry: native events can be converted to OTLP spans (`mas-lab otel`, `mas-lab telemetry`) or
+- OpenTelemetry: native events can be converted to OTLP spans (`mas-lab telemetry`) or
   exported live through the manifest `observability` configuration.
 - Per-turn console trace: `mas-ctl chat --trace` (and `--trace-full`, `--trace-summary`).
 

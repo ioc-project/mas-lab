@@ -197,10 +197,13 @@ async def run_mas_benchmark(experiment_yaml: Path, *, demo_ui: Optional[dict] = 
     from contextlib import ExitStack
 
     from mas.ctl.workspace.config import bind_infra_refs
+    from mas.ctl.workspace.user_connections import load_user_connections
+    from mas.lab.connections import bind_user_connections, reset_user_connections
     from mas.runtime.engine.llm_cache import bind_paths
 
     ui = demo_ui or {}
     with ExitStack() as stack:
+        stack.callback(reset_user_connections, bind_user_connections(load_user_connections()))
         stack.enter_context(bind_demo_ui(binding))
         stack.enter_context(bind_infra_refs(ui.get("workspace_infra_refs")))
         stack.enter_context(bind_paths(default=ui.get("llm_cache_path")))

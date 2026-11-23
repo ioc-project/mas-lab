@@ -93,9 +93,9 @@ async def run_cli(
     env_override: dict[str, str] | None = None,
 ) -> dict:
     """Execute a CLI command synchronously (for quick operations like validate)."""
-    env = hostenv.snapshot()
-    if env_override:
-        env.update(env_override)
+    from mas.runtime.secrets.process import child_env
+
+    env = child_env(env_override, lab=True)
 
     logger.info("Running: %s (cwd=%s)", " ".join(cmd), cwd)
 
@@ -108,18 +108,18 @@ async def run_cli(
             env=env,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except asyncio.TimeoutError:
+    except asyncio.TimeoutError as err:
         proc.kill()
         await proc.communicate()
         raise HTTPException(
             status_code=504,
             detail=f"Command timed out after {timeout}s: {' '.join(cmd)}",
-        ) from None
-    except FileNotFoundError:
+        ) from err
+    except FileNotFoundError as err:
         raise HTTPException(
             status_code=500,
             detail=f"Command not found: {cmd[0]}. Ensure mas-runtime is on PATH.",
-        ) from None
+        ) from err
 
     result = {
         "exit_code": proc.returncode,

@@ -14,7 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from mas.runtime import hostenv
+import yaml
+from mas.runtime.spec.yaml_errors import YamlLoadError, yaml_error_text
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +117,31 @@ class Job:
 _jobs: dict[str, Job] = {}
 
 
+def yaml_error_in_chain(exc: BaseException) -> BaseException | None:
+    """The YAML error *exc* is, or was raised from or while handling, if any."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        if isinstance(current, yaml.YAMLError):
+            return current
+        seen.add(id(current))
+        current = current.__cause__ or current.__context__
+    return None
+
+
+def job_error_text(exc: BaseException) -> str:
+    """The stored or logged error of a failed job.
+
+    ``str()`` of a YAML error, and of any error raised from one, quotes the document: such an
+    error is shown as its type name and the YAML position only.
+    """
+    found = yaml_error_in_chain(exc)
+    if found is None:
+        return str(exc)
+    text = str(found) if isinstance(found, YamlLoadError) else yaml_error_text(found)
+    return f"{type(exc).__name__}: {text}"
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -172,7 +198,7 @@ async def run_job(
 
     except Exception as exc:
         job.status = JobStatus.FAILED
-        job.error = str(exc)
+        job.error = job_error_text(exc)
 
     finally:
         job.finished_at = now_iso()
@@ -238,8 +264,8 @@ async def run_agent_chat_job(
 
     except Exception as exc:
         job.status = JobStatus.FAILED
-        job.error = str(exc)
-        job.error_message = str(exc)
+        job.error = job_error_text(exc)
+        job.error_message = job.error
 
     finally:
         job.finished_at = now_iso()
@@ -298,9 +324,12 @@ def submit_job(
     cleanup_paths: list[Path] | None = None,
 ) -> Job:
     """Create a job, launch it in the background, return immediately."""
-    env = hostenv.snapshot()
-    if env_override:
-        env.update(env_override)
+    from mas.lab.controller.manifest_validation import refuse_secret_fields
+    from mas.runtime.secrets.process import child_env
+
+    # The command and the request body are logged and stored: neither may carry a secret.
+    refuse_secret_fields({"command": cmd, "request": request_body or {}}, source=endpoint)
+    env = child_env(env_override, lab=True)
 
     job = Job(
         id=str(uuid.uuid4()),

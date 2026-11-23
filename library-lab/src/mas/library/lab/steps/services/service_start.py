@@ -50,6 +50,7 @@ from typing import Any, Optional
 from urllib.error import URLError
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
+from mas.runtime.secrets.transport import opener_for
 from mas.runtime.spec.infra_paths import experiment_infra_bundle_path, resolve_infra_bundle
 
 logger = logging.getLogger(__name__)
@@ -88,13 +89,11 @@ def _wait_for_url(url: str, timeout: int) -> bool:
     Probes quickly at first (a local service is usually up within a few hundred ms) and
     backs off to one probe per second, so a ready service does not cost a full second.
     """
-    from mas.lab.benchmark.environment.fixtures import open_url
-
     deadline = time.monotonic() + timeout
     pause = 0.05
     while time.monotonic() < deadline:
         try:
-            resp = open_url(url, 2)
+            resp = opener_for(url).open(url, timeout=2)
             if 200 <= resp.status < 300:
                 return True
         except (URLError, OSError):

@@ -255,8 +255,7 @@ def test_llm_operator_message_for_context_length() -> None:
     classified = classify_llm_failure(_status_error(400, json_body=_CONTEXT_BODY))
     assert classified.code == "CONTEXT_LENGTH_EXCEEDED"
     assert str(classified).startswith("LLM request failed: the prompt does not fit the model context window")
-    assert "maximum context length" in str(classified)
-    assert "context_window" in str(classified)
+    assert "(HTTP 400)" in str(classified)  # the status, never the provider's words
     assert "context_window" in str(classified)
 
 

@@ -11,7 +11,7 @@ It parallels the Neo4j serialization in `library-kg`:
 | library-kg (KG → Neo4j) | library-telemetry (spans → collector) |
 |-------------------------|---------------------------------------|
 | `push_kg_to_neo4j` | `push_spans_to_collector` / `push_file` |
-| `fetch_kg_from_neo4j` | `dump_spans` (ClickHouse) |
+| `fetch_kg_from_neo4j` | `clickhouse_http.fetch_spans` (ClickHouse) |
 | `KGArtifact.push_to_neo4j` | `OtelSpanSet.push_to_collector` |
 
 ## Push
@@ -62,28 +62,28 @@ convert_file_to_otlp_jsonl("events.jsonl", "otlp.jsonl", app_name="my-app")
 ## Read back (ClickHouse)
 
 Collectors commonly persist to ClickHouse (`otel_traces`). Fetch a session's
-spans back out — requires the `clickhouse` extra
-(`uv pip install -e "library-telemetry[clickhouse]"`) and a reachable
+spans back out with `clickhouse_http.fetch_spans` (stdlib HTTP) from a reachable
 ClickHouse (port-forward the service first):
 
 ```python
-from mas.library.telemetry.collector import dump_spans, list_apps
+from mas.library.telemetry.clickhouse_http import fetch_spans
 
-list_apps()                                  # [{ServiceName, spans, sessions}, ...]
-dump_spans("<mas.session.id>", output_path="/tmp/session.otel.jsonl")
-dump_spans("<TRACE_HEX_ID>", query_by="trace", output_path="/tmp/trace.otel.jsonl")
+conn = {"host": "localhost", "port": 8123, "user": "admin", "database": "default"}
+fetch_spans(conn, "<session-id>", password=None)              # otel_sdk_spans dicts
+fetch_spans(conn, "<TRACE_HEX_ID>", by="trace", password=None)
 ```
 
 ```bash
-mas-lab telemetry list-apps
+mas-lab telemetry apps list
 mas-lab telemetry dump <SESSION_ID> -o /tmp/session.otel.jsonl
 mas-lab telemetry dump <TRACE_HEX_ID> --by trace -o /tmp/trace.otel.jsonl
 ```
 
 Connection defaults come from `$CLICKHOUSE_HOST` (default `localhost`),
 `$CLICKHOUSE_PORT` (`8123`), `$CLICKHOUSE_USER` (`admin`) and
-`$CLICKHOUSE_DATABASE` (`default`); the password is read from
-`$CLICKHOUSE_PASSWORD`. Local stack: [`../docker/README.md`](../docker/README.md).
+`$CLICKHOUSE_DATABASE` (`default`). The password is `{secret: clickhouse}`
+(`echo PASS | mas-ctl secrets set clickhouse`). Local stack:
+[`../docker/README.md`](../docker/README.md).
 
 ## OtlpSpan
 

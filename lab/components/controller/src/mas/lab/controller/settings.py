@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from mas.runtime.secrets import is_loopback_host
 
 _LOOPBACK_UI_ORIGINS = (
     "http://localhost:5173",
@@ -18,11 +19,6 @@ _LOOPBACK_UI_ORIGINS = (
     "http://localhost:8090",
     "http://127.0.0.1:8090",
 )
-
-
-def is_loopback_host(host: str) -> bool:
-    """True for binds that only listen on the local machine."""
-    return host in {"127.0.0.1", "localhost", "::1"}
 
 
 @dataclass

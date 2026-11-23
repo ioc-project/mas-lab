@@ -7,9 +7,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-
+from mas.lab.controller.manifest_validation import refuse_secret_values
 from mas.lab.controller.models import SaveOverlayRequest, ValidateRequest
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from mas.lab.controller.path_safety import UnsafeNameError, validate_name
+from mas.lab.controller.routes._api import deps
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 router = APIRouter()
 
@@ -22,6 +24,10 @@ def _overlay_dir_for_namespace(lib_dir: Path, namespace: str | None) -> Path:
     """
     if not namespace or namespace == "global":
         return lib_dir / "overlays"
+    try:
+        validate_name(namespace)
+    except UnsafeNameError:
+        raise HTTPException(status_code=400, detail="invalid overlay namespace") from None
     return lib_dir / "apps" / namespace / "overlays"
 
 
@@ -31,14 +37,9 @@ def _extract_namespace_from_yaml(content: str) -> str:
     Checks root-level ``x-namespace`` first (UI-generated overlays), then
     falls back to ``metadata.namespace``, defaulting to ``"global"``.
     """
-    import yaml as _yaml
     try:
-        doc = _yaml.safe_load(content) or {}
-        return str(
-            doc.get("x-namespace")
-            or (doc.get("metadata") or {}).get("namespace")
-            or "global"
-        )
+        doc = safe_yaml_load(content) or {}
+        return str(doc.get("x-namespace") or (doc.get("metadata") or {}).get("namespace") or "global")
     except Exception:
         return "global"
 
@@ -87,6 +88,7 @@ async def create_overlay(library_name: str, req: SaveOverlayRequest):
     ``global`` → ``{lib}/overlays/``, otherwise → ``{lib}/apps/{ns}/overlays/``.
     """
     lib_dir = deps.get_library_path(library_name)
+    refuse_secret_values(req.content)
     namespace = _extract_namespace_from_yaml(req.content)
     overlay_dir = _overlay_dir_for_namespace(lib_dir, namespace)
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -128,6 +130,7 @@ async def update_overlay(library_name: str, overlay_name: str, req: SaveOverlayR
     if old_path is None:
         raise HTTPException(status_code=404, detail=f"Overlay '{overlay_name}' not found")
 
+    refuse_secret_values(req.content)
     namespace = _extract_namespace_from_yaml(req.content)
     new_overlay_dir = _overlay_dir_for_namespace(lib_dir, namespace)
     new_overlay_dir.mkdir(parents=True, exist_ok=True)

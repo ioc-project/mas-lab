@@ -19,6 +19,7 @@ _MAX_DESTINATIONS = 32
 _MAX_STEPS = 16
 _MAX_AGENTS = 32
 _MAX_CHARS = 120
+_DEST_META_KEYS = frozenset({"name", "api_base", "url", "steps"})
 
 
 def _clip(value: Any, *, limit: int = _MAX_CHARS) -> str:
@@ -29,17 +30,37 @@ def _clip(value: Any, *, limit: int = _MAX_CHARS) -> str:
 
 
 def _redact_url(value: Any, *, limit: int = _MAX_CHARS) -> str:
-    """Scheme, host, port, and path only — no userinfo and no query."""
+    """Scheme, host, port and path only: no userinfo, no query, no fragment."""
     text = str(value or "").strip()
     if not text:
         return ""
-    parts = urlsplit(text)
+    try:
+        parts = urlsplit(text)
+        port = parts.port
+    except ValueError:
+        return "(unparsed url)"
     if not parts.scheme and not parts.netloc:
-        return _clip(text, limit=limit)
+        return _clip(parts.path, limit=limit)
     host = parts.hostname or ""
-    if parts.port:
-        host = f"{host}:{parts.port}"
+    if ":" in host:
+        host = f"[{host}]"
+    if port:
+        host = f"{host}:{port}"
     return _clip(urlunsplit((parts.scheme, host, parts.path, "", "")), limit=limit)
+
+
+_NOT_A_REF = "<not a SecretRef>"
+
+
+def _secret_ref_text(value: Any) -> str:
+    """``secret:name/key present=… size=…``. Never a value."""
+    from mas.runtime.secrets import current_resolver
+    from mas.runtime.secrets.ref import parse_secret_ref
+
+    ref = parse_secret_ref(value)
+    info = current_resolver().describe(ref)
+    size = info.size if info.present else 0
+    return f"{ref} present={info.present} size={size}"
 
 
 def _effective_steps(pipeline: list[dict[str, Any]] | None, kind: str) -> list[dict[str, Any]]:
@@ -89,29 +110,43 @@ def _describe_step(step: dict[str, Any]) -> dict[str, Any]:
 
 
 def _public_params(params: dict[str, Any]) -> dict[str, Any]:
-    """Scalar pipeline params. Keys that name a secret are omitted."""
-    from mas.ctl.infra.bind import secret_keys
+    """Scalar pipeline params. SecretRef objects print as ``secret:name/key present=… size=…``.
+
+    A secret field (``api_key``, ``password``, ...) prints its ref or a placeholder, never a value.
+    """
+    from mas.runtime.secrets import SecretRef
+    from mas.runtime.secrets.ref import is_ref, is_secret_field
 
     out: dict[str, Any] = {}
     for key, value in params.items():
         token = str(key)
-        if secret_keys({token: value}):
-            continue
         if value is None:
             continue
-        if isinstance(value, bool):
+        if is_ref(value):
+            out[token] = _secret_ref_text(value)
+        elif is_secret_field(token):
+            out[token] = _NOT_A_REF
+        elif isinstance(value, bool):
             out[token] = value
         elif isinstance(value, int) and not isinstance(value, bool):
             out[token] = value
         elif isinstance(value, float):
             out[token] = value
         elif isinstance(value, str):
-            out[token] = _clip(value)
+            out[token] = _param_str(value)
         elif isinstance(value, list) and all(
-            isinstance(item, (str, int, float, bool)) or item is None for item in value
+            isinstance(item, (str, int, float, bool, SecretRef)) or item is None or is_ref(item) for item in value
         ):
-            out[token] = value
+            out[token] = [
+                _secret_ref_text(item) if is_ref(item) else _param_str(item) if isinstance(item, str) else item
+                for item in value
+            ]
     return out
+
+
+def _param_str(value: str) -> str:
+    """A URL param prints without userinfo or query, like a destination."""
+    return _redact_url(value) if "://" in value else _clip(value)
 
 
 def _describe_steps(pipeline: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -263,6 +298,15 @@ def _destination_view(
             row["api_base"] = _redact_url(payload.get("api_base") or "")
         else:
             row["url"] = _redact_url(payload.get("url") or payload.get("base_url") or "")
+        from mas.runtime.secrets.ref import is_ref, is_secret_field
+
+        for key, raw in payload.items():
+            if raw in (None, "") or key in {"api_base", "url", "base_url", "pipeline"}:
+                continue
+            if is_ref(raw):
+                row[str(key)] = _secret_ref_text(raw)
+            elif is_secret_field(key):
+                row[str(key)] = _NOT_A_REF
     if pipeline:
         listed = common + list(payload.get("pipeline") or [])
         steps = (
@@ -400,11 +444,14 @@ def _dest_line(row: dict[str, Any], url_key: str) -> str:
     name = str(row.get("name") or "").strip()
     if not name:
         return ""
-    label = f"  {name}"
-    if url_key not in row:
-        return label
-    url = row.get(url_key) or ""
-    return f"{label}  {url}".rstrip() if url else label
+    parts = [f"  {name}"]
+    if url_key in row and row.get(url_key):
+        parts.append(str(row.get(url_key) or ""))
+    for key, value in row.items():
+        if key in _DEST_META_KEYS:
+            continue
+        parts.append(f"{key}={value}")
+    return "  ".join(parts) if len(parts) > 1 else parts[0]
 
 
 def _step_lines(steps: list[dict[str, Any]]) -> list[str]:

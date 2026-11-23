@@ -194,26 +194,13 @@ class OtelSpanSet:
 
     @classmethod
     def fetch_from_clickhouse(
-        cls,
-        session_id: str,
-        *,
-        query_by: str = "session",
-        **kwargs: Any,
+        cls, conn: Dict[str, Any], key: str, *, by: str = "session", password: Optional[str] = None, **filters: Any
     ) -> "OtelSpanSet":
-        """Fetch a session's spans from ClickHouse (requires ``clickhouse`` extra)."""
-        import tempfile
+        """The spans of one session, run or trace from ClickHouse (:func:`clickhouse_http.fetch_spans`)."""
+        from mas.library.telemetry.clickhouse_http import fetch_spans
 
-        from mas.library.telemetry.collector.clickhouse import dump_spans
-
-        with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as tmp:
-            tmp_path = tmp.name
-        try:
-            result = dump_spans(session_id, query_by=query_by, output_path=tmp_path, **kwargs)
-            art = cls.from_file(tmp_path)
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-        art.metadata = {"source": "clickhouse", **result}
-        return art
+        spans = fetch_spans(conn, key, by=by, password=password, **filters)
+        return cls(spans=spans, metadata={"source": "clickhouse", "key": key, "query_by": by, "spans": len(spans)})
 
     # ------------------------------------------------------------------
     # Verification

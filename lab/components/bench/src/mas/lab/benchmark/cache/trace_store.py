@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from mas.runtime.secrets.ref import is_secret_field
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +80,7 @@ def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path |
     infra and already flow into the cache key via ``manifest``.
 
     Deliberately excluded:
-      api_key_env, embed_api_key_env  — secrets
+      api_key, embed_api_key, password, secret, token  — SecretRef objects, never hashed
       _available                      — ProviderSpec cached probe result (runtime state)
       _raw                            — FlavourManifest forward-compat store
       name, description               — organisational, not computational
@@ -89,7 +91,6 @@ def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path |
     if flavour is None:
         return {}
 
-    _SECRETS = frozenset({"api_key_env", "embed_api_key_env"})
     _SKIP = frozenset(
         {
             "_available",
@@ -114,7 +115,7 @@ def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path |
             return {
                 f.name: _scrub(getattr(obj, f.name))
                 for f in _dc.fields(obj)
-                if f.name not in _SECRETS
+                if not is_secret_field(f.name)
                 and f.name not in _SKIP
                 and not f.name.startswith("_")
                 and not _drop_leftover_control(f.name, getattr(obj, f.name))
@@ -123,7 +124,7 @@ def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path |
             return {
                 k: _scrub(v)
                 for k, v in obj.items()
-                if k not in _SECRETS
+                if not is_secret_field(k)
                 and k not in _SKIP
                 and not str(k).startswith("_")
                 and not _drop_leftover_control(k, v)
@@ -162,7 +163,7 @@ def extract_flavour_info(flavour: Optional[Any], *, search_dirs: Sequence[Path |
         if _dc.is_dataclass(llm) and not isinstance(llm, type):
             return _scrub(llm)
         if isinstance(llm, dict):
-            return {k: v for k, v in llm.items() if k not in _SECRETS}
+            return {k: v for k, v in llm.items() if not is_secret_field(k)}
         return {
             "model": getattr(llm, "model", "") or "",
             "api_base": getattr(llm, "api_base", "") or "",
@@ -308,7 +309,7 @@ def compute_run_hash(
     Excluded (organisational, not computational):
       - experiment name / scenario ID / benchmark ID
       - timestamps / API keys / random seeds
-      - api_key_env, embed_api_key_env (secrets, stripped by _extract_flavour_info)
+      - api_key, embed_api_key, password, secret, token (SecretRef, stripped by _extract_flavour_info)
 
     Cache key semantics — effective model:
       The cache key injects the *effective* model name so the hash always

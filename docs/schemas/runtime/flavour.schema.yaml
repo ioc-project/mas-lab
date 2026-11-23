@@ -19,7 +19,7 @@ description: >
                                                     policy, stream, queue depth
     * infra/v1 LLMProxy / provider bundle (workspace infra_refs) — LLM endpoint,
                                                     including standard:openai
-    * infra/v1     (LLMProxy, InfraBundle)       — api_base, api_key_env,
+    * infra/v1     (LLMProxy, InfraBundle)       — api_base, api_key,
                                                     allowed models, embed
                                                     defaults
 
@@ -388,7 +388,7 @@ properties:
         description: >
           Free-form deployment config: infrastructure URLs, non-secret
           identifiers, feature flags.  Never place secret values here — use
-          api_key_env references in infra manifests instead.
+          api_key SecretRef objects in infra manifests instead.
 
       operator:
         type: object

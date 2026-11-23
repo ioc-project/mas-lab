@@ -1,22 +1,20 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Resolve Datastore specs from infra YAML via mas-ctl workspace discovery."""
 
 from __future__ import annotations
 
 import logging
-
-logger = logging.getLogger(__name__)
-
-"""Resolve Datastore specs from infra YAML via mas-ctl workspace discovery."""
-
-
 from pathlib import Path
 from typing import Any
 
 from mas.ctl.infra.resolve import resolve_infra_refs
 from mas.ctl.workspace.config import WorkspaceConfig
 from mas.lab.infra.datastore import DatastoreSpec
-from mas.runtime.spec.source import load_yaml_file
+from mas.runtime.secrets.errors import SecretRefError
+from mas.runtime.secrets.manifest import load_checked_document
+
+logger = logging.getLogger(__name__)
 
 
 def _stores_from_infra_doc(data: dict[str, Any]) -> dict[str, DatastoreSpec]:
@@ -51,13 +49,14 @@ def resolve_datastore(store_id: str, *, anchor: Path | None = None) -> Datastore
         stores = _stores_from_infra_doc(raw if isinstance(raw, dict) else {})
         if store_id in stores:
             return stores[store_id]
+    except SecretRefError:
+        raise
     except Exception:
-        logger.debug('suppressed', exc_info=True)
+        logger.debug("suppressed", exc_info=True)
     # Direct file ref relative to workspace
     ref_path = anchor / str(infra_ref)
     if ref_path.is_file():
-        data = load_yaml_file(ref_path)
-        stores = _stores_from_infra_doc(data if isinstance(data, dict) else {})
+        stores = _stores_from_infra_doc(load_checked_document(ref_path))
         if store_id in stores:
             return stores[store_id]
     return None

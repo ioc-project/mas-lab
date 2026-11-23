@@ -33,7 +33,7 @@ Config keys::
 
     model: str            embedding model  (default: "text-embedding-3-small")
     api_base: str         OpenAI-compatible endpoint
-    api_key_env: str      env-var name for the API key (default: "OPENAI_API_KEY")
+    api_key: SecretRef    secret for the API key (default {secret: openai})
     batch_size: int       number of texts per API call (default: 64)
     overwrite: bool       re-embed already-present states (default: false)
     max_content: int      max characters stored in record (default: 500)
@@ -48,7 +48,6 @@ from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
-from mas.runtime import hostenv
 
 from mas.library.kg.embeddings.state_embeddings import default_openai_embed_fn
 
@@ -74,12 +73,9 @@ class EmbedStatesStep(PipelineStep):
 
         model = self.config.get("model", "text-embedding-3-small")
         api_base = self.config.get("api_base", "")
-        api_key_env = self.config.get("api_key_env", "OPENAI_API_KEY")
         batch_size = int(self.config.get("batch_size", 64))
         overwrite = self.config.get("overwrite", False)
         max_content = int(self.config.get("max_content", 500))
-
-        api_key = hostenv.get(api_key_env, "")
 
         # Load KG
         kg = json.loads(kg_path.read_text(encoding="utf-8"))
@@ -121,6 +117,11 @@ class EmbedStatesStep(PipelineStep):
                 files=[out_path],
                 metadata={"embedded": 0, "total_states": len(states)},
             )
+
+        from mas.library.standard.lib.openai_client import reveal_openai_key
+
+        # The openai default secret goes only to its own endpoint; other bases need an api_key.
+        api_key = reveal_openai_key(self.config.get("api_key"), api_base)
 
         # Extract texts
         texts = [s.get("content", "")[:_MAX_EMBED_INPUT_CHARS] for s in to_embed]  # API limit guard

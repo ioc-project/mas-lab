@@ -60,3 +60,22 @@ def test_metadata_from_yaml_coerces_datetime_timestamp(tmp_path: Path) -> None:
     meta = BenchmarkMetadata.from_yaml(path)
     assert isinstance(meta.timestamp, str)
     assert meta.timestamp.startswith("2026-09-24")
+
+
+def test_run_manager_without_home_uses_workspace_directory(tmp_path, monkeypatch):
+    for name in ("HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "MAS_LABS_ROOT"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)
+    manager = BenchmarkRunManager()
+    assert manager.benchmarks_root == (tmp_path / ".mas" / "labs").resolve()
+    assert manager.benchmarks_root.is_dir()
+
+
+def test_run_manager_without_writable_root_fails_in_one_line(tmp_path):
+    import click
+    import pytest
+
+    blocker = tmp_path / "file"
+    blocker.write_text("x", encoding="utf-8")
+    with pytest.raises(click.ClickException, match="set MAS_LABS_ROOT or run from a writable workspace"):
+        BenchmarkRunManager(blocker / "labs")

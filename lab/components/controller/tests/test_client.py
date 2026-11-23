@@ -270,14 +270,33 @@ def test_ensure_running_restarts_idle_daemon_on_env_drift(temp_mas_home, monkeyp
     assert state["stopped"] and state["started"]
 
 
-def test_env_fingerprint_hashes_run_relevant_variables_only():
+def test_env_fingerprint_is_the_declared_scheduler_keys_only():
+    """No secret, hashed or not, is part of what the daemon answers to a ping."""
     from mas.lab.controller import config as cfg
 
     fp = cfg.env_fingerprint(
-        {"MAS_INFRA_REFS": "x", "OPENAI_API_KEY": "secret", "MAS_CONTROLLER_PORT": "9000", "HOME": "/h"}
+        {
+            "MAS_LLM_RPM": "30",
+            "OPENAI_API_KEY": "sk-CANARY",
+            "MAS_SECRET_OPENAI": "sk-CANARY",
+            "MAS_CONTROLLER_PORT": "9000",
+            "HOME": "/h",
+        }
     )
-    assert set(fp) == {"MAS_INFRA_REFS", "OPENAI_API_KEY"}
-    assert "secret" not in fp.values()
+    assert fp == {"MAS_LLM_RPM": "30"}
+
+
+def test_a_daemon_started_by_the_client_matches_its_fingerprint(monkeypatch):
+    """The keys the fingerprint compares travel to the daemon, so an idle daemon is not restarted for ever."""
+    from mas.lab.controller import config as cfg
+    from mas.runtime import hostenv
+    from mas.runtime.secrets.process import child_env
+
+    host = {"PATH": "/bin", "MAS_LLM_RPM": "30", "MAS_LLM_SCHEDULER_MODEL": "m", "OPENAI_API_KEY": "sk-CANARY"}
+    hostenv.install(host)
+    daemon_env = child_env(lab=True)
+    assert cfg.env_fingerprint(daemon_env) == cfg.env_fingerprint(host)
+    assert "OPENAI_API_KEY" not in daemon_env
 
 
 def test_code_fingerprint_tracks_source_changes(tmp_path, monkeypatch):

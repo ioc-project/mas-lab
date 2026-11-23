@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
+from mas.runtime.secrets.ref import SecretRef
 
 _DEFAULT_API_VERSION = "2024-10-21"
 
@@ -23,17 +24,16 @@ class AzureLLMProvider(OpenAILLMProvider):
     provider_id = "azure"
     kind = "azure"
     default_api_base = ""
-    default_api_key_env = "AZURE_OPENAI_API_KEY"
+    default_secret = SecretRef(name="azure")
+
+    def _auth_header(self) -> tuple[str, str]:
+        if str(self.protocol_params().get("auth") or "api-key").strip().lower() in {"bearer", "token"}:
+            return "Authorization", "Bearer "
+        return "api-key", ""
 
     def _build_chat_request(self, **kwargs: Any) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         url, payload, headers, query = super()._build_chat_request(**kwargs)
-        api_key = str(kwargs.get("api_key") or "")
-        headers.pop("Authorization", None)
         proxy = self.protocol_params()
-        if str(proxy.get("auth") or "api-key").strip().lower() in {"bearer", "token"}:
-            headers["Authorization"] = f"Bearer {api_key}"
-        else:
-            headers["api-key"] = api_key
         if _is_v1(self.api_base):
             return url, payload, headers, query
         deployment = str(proxy.get("deployment") or kwargs.get("model") or "").strip()

@@ -7,11 +7,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mas.runtime.spec.source import load_yaml_mapping
-
 from mas.ctl.deployment.runtime_id import DEFAULT_RUNTIME_ID, normalize_runtime_id, runtime_id_from_deployment
 from mas.ctl.registry.catalog import validate_runtime_id
 from mas.ctl.workspace.config import WorkspaceConfig
+from mas.runtime.secrets import load_checked_document
 
 
 def default_deployment(*, runtime_id: str = DEFAULT_RUNTIME_ID, name: str = "local-inproc") -> dict[str, Any]:
@@ -32,7 +31,7 @@ def default_deployment(*, runtime_id: str = DEFAULT_RUNTIME_ID, name: str = "loc
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
-    return load_yaml_mapping(path)
+    return load_checked_document(path)
 
 
 def load_deployment(

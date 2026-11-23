@@ -11,7 +11,7 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any
 
-import yaml
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 _current: ContextVar["BatchCache | None"] = ContextVar("mas_batch_cache", default=None)
 
@@ -19,7 +19,7 @@ _current: ContextVar["BatchCache | None"] = ContextVar("mas_batch_cache", defaul
 class BatchCache:
     """Read-only YAML trees keyed by path and checked by content hash. Callers get a copy.
 
-    The file is read and hashed on every load; ``yaml.safe_load`` runs only when
+    The file is read and hashed on every load; :func:`safe_yaml_load` runs only when
     the hash is new. An edit replaces the entry of its path.
     """
 
@@ -41,7 +41,7 @@ class BatchCache:
             hit = self._docs.get(key)
         if hit is not None and hit[0] == digest:
             return copy.deepcopy(hit[1])
-        data = yaml.safe_load(text) or {}
+        data = safe_yaml_load(text, source=key) or {}
         with self._lock:
             self._docs[key] = (digest, data)
         return copy.deepcopy(data)

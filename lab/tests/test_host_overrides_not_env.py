@@ -110,7 +110,10 @@ def test_service_children_start_from_the_host_environment() -> None:
     hostenv.install({"PATH": "/bin", "KEEP": "1"})
     try:
         with hostenv.overlay({"EXPORTED": "x"}):
-            assert sm._child_env({"A": "b"}) == {"PATH": "/bin", "KEEP": "1", "EXPORTED": "x", "A": "b"}
+            # Allowlist (PATH) plus declared extras. KEEP and overlay keys stay out.
+            mgr = sm.ServiceManager(Path("/nonexistent/services.yaml"))
+            svc = sm.ServiceDef(name="s", env={"A": "b"})
+            assert mgr._compose_env(svc) == {"PATH": "/bin", "A": "b"}
     finally:
         hostenv.install(os.environ)
 
@@ -165,11 +168,13 @@ def test_a_job_carries_exports_not_the_whole_environment() -> None:
     assert "PATH" not in str(host)
 
 
-def test_a_run_without_the_cli_environment_gives_fixtures_the_host_environment() -> None:
+def test_a_run_without_the_cli_environment_gives_fixtures_the_process_allowlist() -> None:
     from mas.lab.benchmark.schedule.run_batch.prepare import fixture_base_env
     from mas.runtime import hostenv
 
     with hostenv.overlay({"EXPORTED": "x"}):
-        assert fixture_base_env(None)["EXPORTED"] == "x"
+        env = fixture_base_env(None)
+        assert "EXPORTED" not in env
+        assert "PATH" in env
     assert fixture_base_env({"ONLY": "1"}) == {"ONLY": "1"}
     assert fixture_base_env({}) == {}

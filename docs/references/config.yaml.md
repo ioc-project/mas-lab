@@ -15,7 +15,7 @@ mas_ctl:
   trace: summary
 ```
 
-**Secrets never belong in this file.** Put API keys in the dotenv file named by `mas_ctl.env` (default `.env`), or in the process environment. Infra manifests reference the env **name** (`api_key_env`), not the value.
+**Secrets never belong in this file or in the dotenv file `mas_ctl.env` names.** Put API keys in the secret store (`mas-ctl secrets set`). Infra manifests hold a SecretRef (`{secret: openai}`), never a value. `mas_ctl.env` is only the dotenv overlay for non-secret scheduler keys (`MAS_LLM_*`).
 
 Paths and XDG layout: [user-config.md](../user-config.md). CLI flags that override these keys: [mas-ctl.md](../cli/mas-ctl.md).
 
@@ -68,7 +68,7 @@ The `mas_ctl.trace*` keys, and the rest of the `mas_ctl` map used by chat and ru
 | Key | Type | Default | Purpose |
 |-----|------|---------|---------|
 | `flavour` | string | `local` | Flavour name. A *flavour* is the glue that links the logic spec to the infra (its `bind`). Found in `library-standard` or the workspace `flavours/` folder. |
-| `env` | string | `.env` | Gitignored secrets **filename** relative to the workspace |
+| `env` | string | `.env` | Gitignored dotenv filename relative to the workspace. Non-secret `MAS_LLM_*` keys only. Secrets are the file store. |
 | `deployment` | string | none | Deployment manifest path, relative to the workspace |
 | `runtime_id` | string | none | Kernel or runtime id override |
 | `runtime_profile` | string | none | Path to a runtime-profile manifest |
