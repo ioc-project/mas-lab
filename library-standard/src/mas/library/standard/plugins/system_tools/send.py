@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 from weakref import WeakKeyDictionary
 
+from mas.library.standard.lib.comm.headers import merge_headers
 from mas.library.standard.lib.comm.payload import intents_honoured_by
 from mas.library.standard.lib.comm.send_async import asend_via
 from mas.library.standard.lib.stack.layer import LinkIdentity
@@ -316,6 +317,7 @@ class SendTool:
     ) -> dict[str, Any]:
         accepted = self._inspect(communication)[method]
         extra: dict[str, Any] = {}
+        outgoing = merge_headers(headers)
         if "correlation_id" in accepted:
             extra["correlation_id"] = correlation_id
         if "caller_call_id" in accepted:
@@ -323,9 +325,9 @@ class SendTool:
         if "context_id" in accepted:
             extra["context_id"] = context_id
         if "context" in accepted:
-            extra["context"] = SendContext(intent=intent, headers=dict(headers or {}), mode=mode)
-        if headers is not None and "headers" in accepted:
-            extra["headers"] = dict(headers)
+            extra["context"] = SendContext(intent=intent, headers=outgoing, mode=mode)
+        if "headers" in accepted:
+            extra["headers"] = outgoing
         return extra
 
     async def asend(

@@ -34,6 +34,7 @@ async def test_a2a_agent_comm_implements_the_peer_transport_contract() -> None:
     client.asend_message.assert_called_with(
         "task",
         context_id="",
+        headers={"baggage": "k=v"},
         metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
     )
     assert client.asend_message.call_count == 2

@@ -20,7 +20,7 @@ The A2A plugins ship in `library-ioa` and use the official `a2a-sdk`.
 
 - `mas.agent_comm.a2a` is the outbound client.
 - `mas.agent_expose.a2a` is the server.
-- `a2a-framing` is the send protocol layer over `http` or `slim`. Send, tool,
+- `a2a-rpc` is the same SDK on the `slimrpc` binding, a send layer over `slim`. Send, tool,
   and llm stacks are on [Communication stack](../references/comm-stack.md).
 
 Every live-agent entry point (`mas-ctl serve`, `chat`, `tui`, `run-mas`) uses
@@ -95,7 +95,7 @@ a2a send -a http://127.0.0.1:9005 "What is the capital of France?"
 
 | Field | Meaning |
 | --- | --- |
-| `protocol` | `a2a` on a server row selects the A2A `agent_comm` / `agent_expose` plugins. `a2a+grpc` is the same plugins plus the gRPC extra. `a2a-framing` is the framing layer above a transport, not those plugins. |
+| `protocol` | `a2a` on a server row selects the A2A `agent_comm` / `agent_expose` plugins. `a2a+grpc` is the same plugins plus the gRPC extra. `a2a-rpc` is the layer that runs A2A over a `slim` row, not those plugins. |
 | `usage` | `connect` (client route only), `listen` (listen only), or `[connect, listen]`. Omitted means `connect`. `use`, `deploy`, `use-and-deploy` are deprecated aliases. The legacy `expose: true` reads as `[connect, listen]` when `usage` is absent. |
 | `url` | Advertised absolute `http(s)://host:port` URL. It cannot carry a path prefix. |
 | `headers`, `timeout` | Client-side options passed to the outbound A2A client (`usage: connect`). |

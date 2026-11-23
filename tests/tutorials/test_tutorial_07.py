@@ -2,8 +2,8 @@
 #  SPDX-License-Identifier: Apache-2.0
 """Tutorial 07 — SLIM link: the desk, the endpoint rows, the Flavours that link agents to them, fail-closed.
 
-Offline: only the tutorial's own manifests are read. Nothing connects to a real node;
-the node checks run over the in-process fake of the SLIM bindings.
+Offline: only the tutorial's own manifests are read. The node checks run over the in-process fake of
+the SLIM bindings; the A2A check runs on a real SLIM node started inside the test process.
 """
 
 from __future__ import annotations
@@ -39,8 +39,12 @@ def _rows(*refs: str, flavour: str) -> dict[str, dict]:
 
 
 @contextmanager
-def _desk(flavour: str, monkeypatch):
-    """The tutorial's Flavour plus its node row and the Step 3 agent rows, over the in-process fake node."""
+def _desk(flavour: str, monkeypatch, *, real: bool = False):
+    """The tutorial's Flavour plus its node row and the Step 3 agent rows.
+
+    Over the in-process fake node, or over a real SLIM node on the row's port when ``real``
+    (A2A over slimrpc needs the bindings' RPC server, which the fake does not have).
+    """
     import slim_node_fake as fake
     from library_ioa.plugins.slim.actor import ConnectionActor
     from mas.ctl.compose.models import ResolvedInfra
@@ -50,9 +54,11 @@ def _desk(flavour: str, monkeypatch):
     from mas.ctl.session.flavour import resolve_flavour
     from mas.ctl.workspace.config import WorkspaceConfig
 
-    monkeypatch.setattr("library_ioa.plugins.slim.actor.load_slim_bindings", lambda: fake)
-    monkeypatch.setattr(ConnectionActor, "SUBSCRIBE_SETTLE_S", 0.0)
-    monkeypatch.setattr(ConnectionActor, "ROUTE_SETTLE_S", 0.0)
+    node = _real_node() if real else None
+    if node is None:
+        monkeypatch.setattr("library_ioa.plugins.slim.actor.load_slim_bindings", lambda: fake)
+        monkeypatch.setattr(ConnectionActor, "SUBSCRIBE_SETTLE_S", 0.0)
+        monkeypatch.setattr(ConnectionActor, "ROUTE_SETTLE_S", 0.0)
     monkeypatch.setenv("SLIM_SECRET", "e4aaecb9ae0b23b82086bb8a8633e01fba16ae8d9c1379a613c00838")
     fake.FakeWorld.reset()
     resolved: ResolvedInfra = bind_flavour(
@@ -69,6 +75,23 @@ def _desk(flavour: str, monkeypatch):
     finally:
         handles.close()
         fake.FakeWorld.reset()
+        if node is not None:
+            node()
+
+
+def _real_node():
+    """Start a SLIM node on the tutorial's port inside this process; returns its stop function, or skips."""
+    import socket
+
+    sb = pytest.importorskip("slim_bindings")
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", 46357)) == 0:
+            pytest.skip("port 46357 is taken")
+    if not sb.is_initialized():
+        sb.initialize_with_defaults()
+    service = sb.create_service("tutorial-07-node")
+    service.run_server(sb.new_insecure_server_config("127.0.0.1:46357"))
+    return lambda: service.stop_server("127.0.0.1:46357")
 
 
 class TestManifests:
@@ -180,12 +203,12 @@ class TestOverTheNode:
 
     async def test_a2a_above_the_node_through_the_tool_the_model_calls(self, monkeypatch):
         """Step 5, A2A over the node: ``delegate_to_billing`` through ``execute_engine_tool`` with ``SendTool``,
-        over the tutorial's Flavour on the in-process fake node; an inform is refused by the same tool."""
+        over the tutorial's Flavour on a real in-process node; an inform is refused by the same tool."""
         from mas.library.standard.plugins.system_tools.send import SendTool
         from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
         from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
-        with _desk("a2a-over-slim", monkeypatch) as (fake, desk):
+        with _desk("a2a-over-slim", monkeypatch, real=True) as (_, desk):
             triage = desk.link("triage")
             desk.link("billing", run_turn=lambda agent, task, *_: asyncio.sleep(0, f"{agent}: {task}"))
             ctx = SimpleNamespace(
@@ -203,20 +226,12 @@ class TestOverTheNode:
 
             reply = await call("delegate_to_billing", task="I was charged twice", context_id="case-12")
             assert reply == "billing: I was charged twice"
-            request, answer = (json.loads(frame) for frame in fake.FakeWorld.default().frames[:2])
-            rpc = json.loads(request["task"])
-            assert rpc["method"] == "SendMessage"
-            assert rpc["params"]["message"]["parts"] == [{"text": "I was charged twice"}]
-            assert rpc["params"]["message"]["contextId"] == "case-12"
-            assert json.loads(answer["task"])["result"]["message"]["parts"] == [{"text": reply}]
-            sent = len(fake.FakeWorld.default().frames)
             # the model's tool only delegates (intent task): an intent argument is refused before any send
             refused = await call("delegate_to_billing", task="fyi", intent="inform")
             assert refused == "[send] extra arguments ['intent'] not allowed on 'delegate_to_billing'"
             # an inform from Python (the path a design pattern takes) is refused by the A2A layer of the chain
             refused = await tool.asend("billing", "fyi", intent="inform", ctx=ctx)
             assert "intent 'inform' is not supported" in refused
-            assert len(fake.FakeWorld.default().frames) == sent  # nothing left for the node
 
 
 class TestAnAgentOnItsOwnChain:
@@ -224,7 +239,7 @@ class TestAnAgentOnItsOwnChain:
         rows = _rows("slim-node", flavour="billing-over-a2a")
         assert rows["billing"] == {
             "id": "billing",
-            "comm": ["slim", "a2a-framing"],
+            "comm": ["slim", "a2a-rpc"],
             "identity": "acme/lab/desk-a2a/billing",
         }
         assert rows["outage"] == {"id": "outage", "comm": ["slim"], "identity": "acme/lab/desk/outage"}
@@ -232,8 +247,6 @@ class TestAnAgentOnItsOwnChain:
         assert rows["triage"]["identity"] == "acme/lab/desk/triage, acme/lab/desk-a2a/triage"
 
     async def test_triage_reaches_billing_over_a2a_and_outage_plainly(self, monkeypatch):
-        import slim_node_fake as fake
-        from library_ioa.plugins.slim.actor import ConnectionActor
         from mas.ctl.executor.stacks import ChainHandles, chain_links
         from mas.ctl.infra.bind import bind_session
         from mas.ctl.infra.identities import agency_ids, peers_of
@@ -241,11 +254,8 @@ class TestAnAgentOnItsOwnChain:
         from mas.ctl.session.flavour import resolve_flavour
         from mas.ctl.workspace.config import WorkspaceConfig
 
-        monkeypatch.setattr("library_ioa.plugins.slim.actor.load_slim_bindings", lambda: fake)
-        monkeypatch.setattr(ConnectionActor, "SUBSCRIBE_SETTLE_S", 0.0)
-        monkeypatch.setattr(ConnectionActor, "ROUTE_SETTLE_S", 0.0)
+        node = _real_node()
         monkeypatch.setenv("SLIM_SECRET", "e4aaecb9ae0b23b82086bb8a8633e01fba16ae8d9c1379a613c00838")
-        fake.FakeWorld.reset()
         mas = load_yaml(T07 / "mas.yaml")
         resolved = bind_session(
             resolve_infra_refs([str(INFRA / "slim-node.yaml")], anchor=T07, workspace=WorkspaceConfig({})),
@@ -265,13 +275,10 @@ class TestAnAgentOnItsOwnChain:
             assert set(handles) == {"desk-node", "desk-node-a2a+desk-a2a"}
             assert await routes["triage"]["billing"].handler.asend("billing", "refund?") == "billing: refund?"
             assert await routes["triage"]["outage"].handler.asend("outage", "down?") == "outage: down?"
-            frames = [frame.decode("utf-8", "replace") for frame in fake.FakeWorld.default().frames]
-            assert any("SendMessage" in frame and "refund?" in frame for frame in frames)
-            assert any("down?" in frame and "SendMessage" not in frame for frame in frames)
             assert handlers["triage"] is routes["triage"]["triage"].handler
         finally:
             handles.close()
-            fake.FakeWorld.reset()
+            node()
 
 
 class TestOneRowForManyAgents:
@@ -291,11 +298,11 @@ class TestOneRowForManyAgents:
             resolve_flavour(str(FLAVOURS / "hub.yaml")),
             agent_ids=agency_ids(load_yaml(T07 / "mas.yaml")),
         )
-        assert resolved.agent_chains["billing"][0]["params"]["url"] == "https://agents.example.test/a2a/billing"
-        assert resolved.agent_chains["outage"][0]["params"]["url"] == "https://outage.example.test/a2a"
-        assert resolved.agent_usage["billing"] == ["connect"]
+        assert resolved.applications["billing"]["url"] == "https://agents.example.test/a2a/billing"
+        assert resolved.applications["outage"]["url"] == "https://outage.example.test/a2a"
+        assert resolved.applications["billing"]["usage"] == ["connect"]
         rows = _rows("slim-node", "agent-hub", flavour="hub")
-        assert rows["billing"] == {"id": "billing", "comm": ["http", "a2a-framing"], "identity": ""}
+        assert rows["billing"]["comm"] == ["a2a"]
 
     def test_hosting_an_agent_on_the_connect_only_hub_is_refused(self, tmp_path):
         flavour = tmp_path / "host-on-hub.yaml"
@@ -322,7 +329,7 @@ class TestFailClosed:
             (
                 "broken/wrong-first-layer",
                 ("slim-node",),
-                "the first layer must be a transport; 'a2a-framing' needs a layer below it",
+                "the first layer must be a transport; 'a2a-rpc' needs a layer below it",
             ),
             ("slim", ("broken/bad-identity",), "identity must be a three-part org/ns/service name"),
         ],

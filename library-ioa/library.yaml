@@ -7,7 +7,7 @@ kind: Library
 name: ioa
 description: >
   MCP client/server bridge, A2A agent_comm / agent_expose, and stack layers: SLIM and HTTP
-  transports, and A2A framing above either.
+  transports, and A2A over SLIM above the node.
 version: "0.1.0"
 dependencies:
   - mcp>=2.2
@@ -55,6 +55,9 @@ plugins:
     urn: mas.agent_comm.a2a
     module: library_ioa.plugins.a2a.agent_comm
     class: A2AAgentComm
+    shortcuts:
+      - a2a
+      - a2a+grpc
     warm:
       - a2a.client
       - a2a.server.agent_execution
@@ -98,12 +101,16 @@ plugins:
     attributes:
       default_enabled: false
   - type: layer
-    name: a2a-framing
-    urn: mas.layer.a2a-framing
+    name: a2a-rpc
+    urn: mas.layer.a2a-rpc
     module: library_ioa.plugins.a2a.layer
     class: A2ALayer
+    shortcuts:
+      - a2a-rpc
     attributes:
       default_enabled: false
+      plus_name: a2a
+      row_params: [description, version, skills, card, manifest]
   - type: layer
     name: http
     urn: mas.layer.http

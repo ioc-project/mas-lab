@@ -333,6 +333,34 @@ def test_a_layer_that_fails_to_start_leaves_no_layer_of_the_stack_running() -> N
     assert EVENTS[-1] == "service.close"
 
 
+def test_a_connect_only_link_does_not_serve_the_protocol_layer() -> None:
+    class Protocol(Upper):
+        served = 0
+
+        def serve(self, handler: Any) -> Any:
+            type(self).served += 1
+            return handler
+
+    Registry.classes["proto"] = Protocol
+    try:
+        Protocol.served = 0
+        connect_only = StackHandle("s", [_layer("wire"), _layer("proto")], registry=Registry())
+        connect_only.link("buyer")
+        assert Protocol.served == 0
+        connect_only.close()
+        listening = StackHandle(
+            "s",
+            [_layer("wire"), _layer("proto")],
+            run_turn=lambda *_a: "ok",
+            registry=Registry(),
+        )
+        listening.link("buyer")
+        assert Protocol.served == 1
+        listening.close()
+    finally:
+        del Registry.classes["proto"]
+
+
 async def test_the_inbound_chain_calls_the_turn_of_the_agent_it_serves() -> None:
     from mas.library.standard.lib.stack.agent_comm import turn_handler
 

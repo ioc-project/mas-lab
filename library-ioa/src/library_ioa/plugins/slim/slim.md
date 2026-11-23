@@ -10,8 +10,8 @@
 | **Kind** | `layer` (a transport: the bottom layer of a chain) |
 | **URN** | `mas.layer.slim` |
 | **Implementation** | `SlimAgentComm` in `library_ioa.plugins.slim.agent_comm`; shared service `SlimService` in `library_ioa.plugins.slim.service` |
-| **Extra** | `slim` of `library-ioa/` (`slim-bindings>=2.2,<3`) |
-| **Status** | Group tests use in-process fake bindings that route replies by app name, as a node does. Tests marked `slim` run against an in-process node from slim-bindings 2.2 on a free loopback port; unicast and anycast sends return the peer's reply. |
+| **Extra** | `slim` of `library-ioa/` (`slim-bindings>=3.3.6,<4`, `slima2a==0.9.3`) |
+| **Status** | Group tests use in-process fake bindings that route replies by app name, as a node does. Tests marked `slim` run against an in-process node from slim-bindings 3.x on a free loopback port; unicast and anycast sends return the peer's reply. |
 
 `slim` is a transport layer. Declare the node as an infra row with
 `url`, a three-part `identity` and `secret` SecretRef, and bind it in a
@@ -48,10 +48,11 @@ layer params are `url`, `identity`, `secret`, `dev`, `timeout_s`,
 bytes, a timeout that is not a positive number, or a size that is not a
 positive integer, when the service is built.
 
-With a protocol layer above it (for example `a2a-framing`), the stack gives the
-link its inbound chain (`serve`): each request's payload goes through the
-layers before the turn runs, and the reply goes back through them. With
-no such layer the link calls the turn itself, as before.
+With a protocol layer above it (for example `a2a-rpc`) and a turn to serve, the
+stack gives the link its inbound chain (`serve`): that layer claims the app's
+sessions, so this link runs no reader of its own. A connect-only agent has no
+turn: the protocol layer starts no server and this link keeps its reader. With
+no protocol layer the link calls the turn itself, as before.
 
 On the node, a received frame names its sender by the three-part app
 name, without the instance id. So each agent registers the app
@@ -101,8 +102,10 @@ at once and stops reading while it is full, so a fast peer waits on the
 node. A start that fails half way closes its connection. After `MAX_READ_ERRORS` (5)
 consecutive read failures (a read that only found nothing before its deadline is
 not one; any other error is, a timeout included) the link drops the connection and
-reconnects; a send waits for the new connection or `reply_timeout_s`. Stopping a
-link twice, or before it started, does nothing.
+reconnects; a send waits for the new connection or `reply_timeout_s`. When a
+protocol layer has claimed inbound, that reader is not running: a send still
+reconnects, and if the RPC server stops the link reconnects and the layer starts a
+new server. Stopping a link twice, or before it started, does nothing.
 
 `library-ioa` already depends on `library-standard`. The SLIM
 link uses the same comm helpers as `local-group` (`headers`, `names`,
@@ -111,9 +114,9 @@ link uses the same comm helpers as `local-group` (`headers`, `names`,
 SLIM is two things people mix up. The **channel** is the link
 (`SlimAgentComm`: send by name, anycast, groups). The **node** is what
 the row's `url` and `secret` point at. An in-process fake is the
-channel without a node. For A2A over SLIM, bind an `a2a-framing` row above
+channel without a node. For A2A over SLIM, bind an `a2a-rpc` row above
 the node row (`agent_comm: [desk-node, desk-a2a]`, where `desk-a2a` is a
-`protocol: a2a-framing` row); each send then travels as an A2A `SendMessage`
+`protocol: a2a-rpc` row); each send then travels as an A2A `SendMessage`
 request inside the SLIM frame. `mas-ctl serve`
 cannot host an agent on a SLIM chain. `--connect` stays `a2a://`
 and `mcp://`.

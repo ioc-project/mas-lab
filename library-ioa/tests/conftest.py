@@ -21,15 +21,19 @@ def pytest_configure(config) -> None:
 
 
 @pytest.fixture(scope="session")
-def slim_url() -> Iterator[str]:
-    """An in-process SLIM node on a free loopback port. No external node, no network."""
-    import slim_bindings
+def slim_node() -> Iterator[str]:
+    """A real SLIM node inside this process (the bindings' own server), as an ``http://127.0.0.1:PORT`` url.
 
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
-    node = slim_bindings.create_service("test-node")
-    node.run_server(slim_bindings.new_insecure_server_config(f"127.0.0.1:{port}"))
+    Skips when the ``slim`` extra is not installed.
+    """
+    sb = pytest.importorskip("slim_bindings")
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        port = int(listener.getsockname()[1])
+    if not sb.is_initialized():
+        sb.initialize_with_defaults()
+    service = sb.create_service("mas-test-node")
+    service.run_server(sb.new_insecure_server_config(f"127.0.0.1:{port}"))
     deadline = time.monotonic() + 5
     while True:
         try:
@@ -42,4 +46,10 @@ def slim_url() -> Iterator[str]:
     try:
         yield f"http://127.0.0.1:{port}"
     finally:
-        node.shutdown()
+        service.stop_server(f"127.0.0.1:{port}")
+
+
+@pytest.fixture(scope="session")
+def slim_url(slim_node: str) -> str:
+    """The same in-process node as ``slim_node``: one server, two names for existing tests."""
+    return slim_node

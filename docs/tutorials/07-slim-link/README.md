@@ -42,7 +42,7 @@ Three kinds of file take part, and each one owns one thing:
 | `mas.yaml`, `agents/*/agent.yaml` | The desk. Never edited in this tutorial. |
 | `specialists.yaml` | `billing` and `outage` as a MAS of their own (Step 4). |
 | `infra/in-process.yaml` | The in-process row `desk-group` (Step 2). |
-| `infra/slim-node.yaml` | The node rows `desk-node` and `desk-node-a2a`, and the A2A framing row `desk-a2a` (`protocol: a2a-framing`, Steps 3 to 5). |
+| `infra/slim-node.yaml` | The node rows `desk-node` and `desk-node-a2a`, and the A2A row `desk-a2a` (`protocol: a2a-rpc`, Steps 3 to 5). |
 | `infra/outage-server.yaml` | The A2A server row `outage-server` (Step 5). |
 | `infra/agent-hub.yaml` | One A2A hub row for many agents, with `{agent}` in its url (Step 5). |
 | `flavours/*.yaml` | How each deployment links the agents to those rows. |
@@ -128,7 +128,7 @@ spec:
 | `bind.usage` | This deployment's default for agents that omit their own usage. Default `connect`. Set `[connect, listen]` to host everyone on the default chain. |
 | `bind.agents.<id>.usage` | `connect`: this deployment reaches the agent over its chain; `listen`: this deployment hosts it. Omitted, it is `bind.usage`, else `connect`. It must be within the `usage` of every row of the chain. |
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent, by row name (Step 5). |
-| Row `protocol` | The layer plugin (`local-group`, `slim`, `http`, `a2a`, `a2a-framing`). The row's other fields are that layer's params. |
+| Row `protocol` | The layer plugin (`local-group`, `slim`, `http`, `a2a`, `a2a-rpc`). The row's other fields are that layer's params. |
 | Row `identity` | `org/ns/service`. Each agent on that layer is `<identity>/<agent_id>`. |
 | Row `usage` | The row's capability: `connect`, `listen`, or both. Default `connect`. |
 
@@ -171,7 +171,7 @@ spec:
   endpoints:
     desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
                 usage: [connect, listen]}
-    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
+    desk-a2a: {protocol: a2a-rpc, usage: [connect, listen]}
     desk-node-a2a: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk-a2a,
                     secret: {secret: slim}, usage: [connect, listen]}
 ```
@@ -348,11 +348,11 @@ agents.
 ### A2A over the node
 
 The chain can also speak A2A *over* the node: `flavours/a2a-over-slim.yaml` binds
-`[desk-node, desk-a2a]`, the `a2a-framing` row above the node row.
+`[desk-node, desk-a2a]`, the `a2a-rpc` row above the node row.
 
-Two ids name the two A2A roles. `protocol: a2a` is the A2A SDK client of one url, always
-the bottom of a chain (`outage-server` above). `protocol: a2a-framing` frames each send
-as an A2A request for the row below it, so it never sits at the bottom (`desk-a2a` here).
+Two ids name the two A2A bindings. `protocol: a2a` is the A2A SDK client of one url on the HTTP binding, always
+the bottom of a chain (`outage-server` above). `protocol: a2a-rpc` is the same SDK on the `slimrpc` binding,
+over the node row below it, so it never sits at the bottom (`desk-a2a` here).
 
 ```bash
 mas-ctl run-mas docs/tutorials/07-slim-link/mas.yaml --trace \
@@ -361,21 +361,19 @@ mas-ctl run-mas docs/tutorials/07-slim-link/mas.yaml --trace \
   -q "I was charged twice for my March invoice. What should I do?"
 ```
 
-Each send now leaves as an A2A `SendMessage` JSON-RPC request inside the SLIM frame:
-the text is a message part, the context id is the message `contextId`, and the call
-ids ride the message metadata. On the serving side the `a2a-framing` layer reads the request
-before `billing`'s turn runs and sends the answer back as an A2A agent message. A
-turn that fails comes back as a failed A2A task, and the caller's tool returns a
-failure. A2A has no inform/ask, so on this chain only plain delegation (`task`) is
-sent; other intents are refused before anything leaves. The JSON-RPC text rides
-inside MAS Lab's own SLIM request frame: this is MAS Lab's JSON-RPC, not the A2A SDK
-riding SLIM, so both ends must be MAS Lab sessions with the `a2a-framing` row above the
-node row.
+Each send now leaves as an A2A `SendMessage` made by the A2A SDK over the `slimrpc`
+protocol binding, on the node connection the row below holds: the text is a message
+part, the context id is the message `contextId`, and the call ids ride the message
+metadata. On the serving side the SDK's request handler runs `billing`'s turn and
+answers with an A2A agent message. A turn that fails comes back as a failed A2A task,
+and the caller's tool returns a failure. A2A has no inform/ask, so on this chain only
+plain delegation (`task`) is sent; other intents are refused before anything leaves.
+This is the A2A that other slimrpc peers speak, so a peer that is not a MAS Lab
+session can be reached the same way.
 
-The same framing works over HTTP: a row `{protocol: http, url: ...}` below the `a2a-framing`
-row posts the request to an A2A server such as the `outage` one above. An `http`
-chain only connects; `usage: listen` on it is refused, because serving over HTTP is
-the job of `mas-ctl serve`.
+The `a2a-rpc` layer runs over `slim` only. To reach an A2A server at an HTTP url, use
+the `a2a` link (one row, such as `outage-server` above): it is the same SDK client on
+the HTTP binding.
 
 ### One row for many agents, and an override for one
 
@@ -388,11 +386,11 @@ stricter, see "Names cannot contain `.`" at the end).
 # infra/agent-hub.yaml
 spec:
   endpoints:
-    agent-hub: {protocol: http, url: "https://agents.example.test/a2a/{agent}", usage: connect}
+    agent-hub: {protocol: a2a, url: "https://agents.example.test/a2a/{agent}", usage: connect}
 ```
 
-`flavours/hub.yaml` reaches `billing` and `outage` there, with A2A framing above the
-HTTP transport, and gives `outage` a url of its own:
+`flavours/hub.yaml` reaches `billing` and `outage` there, each as the `a2a` link of its url, and gives
+`outage` a url of its own:
 
 ```yaml
 spec:
@@ -401,10 +399,10 @@ spec:
     usage: [connect, listen]
     agents:
       billing:
-        agent_comm: [agent-hub, desk-a2a]
+        agent_comm: [agent-hub]
         usage: connect
       outage:
-        agent_comm: [agent-hub, desk-a2a]
+        agent_comm: [agent-hub]
         usage: connect
         params:
           agent-hub: {url: "https://outage.example.test/a2a"}
@@ -431,7 +429,7 @@ mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
 ### One agent on its own chain
 
 `flavours/billing-over-a2a.yaml` keeps the desk on the node and puts only `billing`
-on A2A framing:
+on A2A over its own node connection:
 
 ```yaml
 spec:
@@ -457,7 +455,7 @@ mas-ctl infra resolved docs/tutorials/07-slim-link/mas.yaml \
 ```text
 agents
   triage  slim  acme/lab/desk/triage, acme/lab/desk-a2a/triage
-  billing  slim, a2a-framing  acme/lab/desk-a2a/billing
+  billing  slim, a2a-rpc  acme/lab/desk-a2a/billing
   outage  slim  acme/lab/desk/outage
 ```
 
@@ -472,7 +470,7 @@ Everything is checked before anything connects. Each case exits 1 with one line:
 | --- | --- |
 | `flavours/broken/unknown-agent.yaml`: `billng`, a typo | `Flavour bind.agents names 'billng', which is no agent of this session` |
 | `flavours/broken/unknown-row.yaml`: `desk-nod`, a typo | `Flavour bind.agent_comm names 'desk-nod', which is no Application row` |
-| `flavours/broken/wrong-first-layer.yaml`: the `a2a-framing` row first, the node after it | `Flavour bind.agent_comm: the first layer must be a transport; 'a2a-framing' needs a layer below it` |
+| `flavours/broken/wrong-first-layer.yaml`: the `a2a-rpc` row first, the node after it | `Flavour bind.agent_comm: the first layer must be a transport; 'a2a-rpc' needs a layer below it` |
 | `infra/broken/bad-identity.yaml`: `acme/desk`, two parts | `identity must be a three-part org/ns/service name, got 'acme/desk'` |
 
 ```bash
@@ -515,7 +513,7 @@ same MAS, same agents, in one process.
 ## Limits to know
 
 - The tests in the repository (`tests/support/slim_node_fake.py`) use an in-process fake of the SLIM
-  bindings. Real-node tests run with the pytest marker `slim` (`slim-bindings` 2.2
+  bindings. Real-node tests run with the pytest marker `slim` (`slim-bindings` 3.x
   and the Step 3 node).
 - **Every entry point reads `bind`.** `run-mas`, `chat`, `tui`, `serve`, `infra resolved`
   and benchmark runs apply the same Flavour the same way. A one-agent `chat` or `tui`
@@ -544,7 +542,7 @@ same MAS, same agents, in one process.
 - Swapping `local-group` for `slim` changes one row name in the Flavour. A node lets
   you split agents across processes with no per-agent URL.
 - A row above the transport changes every send without touching the agents:
-  `a2a-framing` frames it as an A2A request. A chain of one `a2a` server row is the A2A
+  `a2a-rpc` sends it as an A2A request over slimrpc. A chain of one `a2a` server row is the A2A
   SDK client.
 - A mistake in a Flavour or a row fails before anything connects, and secrets come
   from the secret store.

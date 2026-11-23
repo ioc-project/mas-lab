@@ -39,19 +39,19 @@ def test_every_new_transport_and_framing_layer_is_a_layer() -> None:
     from mas.library.standard.lib.stack.handle import is_transport, layer_classes
 
     registry = get_registry()
-    for name, cls in (("slim", SlimAgentComm), ("http", HttpLayer), ("a2a-framing", A2ALayer)):
+    for name, cls in (("slim", SlimAgentComm), ("http", HttpLayer), ("a2a-rpc", A2ALayer)):
         info = registry.resolve_by_type("layer", name)
         assert info is not None and info.load_class() is cls, name
     assert is_transport(SlimAgentComm) and is_transport(HttpLayer) and not is_transport(A2ALayer)
     assert callable(SlimAgentComm.shared_service) and callable(SlimAgentComm.agent_name)
-    assert layer_classes([{"type": "slim", "params": {}}, {"type": "a2a-framing", "params": {}}]) == [
+    assert layer_classes([{"type": "slim", "params": {}}, {"type": "a2a-rpc", "params": {}}]) == [
         SlimAgentComm,
         A2ALayer,
     ]
     assert registry.resolve_by_type("agent_comm", "a2a").load_class() is A2AAgentComm
 
 
-def test_a2a_is_the_sdk_link_and_a2a_framing_is_the_framing_layer() -> None:
+def test_a2a_is_the_sdk_link_and_a2a_rpc_is_the_slimrpc_layer() -> None:
     """The two ids resolve on the real registry; a chain must start at a transport and stack nothing over one."""
     from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
     from library_ioa.plugins.a2a.layer import A2ALayer
@@ -59,11 +59,11 @@ def test_a2a_is_the_sdk_link_and_a2a_framing_is_the_framing_layer() -> None:
     from mas.library.standard.lib.stack.handle import is_direct_link, layer_classes
 
     a2a = {"type": "a2a", "params": {}}
-    framing = {"type": "a2a-framing", "params": {}}
+    framing = {"type": "a2a-rpc", "params": {}}
     node = {"type": "slim", "params": {}}
     assert layer_classes([a2a]) == [A2AAgentComm]
     assert layer_classes([node, framing])[1] is A2ALayer
-    with pytest.raises(StackError, match="the first layer must be a transport; 'a2a-framing' needs a layer below it"):
+    with pytest.raises(StackError, match="the first layer must be a transport; 'a2a-rpc' needs a layer below it"):
         layer_classes([framing])
     with pytest.raises(StackError, match=r"layer 1 \('a2a'\) is a transport; only the first layer can be one"):
         layer_classes([node, a2a])

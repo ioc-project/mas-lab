@@ -87,3 +87,64 @@ def agent_card_from_manifest(
         default_output_modes=["text/plain"],
         skills=skills,
     )
+
+
+def slimrpc_agent_card(
+    name: str,
+    url: str,
+    *,
+    description: str = "",
+    version: str = "1",
+    skills: list[Any] | None = None,
+    manifest: dict[str, Any] | None = None,
+) -> Any:
+    """The protobuf AgentCard a slimrpc server publishes: one slimrpc interface, real name and skills.
+
+    ``manifest`` is the same shape ``agent_card_from_manifest`` reads. Without it, ``skills`` is a
+    list of names or ``{id, name, description}`` maps; omitted, one skill uses the agent's description.
+    """
+    from a2a.types.a2a_pb2 import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+
+    if manifest is not None:
+        http = agent_card_from_manifest(manifest, url=url)
+        name = http.name
+        description = http.description
+        version = http.version
+        proto_skills = [
+            AgentSkill(
+                id=skill.id,
+                name=skill.name,
+                description=skill.description,
+                tags=list(skill.tags) or ["general"],
+            )
+            for skill in http.skills
+        ]
+    else:
+        description = description or name
+        proto_skills = []
+        for index, raw in enumerate(skills or []):
+            if isinstance(raw, str):
+                proto_skills.append(AgentSkill(id=raw, name=raw, description=raw, tags=[raw]))
+            elif isinstance(raw, dict):
+                skill_id = str(raw.get("id") or raw.get("name") or f"skill-{index + 1}")
+                skill_name = str(raw.get("name") or skill_id)
+                proto_skills.append(
+                    AgentSkill(
+                        id=skill_id,
+                        name=skill_name,
+                        description=str(raw.get("description") or skill_name),
+                        tags=[skill_id],
+                    )
+                )
+        if not proto_skills:
+            proto_skills.append(AgentSkill(id=name, name=name, description=description, tags=["general"]))
+    return AgentCard(
+        name=name,
+        description=description or name,
+        version=version,
+        supported_interfaces=[AgentInterface(url=url, protocol_binding="slimrpc", protocol_version="1.0")],
+        capabilities=AgentCapabilities(),
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        skills=proto_skills,
+    )

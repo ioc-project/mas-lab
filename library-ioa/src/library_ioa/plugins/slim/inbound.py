@@ -261,7 +261,7 @@ class SlimInbound:
         self._actor.close_connection(service, conn_id)
 
     def _start_listen_thread(self) -> None:
-        if self._listening:
+        if self._listening or self._inbound_claimed:
             return
         self._listening = True
         self._actor.spawn(self._inbound_loop())

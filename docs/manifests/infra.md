@@ -376,7 +376,7 @@ Directory discovery and search or composition plugins are not shipped.
 
 Experimental. An `Application` row can also describe a server or endpoint that
 agents talk *over*: a SLIM node, an in-process channel, an HTTP url, an A2A server, or
-a framing such as A2A. Name the row by what it is, never by an agent. The row's
+the A2A layer over a node. Name the row by what it is, never by an agent. The row's
 `usage` is its capability: `connect`, a server we can dial that serves agents;
 `listen`, infrastructure on which we can host the agents we run. Default `connect`,
 as on every Application row. Infra only declares the row; a Flavour's
@@ -392,13 +392,20 @@ spec:
   endpoints:
     desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
                 usage: [connect, listen]}
-    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
+    desk-a2a: {protocol: a2a-rpc, usage: [connect, listen]}
+    desk: {protocol: "a2a+slim", url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
+           usage: [connect, listen]}
     outage-server: {protocol: a2a, url: "http://127.0.0.1:9003", usage: [connect, listen]}
     agent-hub: {protocol: http, url: "https://hub.example.test/a2a/{agent}", usage: connect}
 ```
 
-`protocol` is the layer plugin (`slim`, `local-group`, `http`, `a2a`, `a2a-framing`); every other
-field but `usage` and the legacy `expose` is a param of that layer, checked by the plugin. A string param may hold
+`protocol` is the layer plugin (`slim`, `local-group`, `http`, `a2a`, `a2a-rpc`); every other
+field but `usage` and the legacy `expose` is a param of that layer, checked by the plugin.
+A row may name a stack in one word: `protocol: a2a+slim` reads top first, *A2A over SLIM*, and is the chain
+`[slim, a2a-rpc]`; the row's node fields are the bottom layer's params, and card fields (`description`,
+`version`, `skills`, `card`, `manifest`) go on `a2a-rpc`, so `desk` above is the same as the two
+rows `desk-node` and `desk-a2a` bound as `[desk-node, desk-a2a]`. A name above the bottom is a layer, so `a2a` there is
+the slimrpc layer (`a2a-rpc`), while `a2a` alone stays the SDK client of one url. A string param may hold
 `{agent}`, replaced by each agent's id, so one row serves many agents (`agent-hub`
 above); it is the only placeholder, and a Flavour can override a row's params per
 agent. The agent id goes in as it is, never encoded, so an agent whose id holds
@@ -418,8 +425,8 @@ Layer params that a naming transport reads:
 
 The schema requires `protocol` on every row and cannot require `url`: an agent-keyed
 row and an endpoint row differ only by their key (an agent id of the MAS, or an
-endpoint name), and an infra document is validated without its MAS. A framing row
-(`a2a-framing`) and an in-process channel have no address. ctl refuses an
+endpoint name), and an infra document is validated without its MAS. The `a2a-rpc` row
+and an in-process channel have no address. ctl refuses an
 agent-keyed row without a `url` when it applies the Flavour, where it knows the agent
 ids, and the plugin of an endpoint row that needs a `url` refuses the row without one.
 
@@ -427,7 +434,7 @@ A secret field holds a SecretRef, never a value. A listed HTTP auth header canno
 resolves to an `agent_comm` link first, then a `layer`
 ([the rule](../references/comm-stack.md#stack)). So `a2a` (a one-row chain on an A2A
 server) is the A2A SDK client at its url, the same as an agent-keyed `a2a` row, and
-`a2a-framing` is the A2A framing layer above a transport.
+`a2a-rpc` is the A2A SDK over the `slim` node below it (the slimrpc binding).
 
 Every local agent on a chain gets its own instance of the layers and its own
 receive; what the layers share (the SLIM node connection, the in-process fabric) is
@@ -439,7 +446,7 @@ of each agent it delegates to that the Flavour dials (`connect`).
 Walkthrough: [Tutorial 7](../tutorials/07-slim-link/README.md).
 Plugin cards: [`slim`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/slim/slim.md),
 [`http`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/http_layer/http.md),
-[`a2a-framing`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-framing.md).
+[`a2a-rpc`](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-rpc.md).
 
 ## Separation from Flavour
 

@@ -39,7 +39,7 @@ _NODE_A2A = {**_NODE, "identity": "acme/lab/desk-a2a"}
 _ROWS = {
     "desk-node": _NODE,
     "desk-node-a2a": _NODE_A2A,
-    "desk-a2a": {"protocol": "a2a-framing", "usage": _BOTH},
+    "desk-a2a": {"protocol": "a2a-rpc", "usage": _BOTH},
     "desk-group": {"protocol": "local-group", "identity": "acme/lab/desk", "usage": _BOTH},
     "outage-server": {"protocol": "a2a", "url": "http://127.0.0.1:9003", "usage": _BOTH},
     "agent-hub": {"protocol": "http", "url": "https://hub.example.test/agents/{agent}"},
@@ -394,9 +394,9 @@ def test_a_one_row_chain_on_an_a2a_server_is_the_released_direct_path() -> None:
         ),
         ({"agents": {"billing": {"params": {"desk-node": {"x": 1}}}}}, None, "has usage or params but no chain"),
         ({"agent_comm": ["bogus"]}, _rows(bogus={"protocol": "nope"}), "unknown layer 'nope'"),
-        ({"agent_comm": ["desk-a2a"]}, None, "the first layer must be a transport; 'a2a-framing' needs a layer below"),
+        ({"agent_comm": ["desk-a2a"]}, None, "the first layer must be a transport; 'a2a-rpc' needs a layer below"),
         ({"agent_comm": ["outage-server"]}, None, "'outage-server' is a link to one agent's own url"),
-        ({"agent_comm": ["desk-a2a", "desk-node"]}, None, "the first layer must be a transport; 'a2a-framing' needs"),
+        ({"agent_comm": ["desk-a2a", "desk-node"]}, None, "the first layer must be a transport; 'a2a-rpc' needs"),
         ({"agent_comm": ["desk-node", "outage-server"]}, None, "layer 1 \\('a2a'\\) is a transport; only the first"),
         ({"agent_comm": ["outage-server", "desk-node"]}, None, "layer 1 \\('slim'\\) is a transport; only the first"),
         ({"agent_comm": "desk-node"}, None, "list of Application row names"),
@@ -679,6 +679,24 @@ def _wire(materialized, *, already_wired: set[str] | None = None) -> list[dict]:
 
 
 @pytest.fixture()
+def real_node(monkeypatch: pytest.MonkeyPatch):
+    """A real SLIM node inside this process on the rows' port (46357); skips when it is taken or the extra is absent."""
+    import socket
+
+    sb = pytest.importorskip("slim_bindings")
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", 46357)) == 0:
+            pytest.skip("port 46357 is taken")
+    monkeypatch.setenv("SLIM_SECRET", _SECRET)
+    if not sb.is_initialized():
+        sb.initialize_with_defaults()
+    service = sb.create_service("ctl-test-node")
+    service.run_server(sb.new_insecure_server_config("127.0.0.1:46357"))
+    yield
+    service.stop_server("127.0.0.1:46357")
+
+
+@pytest.fixture()
 def fake_node(monkeypatch: pytest.MonkeyPatch):
     from library_ioa.plugins.slim.actor import ConnectionActor
 
@@ -872,7 +890,7 @@ _PER_AGENT = {
 }
 
 
-async def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(tmp_path: Path, fake_node) -> None:
+async def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(tmp_path: Path, real_node) -> None:
     resolved = _bind(_PER_AGENT)
     nodes = [{"id": "triage", "delegates_to": ["billing", "outage"]}, {"id": "billing"}, {"id": "outage"}]
     materialized = _materialized(_DESK, tmp_path, resolved, nodes)
@@ -889,9 +907,6 @@ async def test_a_sender_joins_its_targets_chain_and_each_chain_gets_one_handle(t
         tool = SendTool(comm=caller["comm"], routes=caller["routes"], allowed_peers=["billing", "outage"])
         assert (await tool.asend("billing", "refund")) == "ok:billing:refund"
         assert (await tool.asend("outage", "down?")) == "ok:outage:down?"
-        frames = [frame.decode("utf-8", "replace") for frame in fake_node.frames]
-        assert any("SendMessage" in frame and "refund" in frame for frame in frames)  # billing's chain frames A2A
-        assert any("down?" in frame and "SendMessage" not in frame for frame in frames)  # outage's does not
     finally:
         materialized.stack_handles.close()
 
@@ -1450,9 +1465,9 @@ def test_an_agent_keyed_row_is_checked(row: dict, entries: dict, message: str) -
 
 
 def test_an_agent_on_a_chain_is_checked_for_its_id_and_its_usage() -> None:
-    from mas.ctl.infra.bind import _check_agent_on_chain, _for_agent, _layer
+    from mas.ctl.infra.bind import _check_agent_on_chain, _for_agent, _row_layers
 
-    chain = _for_agent([_layer("desk-node", _rows(), "bind.agent_comm")], "triage", {}, "bind.agents.triage")
+    chain = _for_agent(_row_layers("desk-node", _rows(), "bind.agent_comm"), "triage", {}, "bind.agents.triage")
     _check_agent_on_chain("triage", chain, ["connect", "listen"])
     with pytest.raises(BindError, match="cannot ride row 'desk-node'"):
         _check_agent_on_chain("tri.age", chain, ["connect"])
@@ -1734,3 +1749,67 @@ def test_the_flavour_can_bind_a_peer_that_only_the_agent_spec_names() -> None:
     assert resolved.applications["outage"]["protocol"] == "a2a"
     with pytest.raises(SystemExit):  # the same Flavour names an agent this session does not have
         bind_or_exit(ResolvedInfra(applications=_rows()), flavour, agent_id="triage", manifest=None)
+
+
+def test_a_plus_row_is_the_layers_it_names_top_first_with_its_params_on_the_bottom() -> None:
+    node = {k: v for k, v in _NODE.items() if k != "protocol"}
+    rows = _rows(desk={"protocol": "a2a+slim", **node})
+    resolved = _bind({"agent_comm": ["desk"]}, rows=rows)
+    chain = resolved.agent_chains["triage"]
+    assert [layer["type"] for layer in chain] == ["slim", "a2a-rpc"]
+    assert [layer["row"] for layer in chain] == ["desk", "desk"]
+    from mas.runtime.secrets.ref import parse_secret_ref
+
+    assert chain[0]["params"] == {
+        "url": "http://127.0.0.1:46357",
+        "identity": "acme/lab/desk",
+        "secret": parse_secret_ref({"secret": "slim"}, field="secret"),
+    }
+    assert chain[1]["params"] == {}
+    assert "desk" not in resolved.applications
+
+
+def test_a_plus_row_puts_card_fields_on_the_layer_above() -> None:
+    node = {k: v for k, v in _NODE.items() if k != "protocol"}
+    rows = _rows(desk={"protocol": "a2a+slim", **node, "description": "bills", "version": "9", "skills": ["invoice"]})
+    resolved = _bind({"agent_comm": ["desk"]}, rows=rows)
+    chain = resolved.agent_chains["triage"]
+    assert "description" not in chain[0]["params"]
+    assert "version" not in chain[0]["params"]
+    assert "skills" not in chain[0]["params"]
+    assert chain[1]["params"] == {"description": "bills", "version": "9", "skills": ["invoice"]}
+
+
+def test_a_plus_row_is_the_same_chain_as_two_rows() -> None:
+    node = {k: v for k, v in _NODE.items() if k != "protocol"}
+    plus = _bind({"agent_comm": ["desk"]}, rows=_rows(desk={"protocol": "a2a+slim", **node}))
+    two = _bind({"agent_comm": ["desk-node", "desk-a2a"]})
+    assert [(layer["type"], layer["params"]) for layer in plus.agent_chains["triage"]] == [
+        (layer["type"], layer["params"]) for layer in two.agent_chains["triage"]
+    ]
+
+
+@pytest.mark.parametrize("protocol", ["a2a+", "+slim", "a2a++slim"])
+def test_a_plus_row_with_an_empty_part_is_refused(protocol: str) -> None:
+    with pytest.raises(BindError, match="has an empty part"):
+        _bind({"agent_comm": ["desk"]}, rows=_rows(desk={"protocol": protocol, "url": "http://127.0.0.1:1"}))
+
+
+def test_a_plus_row_that_puts_a_layer_at_the_bottom_is_refused() -> None:
+    with pytest.raises(BindError, match="is a transport; only the first layer can be one"):
+        _bind({"agent_comm": ["desk"]}, rows=_rows(desk={"protocol": "slim+a2a"}))
+
+
+def test_a2a_plus_grpc_stays_the_a2a_plugin() -> None:
+    from mas.ctl.infra.bind import _protocol_parts
+
+    assert _protocol_parts("a2a+grpc", "outage") == ["a2a+grpc"]
+    assert _protocol_parts("a2a+slim", "desk") == ["a2a", "slim"]
+    rows = _rows(**{"outage-grpc": {"protocol": "a2a+grpc", "url": "http://127.0.0.1:9003", "usage": ["connect"]}})
+    resolved = _bind(
+        {"agents": {"outage": {"agent_comm": ["outage-grpc"], "usage": "connect"}}},
+        rows=rows,
+        agents=["triage", "outage"],
+    )
+    assert resolved.applications["outage"]["protocol"] == "a2a+grpc"
+    assert "outage" not in resolved.agent_chains

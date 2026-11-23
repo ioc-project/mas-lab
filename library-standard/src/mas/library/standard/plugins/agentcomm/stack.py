@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from mas.library.standard.lib.comm.capabilities import declared_capabilities, merge_capabilities, read_capabilities
 from mas.library.standard.lib.comm.compose import instantiate_layers, layer_binding, resolve_layer_class
+from mas.library.standard.lib.comm.headers import merge_headers
 from mas.library.standard.lib.comm.payload import TASK_ONLY_INTENTS
 from mas.library.standard.lib.comm.send_context import merge_send_context
 from mas.library.standard.lib.stack import Envelope, Handler, Layer, Stack, StackError, StackSendError
@@ -42,7 +43,7 @@ class StackAgentComm(LinkIdentity):
 
     The first layer is a link: a ``Layer`` that sends, or any object with
     ``send(target, task, ...)``. The layers above are generic ``Layer`` objects
-    (for example the ``a2a-framing`` layer) or ``BoundLayer`` decorators, a
+    (for example the ``a2a-rpc`` layer) or ``BoundLayer`` decorators, a
     deprecated form; ``adapt_legacy`` turns a link or decorator into a ``Layer``.
     The generic ``Stack`` underneath starts the layers bottom first, merges
     their capabilities, and stamps a child ``traceparent`` on every send. The
@@ -153,15 +154,16 @@ class StackAgentComm(LinkIdentity):
         headers: dict[str, str] | None,
         context: SendContext | None,
     ) -> Envelope:
-        stamped = self._stamp(headers, context)
+        aligned = self._stamp(headers, context)
+        outgoing = merge_headers(aligned.headers)
         return to_envelope(
             target_agent_id,
             task,
             correlation_id=correlation_id,
             caller_call_id=caller_call_id,
             context_id=context_id,
-            headers=stamped.headers,
-            context=stamped,
+            headers=outgoing,
+            context=aligned,
         )
 
     async def asend(

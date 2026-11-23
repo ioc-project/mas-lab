@@ -4,7 +4,7 @@ apiVersion: flavour/v1
 kind: Flavour
 metadata:
   name: desk-billing-over-a2a
-  description: The desk on the node; billing alone on A2A framing over its own connection to the node.
+  description: The desk on the node; billing alone on A2A over its own connection to the node.
 spec:
   bind:
     agent_comm: [desk-node]

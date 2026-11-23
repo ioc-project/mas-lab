@@ -11,10 +11,10 @@ spec:
     usage: [connect, listen]
     agents:
       billing:
-        agent_comm: [agent-hub, desk-a2a]
+        agent_comm: [agent-hub]
         usage: connect
       outage:
-        agent_comm: [agent-hub, desk-a2a]
+        agent_comm: [agent-hub]
         usage: connect
         params:
           agent-hub: {url: "https://outage.example.test/a2a"}

@@ -29,9 +29,9 @@ never goes out as an `inform`. The table below is the whole map.
 
 | Action | Plane | What it does | Status |
 | --- | --- | --- | --- |
-| `task` | Peer send | Run a turn on the peer. Return the reply. | **Yes.** `delegate_to_*` is always this. Also on `slim`, and through the `a2a-framing` layer over `slim` or `http`. |
-| `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
-| `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-framing` layer refuse it. |
+| `task` | Peer send | Run a turn on the peer. Return the reply. | **Yes.** `delegate_to_*` is always this. Also on `slim`, and through the `a2a-rpc` layer over `slim`. The `a2a` link is A2A over HTTP. |
+| `ask` | Peer send | Same as `task`, with the peer text marked as coming from another agent. The caller waits for the reply. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-rpc` layer refuse it. |
+| `inform` | Peer send | Same as `ask`, then drop the reply and return `delivered`. The caller still waits. A peer error still raises. | **Yes**, on `local`, `local-group` and `slim`. **No** on A2A: the `a2a` plugin and the `a2a-rpc` layer refuse it. |
 | Channel `publish` | Peer send | Fan-out to a room. Intent is `publish`, not `task`. Labelled untrusted. | **Yes** on `local-group` and `slim`. |
 | `send(..., intent="steer")` | Peer send → control | Call `ControlContract.scoped` then `steer` on the session the link maps for that target. The new handle cannot do more than the control you passed. Default mode is `after` at the tail. `preempt` and `replace` must be set. Peer entries always queue at the tail. `after` on a paused session waits in the queue; `preempt` and `replace` are refused. The target must be on `steer_peers` (empty list means nobody). | **Yes** on `local` and `local-group` when `control=` is passed at construction. **No** on A2A. Session wiring does not inject `control` yet. |
 | Pause / resume | Control | Block or continue the next user turn. | **Yes.** `mas-ctl control`. |
@@ -125,7 +125,7 @@ each layer hands it to the one below.
 
 Send carries an `Envelope`. Llm and tool carry `InvokeEngineIo` →
 `EngineIoReturn`. The wrap layers (retry, circuit breaker, cache, impair)
-are the same plugins on all three. Protocol layers differ: `a2a-framing`
+are the same plugins on all three. Protocol layers differ: `a2a-rpc`
 on send, `openai` on llm, `mcp` on tool. The transport today is `http`
 (or `slim` / `local-group` on send).
 
@@ -156,8 +156,8 @@ The other objects that carry headers treat them like this:
 | Where | Rule |
 | --- | --- |
 | `Stack.send` | Sets `traceparent` (a child of the incoming one) with `with_`, so only that key changes. |
-| `agent_comm/stack` `send(..., headers=, context=)` | Explicit `headers` replace `context.headers` whole; with `headers` omitted, `context.headers` is used. The bottom link's `agent_id` replaces any `sender`. |
-| A link (`local-group`, `slim`) on send | The hop-safe ambient headers of the turn that is sending (`traceparent`, `tracestate`, `baggage`), then the send's headers; a send header wins on a clash. `mas.*` and other keys never hop to a later send. |
+| `agent_comm/stack` `send(..., headers=, context=)` | Explicit `headers` replace `context.headers` whole; with `headers` omitted, `context.headers` is used. Hop-safe ambient keys of the sending turn (`traceparent`, `tracestate`, `baggage`) are merged in before the stack stamps a child `traceparent`. The bottom link's `agent_id` replaces any `sender`. |
+| A link (`local-group`, `slim`, `a2a`) on send | The hop-safe ambient headers of the turn that is sending (`traceparent`, `tracestate`, `baggage`), then the send's headers; a send header wins on a clash. `mas.*` and other keys never hop to a later send. The `a2a-rpc` layer copies those three onto A2A message metadata. |
 | A link on receive | The received headers become the ambient headers while the handler runs. |
 
 A layer plays one of two roles:
@@ -165,34 +165,34 @@ A layer plays one of two roles:
 | Role | `needs_lower` | Examples |
 | --- | --- | --- |
 | Transport | `False`: sits at the bottom and answers the send | `slim`, `local-group`, `http`, any `agent_comm` link with `send(target, task, ...)` |
-| Protocol | `True`: changes what is sent or how it is framed | `a2a-framing`, `trace_context` (deprecated), a `BoundLayer` decorator (deprecated) |
+| Protocol | `True`: changes what is sent or how it is framed | `a2a-rpc`, `trace_context` (deprecated), a `BoundLayer` decorator (deprecated) |
 
 `Stack.serve(handler)` builds the inbound chain: each layer, top first,
 wraps the handler of the layers above it, and the bottom layer gets the
 outermost one. On a chain a Flavour binds, the handle does this for each agent
 when a layer above the transport overrides `serve` (a protocol layer such
-as `a2a-framing`); the agent's turn is the top handler. With no such layer nothing
+as `a2a-rpc`); the agent's turn is the top handler. With no such layer nothing
 changes: the transport calls the turn itself. `slim` passes each request's
 payload through the chain; `local-group` has no `serve`, so a protocol layer
 above it is refused when the agent's stack is built. `http` keeps the chain
 but never receives anything.
 
-`a2a-framing` turns a send into an A2A 1.0 `SendMessage` JSON-RPC request, the
-one the A2A SDK client sends and the `a2a` exposure accepts: the text is one
-text part, `context_id` is the message `contextId`, and `correlation_id` /
-`caller_call_id` ride the message metadata as `mas.correlation_id` /
-`mas.caller_call_id`. It adds the header `a2a-version: 1.0`. It honours
-only the `task` intent; any other raises `AgentCommError` before the
-request leaves. The response's message text is the reply; a JSON-RPC error
-or a `failed`, `rejected` or `canceled` task raises `AgentCommError`. On
-the inbound side it answers a `SendMessage` request: the turn gets the
-text, the call ids and the context id (a new one when the request has
-none), and the reply goes back as an agent message in that context. A turn
-that raises is a `failed` task with the text `Agent execution failed`; the
-error itself stays in the serving process's log. Over `slim` this is MAS Lab's
-own JSON-RPC inside a SLIM frame, with both ends MAS Lab sessions; it is not the
-A2A SDK riding SLIM. Only `a2a-framing` over `http` talks to a third-party A2A
-server.
+`a2a-rpc` is the A2A SDK over the `slim` link below it, through the `slimrpc`
+protocol binding (the `slima2a` package). A send is one A2A 1.0 `SendMessage`: the
+text is one text part, `context_id` is the message `contextId`, and
+`correlation_id` / `caller_call_id` ride the message metadata as
+`mas.correlation_id` / `mas.caller_call_id`. It honours only the `task` intent; any
+other raises `AgentCommError` before the request leaves. The response's message text
+is the reply; a `failed`, `rejected` or `canceled` task raises `AgentCommError`. On the
+inbound side the SDK request handler answers: the turn gets the text, the call ids
+and the context id (a new one when the request has none), and the reply goes back as
+an agent message in that context. A turn that raises is a `failed` task with the text
+`Agent execution failed`; the error itself stays in the serving process's log. The
+layer takes over the link's inbound sessions when it serves a turn (the RPC server owns
+them), so a peer that speaks A2A over slimrpc can be reached and can reach it. A
+connect-only agent has no turn: the handle does not serve, this layer starts no RPC
+server, and `slim` keeps its reader. To reach an A2A server at an HTTP url, use the
+`a2a` link.
 
 `http` posts each send's payload to its `url` (`headers`, `timeout`, `dev`,
 `content_type` are its other params) with the envelope's headers, and
@@ -225,8 +225,8 @@ other attribute.
 A layer id resolves in one order (`resolve_layer_class` in
 `mas.library.standard.lib.comm.compose`): an `agent_comm` link first, then a
 `layer`. The ids are distinct: `a2a` is the A2A SDK client reaching a url,
-a transport that can only be first, and `a2a-framing` is the A2A framing layer,
-which needs a layer below it. A chain that starts with `a2a-framing`, or that
+a transport that can only be first, and `a2a-rpc` is the A2A layer over
+`slim`, which needs the node below it. A chain that starts with `a2a-rpc`, or that
 puts `a2a` above another transport, is refused. Above the bottom only a layer
 that needs one below it is allowed. A chain of one row whose link reaches one agent at its
 own url (`is_direct_link`: an `agent_comm` transport that is not a
@@ -248,7 +248,9 @@ failed send like any other: the
 layer must pass. `check_layer` is for a layer above the bottom: unbound
 send fails, lifecycle is idempotent, capabilities only grow, a send reaches
 the layer below, sync and async agree (a protocol layer passes the framed
-answer its decoder reads). `check_transport` is for a bottom layer: it needs
+answer its decoder reads). `a2a-rpc` does not forward `asend` to the layer
+below (it speaks A2A on the slim app), so it runs the unbound, lifecycle and
+capability parts and not the stock helper. `check_transport` is for a bottom layer: it needs
 no layer below, start and stop are idempotent, its capability flags are the
 known set of booleans, a send reaches the peer once and returns its reply,
 and `asend` agrees. The SLIM link, `local-group` and `http` run it.
@@ -366,7 +368,7 @@ that peer is on the send allow list.
 Cards: [local-group](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/local-group.md),
 [stack](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/stack.md),
 [trace_context](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/agentcomm/trace-context.md),
-[a2a-framing layer](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-framing.md),
+[a2a-rpc layer](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/a2a/a2a-rpc.md),
 [http](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/http_layer/http.md),
 [slim](https://github.com/ioc-project/mas-lab/blob/main/library-ioa/src/library_ioa/plugins/slim/slim.md),
 [send](https://github.com/ioc-project/mas-lab/blob/main/library-standard/src/mas/library/standard/plugins/system_tools/send.md).

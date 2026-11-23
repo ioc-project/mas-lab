@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [project]
 name = "mas-lab-library-ioa"
 version = "0.2.0"
-description = "MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers."
+description = "MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A-over-SLIM stack layers."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -25,7 +25,8 @@ cli = ["mcp[cli]"]
 # Same as cli. Protocol conformance is Node `@modelcontextprotocol/conformance`
 # (npx) — do not vendor mcp-python-sdk or mcp-conformance checkouts.
 all = ["mcp[cli]"]
-slim = ["slim-bindings>=2.2,<3"]
+# slima2a adds the A2A "slimrpc" binding to the a2a-sdk and pins the sdk it was built against.
+slim = ["slim-bindings>=3.3.6,<4", "slima2a==0.9.3"]
 # A2A over gRPC. The SDK extra ships grpcio; we do not pin grpcio ourselves.
 a2a-grpc = ["a2a-sdk[grpc]>=1.1.5"]
 
