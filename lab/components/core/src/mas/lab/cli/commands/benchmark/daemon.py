@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab benchmark daemon`` subcommands."""
+
 from __future__ import annotations
 
 import json as _json
@@ -55,12 +56,11 @@ def daemon_group() -> None:
 
 
 @daemon_group.command("start")
-@click.option("--port", "-p", type=int, default=8090, show_default=True,
-              help="TCP port for the Benchmark Explorer.")
-@click.option("-o", "--output-dir", type=Path, default=None,
-              help="Benchmarks root directory (persisted in the PID file).")
-@click.option("--force", is_flag=True, default=False,
-              help="Kill an existing daemon before starting a new one.")
+@click.option("--port", "-p", type=int, default=8090, show_default=True, help="TCP port for the Benchmark Explorer.")
+@click.option(
+    "-o", "--output-dir", type=Path, default=None, help="Benchmarks root directory (persisted in the PID file)."
+)
+@click.option("--force", is_flag=True, default=False, help="Kill an existing daemon before starting a new one.")
 def daemon_start_cmd(port: int, output_dir: Path | None, force: bool) -> None:
     """Start the Benchmark Explorer daemon."""
     info = _read_daemon_pid()
@@ -76,29 +76,28 @@ def daemon_start_cmd(port: int, output_dir: Path | None, force: bool) -> None:
 
     _DAEMON_DIR.mkdir(parents=True, exist_ok=True)
     import shutil as _shutil
+
     mas_lab_bin = _shutil.which("mas-lab") or _sys.argv[0]
-    cmd: list[str] = [mas_lab_bin, "serve",
-                      "--port", str(port), "--no-browser"]
+    cmd: list[str] = [mas_lab_bin, "serve", "--port", str(port), "--no-browser"]
     if output_dir:
         cmd += ["-o", str(output_dir)]
 
+    from mas.runtime.secrets.process import child_env
+
     proc = _subprocess.Popen(
         cmd,
+        env=child_env(lab=True),
         stdout=_subprocess.DEVNULL,
         stderr=_subprocess.DEVNULL,
         start_new_session=True,
     )
     pid_data = {
-        "pid":        proc.pid,
-        "port":       port,
+        "pid": proc.pid,
+        "port": port,
         "output_dir": str(output_dir) if output_dir else None,
     }
     _DAEMON_PID.write_text(_json.dumps(pid_data))
-    click.echo(
-        f"Daemon started  pid={proc.pid}  port={port}\n"
-        f"  http://localhost:{port}\n"
-        f"  PID file: {_DAEMON_PID}"
-    )
+    click.echo(f"Daemon started  pid={proc.pid}  port={port}\n  http://localhost:{port}\n  PID file: {_DAEMON_PID}")
 
 
 @daemon_group.command("stop")

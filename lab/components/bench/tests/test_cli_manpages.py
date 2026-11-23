@@ -62,11 +62,6 @@ def test_click_leaves_are_in_the_man_catalog() -> None:
             continue
         if command in catalog:
             continue
-        # `mas-lab otel` is the same Click group as `mas-lab telemetry`.
-        if command.startswith("mas-lab otel"):
-            aliased = "mas-lab telemetry" + command[len("mas-lab otel") :]
-            if aliased in catalog:
-                continue
         missing.append(command)
     assert not missing, "Click commands without man pages:\n" + "\n".join(missing)
 

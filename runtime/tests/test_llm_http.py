@@ -9,12 +9,13 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 from mas.library.standard.lib.retry import RetryPolicy, acall_with_retry, call_with_retry
-from mas.library.standard.plugins.llm.http import (
-    arequest_once,
-    llm_status_is_retryable,
-    request_once,
+from mas.library.standard.plugins.llm.http import arequest_once, request_once
+from mas.runtime.reliability.classify import (
+    classify_llm_failure,
+    is_retryable_llm_http_error,
+    is_retryable_status,
+    is_tls_verify_failure,
 )
-from mas.runtime.reliability.classify import classify_llm_failure, is_retryable_llm_http_error, is_tls_verify_failure
 
 
 def _fast_retry(*, max_attempts: int = 4):
@@ -53,7 +54,7 @@ def test_is_retryable_for_connect_and_timeout_errors():
 
 def test_is_retryable_for_5xx_and_429_status():
     for status in (429, 500, 502, 503, 504):
-        assert llm_status_is_retryable(status) is True
+        assert is_retryable_status(status) is True
         response = httpx.Response(status, request=httpx.Request("POST", "https://x"))
         exc = httpx.HTTPStatusError("boom", request=response.request, response=response)
         assert is_retryable_llm_http_error(exc) is True
@@ -63,7 +64,7 @@ def test_not_retryable_for_4xx_status():
     response = httpx.Response(400, request=httpx.Request("POST", "https://x"))
     exc = httpx.HTTPStatusError("boom", request=response.request, response=response)
     assert is_retryable_llm_http_error(exc) is False
-    assert llm_status_is_retryable(400) is False
+    assert is_retryable_status(400) is False
 
 
 def test_not_retryable_for_tls_verify_failure():
@@ -196,3 +197,16 @@ async def test_aretrying_request_retries_timeout():
 
     assert result is ok
     assert calls["n"] == 2
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_an_auth_refusal_body_is_not_copied_into_the_failure(status: int) -> None:
+    """Compatible proxies echo the refused key in the body."""
+    canary = "sk-CANARY-4d1e"
+    request = httpx.Request("POST", "https://llm.example/v1/chat/completions")
+    response = httpx.Response(status, json={"error": {"message": f"Invalid API key: {canary}"}}, request=request)
+    exc = httpx.HTTPStatusError("refused", request=request, response=response)
+    failure = classify_llm_failure(exc)
+    assert canary not in str(failure)
+    assert canary not in repr(failure.args)
+    assert f"HTTP {status}" in str(failure)

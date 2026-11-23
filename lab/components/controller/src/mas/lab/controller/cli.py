@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """CLI extension — ``mas-lab control`` and ``mas-lab worker`` command groups."""
+
 from __future__ import annotations
 
 import json
@@ -33,8 +34,6 @@ def control_start(port: int, no_http: bool, foreground: bool) -> None:
             click.echo(f"Warning: {drift_message(drift)}", err=True)
         return
     if foreground:
-        import sys
-
         argv = ["--port", str(port)]
         if no_http:
             argv.append("--no-http")
@@ -62,8 +61,8 @@ def control_stop() -> None:
 @control_group.command("status")
 def control_status() -> None:
     """Show controller daemon status."""
-    from mas.lab.controller.client import ControllerClient, drift_message
     from mas.lab.controller import config as cfg
+    from mas.lab.controller.client import ControllerClient, drift_message
 
     client = ControllerClient()
     if not client.is_running():
@@ -130,8 +129,13 @@ def worker_cancel(worker_id: str) -> None:
 
 @worker_group.command("follow")
 @click.argument("worker_id")
-@click.option("--interval", type=float, default=0.5, show_default=True,
-              help="Poll interval in seconds (REST poll, same as blocking benchmark run).")
+@click.option(
+    "--interval",
+    type=float,
+    default=0.5,
+    show_default=True,
+    help="Poll interval in seconds (REST poll, same as blocking benchmark run).",
+)
 def worker_follow(worker_id: str, interval: float) -> None:
     """Follow worker output until completion (polls daemon, streams stdout/stderr)."""
     from mas.lab.controller.client import follow_worker
@@ -209,6 +213,8 @@ def demo_ui_export(
     from mas.lab.controller.ui_stream.export import (
         export_merged_trace,
         export_trace,
+    )
+    from mas.lab.controller.ui_stream.export import (
         main as export_main,
     )
 
@@ -228,9 +234,12 @@ def demo_ui_export(
         )
         click.echo(f"Wrote {dest} ({len(scenario_traces)} scenarios merged: {', '.join(scenario_traces)})")
         if serve:
+            from mas.runtime.secrets.process import child_env
+
             subprocess.run(
                 [sys.executable, "-m", "http.server", str(port), "--bind", "127.0.0.1", "--directory", str(dest)],
                 check=False,
+                env=child_env(lab=True),
             )
         else:
             click.echo(f"python3 -m http.server {port} --bind 127.0.0.1 --directory {dest}")
@@ -307,7 +316,10 @@ def demo_ui_export(
 @click.option(
     "--recompute",
     is_flag=True,
-    help="ui-trace only: replay runtime and re-fold missing plot artefacts. Does not run the MAS or experiment pipelines.",
+    help=(
+        "ui-trace only: replay runtime and re-fold missing plot artefacts. "
+        "Does not run the MAS or experiment pipelines."
+    ),
 )
 @click.option(
     "--trees",
@@ -417,13 +429,10 @@ def replay_cmd(
             continue
         n = row.get("n")
         click.echo(
-            f"{row.get('scenario')}: n={0 if n is None else n} "
-            f"job={row.get('job_id') or 'ok'} path={row.get('path')}"
+            f"{row.get('scenario')}: n={0 if n is None else n} job={row.get('job_id') or 'ok'} path={row.get('path')}"
         )
     if dropped:
-        raise click.ClickException(
-            "ingest dropped — Reset had closed Passive ingest; retry this command"
-        )
+        raise click.ClickException("ingest dropped — Reset had closed Passive ingest; retry this command")
 
 
 @demo_ui_group.command("replay")

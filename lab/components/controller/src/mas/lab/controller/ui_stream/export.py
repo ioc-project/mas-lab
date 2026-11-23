@@ -262,8 +262,9 @@ def _patch_index(html: str) -> str:
 
 def build_static_ui(ui_root: Path, *, base: str = "./") -> Path:
     dist = ui_root / "dist"
-    env = hostenv.snapshot()
-    env["DEMO_UI_BASE"] = base
+    from mas.runtime.secrets.process import child_env
+
+    env = child_env({"DEMO_UI_BASE": base}, lab=True)
     subprocess.run(
         ["npm", "run", "build"],
         cwd=ui_root,
@@ -354,6 +355,10 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
     import webbrowser
     from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()  # an entry point (python -m): hostenv first, process scrubbed
 
     parser = argparse.ArgumentParser(description="Export a static demo-ui replay from a native trace.")
     parser.add_argument("trace", type=Path, help="events.jsonl or a trace/run directory")

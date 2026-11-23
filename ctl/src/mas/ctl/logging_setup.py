@@ -8,6 +8,28 @@ import logging
 
 from mas.runtime import hostenv
 
+# Loggers whose debug output carries request or response headers (a caller's bearer in the a2a-sdk call
+# context, a token a server echoes in WWW-Authenticate in httpcore and httpcore2, the frames of h2 and hpack,
+# request options in the vendor SDKs). They stay at this level whatever the verbosity.
+_HEADER_LOGGERS = {
+    "a2a": logging.INFO,
+    "httpcore": logging.WARNING,
+    "httpcore2": logging.WARNING,
+    "httpx2": logging.WARNING,
+    "h2": logging.WARNING,
+    "hpack": logging.WARNING,
+    "openai": logging.INFO,
+    "anthropic": logging.INFO,
+}
+_QUIET_LOGGERS = ("httpx", "httpx2", "openai", "httpcore", "httpcore2", "h2", "hpack")
+
+
+def _cap_header_loggers() -> None:
+    for name, floor in _HEADER_LOGGERS.items():
+        logger = logging.getLogger(name)
+        if logger.level == logging.NOTSET or logger.level < floor:
+            logger.setLevel(floor)
+
 
 def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
     """Configure logging from ``-v`` count or explicit level.
@@ -22,6 +44,7 @@ def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
         level_str = log_level or env_level
         log_level_attr = getattr(logging, str(level_str).upper(), logging.INFO)
         _apply_root_logging(log_level_attr)
+        _cap_header_loggers()
         return
 
     log_format = hostenv.get("LOG_FORMAT", "simple")
@@ -47,8 +70,8 @@ def setup_logging(log_level: str | None = None, verbosity: int = 0) -> None:
         logging.getLogger(name).setLevel(rt_level)
 
     if verbosity < 3:
-        for noisy in ("sqlalchemy", "httpx", "openai", "httpcore"):
-            logging.getLogger(noisy).setLevel(logging.ERROR if noisy == "sqlalchemy" else logging.WARNING)
+        _quiet_loggers()
+    _cap_header_loggers()
 
 
 def _apply_root_logging(level: int) -> None:
@@ -57,5 +80,10 @@ def _apply_root_logging(level: int) -> None:
         "[%(asctime)s] %(levelname)s [%(name)s:%(lineno)s] %(message)s" if log_format == "full" else "%(message)s"
     )
     logging.basicConfig(level=level, format=format_str, force=True)
-    for noisy in ("sqlalchemy", "httpx", "openai", "httpcore"):
-        logging.getLogger(noisy).setLevel(logging.ERROR if noisy == "sqlalchemy" else logging.WARNING)
+    _quiet_loggers()
+
+
+def _quiet_loggers() -> None:
+    logging.getLogger("sqlalchemy").setLevel(logging.ERROR)
+    for name in _QUIET_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)

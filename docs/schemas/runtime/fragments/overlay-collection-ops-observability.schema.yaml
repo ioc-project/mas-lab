@@ -50,7 +50,7 @@ oneOf:
                           type: string
                         converter_profile:
                           type: string
-                        otlp_endpoint_env:
+                        otlp_endpoint:
                           type: string
                         service_name:
                           type: string

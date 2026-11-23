@@ -183,3 +183,44 @@ def test_main_module_entrypoint_imports() -> None:
     from library_ioa.plugins.mcp.server import __main__ as server_main
 
     assert callable(server_main.main)
+
+
+_CANARY = "sk-S3CR3T-mcp-canary"
+_SECRET_LINES = {
+    "literal_api_key": f"api_key: {_CANARY}",
+    "credentialed_url": f"url: https://u:{_CANARY}@tools.example/mcp",
+}
+
+
+@pytest.mark.parametrize("case", sorted(_SECRET_LINES))
+def test_main_serve_refuses_an_infra_ref_with_a_secret(tmp_path, capsys, case: str) -> None:
+    infra = tmp_path / "mcp.yaml"
+    infra.write_text(
+        "apiVersion: infra/v1\nkind: ToolServerRegistry\nmetadata:\n  name: mcp\n"
+        "spec:\n  tool_servers:\n    - id: local-mcp\n      protocol: mcp\n      usage: listen\n"
+        f"      {_SECRET_LINES[case]}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit):
+        main(["serve", "--infra-ref", str(infra)])
+    err = capsys.readouterr().err
+    assert str(infra) in err
+    assert "SecretRef" in err or "credentials" in err
+    assert _CANARY not in err
+
+
+@pytest.mark.parametrize("case", sorted(_SECRET_LINES))
+def test_tool_manifest_with_a_secret_is_refused(tmp_path, case: str) -> None:
+    from library_ioa.plugins.mcp.server import MCPToolServerFactory
+    from mas.runtime.secrets import SecretRefError
+
+    manifest = tmp_path / "sample.tool.yaml"
+    manifest.write_text(
+        "apiVersion: mas/v1\nkind: Tool\nmetadata:\n  name: sample-tool\n"
+        f"spec:\n  impl:\n    module_path: tool.py\n  params:\n    {_SECRET_LINES[case]}\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SecretRefError) as caught:
+        MCPToolServerFactory.from_manifest(manifest)
+    assert str(manifest) in str(caught.value)
+    assert _CANARY not in str(caught.value)

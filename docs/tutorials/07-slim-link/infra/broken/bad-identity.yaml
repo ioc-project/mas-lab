@@ -6,5 +6,5 @@ kind: Application
 metadata: {name: desk-slim-node}
 spec:
   endpoints:
-    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/desk, secret_env: SLIM_SECRET,
+    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/desk, secret: {secret: slim},
                 usage: [connect, listen]}

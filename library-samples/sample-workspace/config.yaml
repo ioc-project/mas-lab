@@ -9,11 +9,12 @@
 # For live OpenAI/production infra, see:
 #   docs/tutorials/00-environment-setup/config.openai.example.yaml
 #
-# For live LLM via proxy: set MAS_INFRA_REFS=standard:llm-proxy and
-# LLM_PROXY_API_BASE=https://your-proxy/v1 in .env (see tutorial 00).
+# For live LLM via proxy: set MAS_INFRA_REFS=standard:llm-proxy and point
+# proxy.api_base at your gateway with an overlay (see tutorial 00).
 
 mas_ctl:
   flavour: local
+  # non-secret MAS_LLM_* only; API keys: mas-ctl secrets set
   env: .env
   # Human exchange log on stderr. Machines use events.jsonl / telemetry.
   trace: summary

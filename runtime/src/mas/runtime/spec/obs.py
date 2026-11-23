@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.transport.config import TransportObservabilityConfig
 
@@ -21,13 +20,10 @@ def _normalize_obs_plugin(name: str) -> str:
 
 
 def _resolve_manifest_cfg_value(cfg: dict[str, Any], key: str, *, default: str = "") -> str:
-    """Resolve a manifest config value from inline field or ``{key}_env`` reference."""
+    """Return the inline manifest config value."""
     direct = cfg.get(key)
     if direct is not None and str(direct).strip():
         return str(direct).strip()
-    env_key = cfg.get(f"{key}_env")
-    if env_key:
-        return hostenv.get(str(env_key), default).strip()
     return default
 
 
@@ -74,18 +70,18 @@ def parse_obs_spec(raw: list | None) -> ObservabilityBinding:
         )
 
     events_file: str | None = None
-    otlp_endpoint_env: str | None = None
+    otlp_endpoint: str | None = None
     for cfg in configs.values():
         path = _resolve_path_cfg(cfg)
         if path and not events_file:
             events_file = path
-        if cfg.get("otlp_endpoint_env") and not otlp_endpoint_env:
-            otlp_endpoint_env = str(cfg["otlp_endpoint_env"])
+        if cfg.get("otlp_endpoint") and not otlp_endpoint:
+            otlp_endpoint = str(cfg["otlp_endpoint"])
 
     return ObservabilityBinding(
         plugins=plugins,
         plugin_configs=configs,
-        otlp_endpoint_env=otlp_endpoint_env,
+        otlp_endpoint=otlp_endpoint,
         events_file=events_file,
         transport=TransportObservabilityConfig.from_plugins(plugins, configs),
     )

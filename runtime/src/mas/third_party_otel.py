@@ -28,13 +28,11 @@ the ``ioa-observe-sdk`` dependency (see the telemetry library) defaults
 this to ``"true"`` when unset upstream. MAS Lab pins it off by default too —
 real-time span emission is opt-in, not implied by installing the SDK.
 
-The telemetry library itself declares zero required dependencies (not
-even on the runtime, where this module lives), so it cannot import this
-module — its own ``src/mas/library/telemetry/__init__.py`` carries an
-independent copy of just the ``OBSERVE_REALTIME_OBSERVABILITY_ENABLED``
-``setdefault`` line for the case where that package is used standalone,
-without ``mas-runtime`` ever being imported. If this flag's default or name
-ever changes here, update that copy too — it will not pick this one up.
+Why this module writes ``os.environ``: these SDKs read their flags only from
+the process environment, with no API to pass them. This is the one runtime
+exception to "no environment access": it writes two fixed, non-secret
+constants (``"false"``) with ``setdefault``, and never reads a host value
+into MAS Lab. The host-read guard tests allowlist this file for that write.
 """
 
 from __future__ import annotations

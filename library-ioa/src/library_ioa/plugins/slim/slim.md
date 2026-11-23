@@ -14,7 +14,7 @@
 | **Status** | Group tests use in-process fake bindings that route replies by app name, as a node does. Tests marked `slim` run against an in-process node from slim-bindings 2.2 on a free loopback port; unicast and anycast sends return the peer's reply. |
 
 `slim` is a transport layer. Declare the node as an infra row with
-`url`, a three-part `identity` and `secret_env`, and bind it in a
+`url`, a three-part `identity` and `secret` SecretRef, and bind it in a
 Flavour (`spec.bind.agent_comm`):
 
 ```yaml
@@ -23,7 +23,7 @@ kind: Application
 metadata: {name: desk}
 spec:
   endpoints:
-    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret_env: SLIM_SECRET}
+    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim}}
 ---
 # Flavour
 kind: Flavour
@@ -66,8 +66,7 @@ process share one event loop, because slim-bindings keeps a single
 global loop. A peer outside MAS Lab addresses an agent
 by that app name.
 
-ctl reads the env-var named by `secret_env` and passes the value into
-the plugin. The plugin never reads the environment. `dev` is off
+The row holds a SecretRef. The plugin reveals it when it starts and never reads the environment. `dev` is off
 unless set; it skip-verifies TLS on loopback HTTPS. HTTP is only
 allowed on `127.0.0.1`, `localhost`, and `::1`; a url with a backslash,
 a space, a control character, or credentials in it is refused, and the
@@ -111,7 +110,7 @@ link uses the same comm helpers as `local-group` (`headers`, `names`,
 
 SLIM is two things people mix up. The **channel** is the link
 (`SlimAgentComm`: send by name, anycast, groups). The **node** is what
-the row's `url` and `secret_env` point at. An in-process fake is the
+the row's `url` and `secret` point at. An in-process fake is the
 channel without a node. For A2A over SLIM, bind an `a2a-framing` row above
 the node row (`agent_comm: [desk-node, desk-a2a]`, where `desk-a2a` is a
 `protocol: a2a-framing` row); each send then travels as an A2A `SendMessage`

@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.ctl.infra.env_resolve import resolve_manifest_values
 from mas.ctl.manifest.spec_bindings import parse_governance
 from mas.runtime.boundary.hitl.responders import HitlResponder
 from mas.runtime.registry import get_registry
+from mas.runtime.secrets import prepare_manifest
 from mas.runtime.spec.gov import _constructor_kwargs
 
 
@@ -36,8 +36,7 @@ def _load_hitl_responder(mode: str, params: dict[str, Any] | None = None) -> Hit
     cls = variant.load_class()
     if not params:
         return cls()
-    # ``env:VAR`` refs are resolved here, once; the responder never reads the environment.
-    resolved = resolve_manifest_values(dict(params))
+    resolved = prepare_manifest(dict(params))
     kwargs = _constructor_kwargs(cls, resolved)
     unknown = sorted(str(k) for k in set(resolved) - set(kwargs))
     if unknown:

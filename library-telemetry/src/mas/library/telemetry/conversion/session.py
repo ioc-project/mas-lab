@@ -9,6 +9,7 @@ only on :class:`MasOtelConverter`.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,48 @@ from mas.library.telemetry.conversion.profiles import (
 )
 from mas.library.telemetry.exceptions import OtelSdkUnavailableError
 from mas.runtime import hostenv
+
+
+def check_otlp_headers(headers: Any, *, path: str = "otel.headers") -> dict[str, Any]:
+    """Validate the OTLP export headers: a mapping of name to plain string or SecretRef.
+
+    A credential header (``Authorization``, ``X-Api-Key``, ``Cookie``, ...; the shared
+    :data:`~mas.runtime.secrets.ref.HTTP_SECRET_HEADERS`) must be a SecretRef: a plain string there
+    is refused. Returns the map with every ref as a :class:`~mas.runtime.secrets.SecretRef`.
+    """
+    from mas.runtime.secrets import SecretRefError
+    from mas.runtime.secrets.ref import check_http_header_secrets, is_ref, parse_secret_ref
+
+    if headers is None:
+        return {}
+    if not isinstance(headers, Mapping):
+        raise SecretRefError(f"{path}: expected a mapping of header name to string or SecretRef")
+    check_http_header_secrets(headers, path=path)
+    out: dict[str, Any] = {}
+    for name, value in headers.items():
+        key = str(name)
+        if is_ref(value):
+            out[key] = parse_secret_ref(value, field=f"{path}.{key}")
+        elif isinstance(value, str):
+            out[key] = value
+        else:
+            raise SecretRefError(f"{path}.{key}: expected a string or a SecretRef, got {type(value).__name__}")
+    return out
+
+
+def _otlp_session(endpoint: str) -> Any:
+    """The http session an OTLP exporter sends with. Given explicitly, so the SDK does not load a credential
+    provider named by ``OTEL_PYTHON_EXPORTER_OTLP_HTTP_*_CREDENTIAL_PROVIDER``. For a loopback endpoint it
+    reads no proxy settings from the environment: the plain-http headers would otherwise go to that proxy.
+
+    The SDK still merges ``OTEL_EXPORTER_OTLP_HEADERS`` and ``OTEL_EXPORTER_OTLP_{TRACES,LOGS}_HEADERS`` from
+    the process environment into every export, under the headers given here. The MAS Lab entry points remove
+    those variables from the process (:func:`mas.runtime.entrypoint.install_host_environment`); a program that
+    embeds this library without an entry point must not set them.
+    """
+    from mas.runtime.secrets.transport import requests_session_for
+
+    return requests_session_for(endpoint)
 
 
 def runtime_events_path(spans_path: str | Path) -> Path:
@@ -68,6 +111,7 @@ def create_otel_export(
     realtime: bool = False,
     extensions: bool | None = None,
     otlp_endpoint: str | None = None,
+    otlp_headers: Mapping[str, Any] | None = None,
     id_generator: Any | None = None,
     annotation_enabled: bool | None = None,
     timestamp_offset_s: float = 0.0,
@@ -82,6 +126,12 @@ def create_otel_export(
     to :func:`runtime_events_path` and, with an OTLP endpoint, to ``/v1/logs``.
     ``runtime_logs`` stands up the same LoggerProvider for transport aliases
     (observe-sdk names SCOPE already reads) without turning kernel realtime on.
+
+    ``otlp_headers`` maps a header name to a plain string or a SecretRef (see
+    :func:`check_otlp_headers`). The refs are revealed once here, for the OTLP exporters this
+    call builds, and the values go to those exporters only: a later build reveals again, so a
+    rotated secret reaches the next export session. A secret header goes only over https or to a
+    loopback endpoint.
     """
     if not OTEL_AVAILABLE:
         raise OtelSdkUnavailableError("required for OTel export")
@@ -123,10 +173,21 @@ def create_otel_export(
     exporters: list = [file_exporter]
     if not otlp_endpoint:
         otlp_endpoint = hostenv.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip() or None
+    # One reveal per build; the values live in this frame and in the exporters, nowhere else.
+    headers = None
     if otlp_endpoint:
+        from mas.runtime.secrets.transport import reveal_headers_for
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-        exporters.append(OTLPSpanExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces"))
+        revealed = reveal_headers_for(otlp_endpoint, check_otlp_headers(otlp_headers), what="OTLP secret headers")
+        headers = revealed or None
+        exporters.append(
+            OTLPSpanExporter(
+                endpoint=f"{otlp_endpoint.rstrip('/')}/v1/traces",
+                headers=headers,
+                session=_otlp_session(otlp_endpoint),
+            )
+        )
 
     from mas.library.telemetry.conversion.topology import require_mas_name
 
@@ -171,7 +232,13 @@ def create_otel_export(
             from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 
             logger_provider.add_log_record_processor(
-                SimpleLogRecordProcessor(OTLPLogExporter(endpoint=f"{otlp_endpoint.rstrip('/')}/v1/logs"))
+                SimpleLogRecordProcessor(
+                    OTLPLogExporter(
+                        endpoint=f"{otlp_endpoint.rstrip('/')}/v1/logs",
+                        headers=headers,
+                        session=_otlp_session(otlp_endpoint),
+                    )
+                )
             )
     converter = MasOtelConverter(
         provider.get_tracer("mas-otel"),
@@ -194,4 +261,4 @@ def create_otel_export(
     )
 
 
-__all__ = ["OtelExport", "create_otel_export", "runtime_events_path"]
+__all__ = ["OtelExport", "check_otlp_headers", "create_otel_export", "runtime_events_path"]

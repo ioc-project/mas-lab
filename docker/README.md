@@ -12,7 +12,7 @@ Use Docker for day-to-day use. Use `uv run` and `task install` when you develop 
 
 ```bash
 cd docker
-cp .env.example .env          # set OPENAI_API_KEY
+cp .env.example .env          # non-secret values only; keys via mas-ctl secrets set
 docker compose up --build
 ```
 
@@ -23,6 +23,9 @@ For a UI on another origin, pass `--cors-origin` and `--token-file` to the
 controller and set `MAS_LAB_TOKEN` / `MAS_LAB_DEFAULT_SCOPE` for
 `env-config.js` (see `docker/ui/entrypoint-ui.sh`).
 
+Both ports are published on the host's loopback only. Set `MAS_BIND_ADDRESS` (for example `0.0.0.0`)
+to reach the stack from another machine, on a network you trust.
+
 Docker setup in the context of the tutorials:
 [Tutorial 0](../docs/tutorials/00-environment-setup/README.md).
 
@@ -32,16 +35,32 @@ Every backend and cli container mounts two host folders and an optional read-onl
 
 | Container path | Env var (host path) | Purpose |
 |----------------|---------------------|---------|
-| `/workspace` | `MAS_WORKSPACE_MOUNT` (default: `..`) | `labs/`, `infra/`, project `.env` (optional `config.yaml`) |
+| `/workspace` | `MAS_WORKSPACE_MOUNT` (default: `..`) | `labs/`, `infra/`, the secret store `.mas/secrets` (optional `config.yaml`) |
 | `/data` | `MAS_DATA_MOUNT` (default: `./data`) | Trace cache, benchmark outputs, run artifacts |
-| `/root/.config/mas` | `MAS_XDG_CONFIG_MOUNT` (default: `$HOME/.config/mas`) | Read-only user config and infra fallback |
+| `/config/mas` (`XDG_CONFIG_HOME=/config`) | `MAS_XDG_CONFIG_MOUNT` (default: `$HOME/.config/mas`) | Read-only user config and infra fallback |
 
 Example `.env` for a custom project:
 
 ```bash
 MAS_WORKSPACE_MOUNT=/home/you/my-mas-project
 MAS_DATA_MOUNT=/home/you/mas-lab-data
-OPENAI_API_KEY=sk-...
+```
+
+API keys live in the file secret store `<workspace>/.mas/secrets` on the workspace mount, so they persist on the host:
+
+```bash
+docker compose run --rm -T cli mas-ctl secrets init
+printf %s "$OPENAI_API_KEY" | docker compose run --rm -T cli mas-ctl secrets set openai
+```
+
+`secrets set` reads the value from stdin. When the mounted workspace has no `config.yaml`, `labs/` or `mas.yaml`, the containers use the baked install tree as the workspace. The entrypoint then links that tree's store to the mounted one, so the keys still come from the host.
+
+The image has no `USER` and starts as root. The entrypoint runs the server and every `cli` command as the owner (uid and gid) of the mounted workspace, so the store directory and its files belong to you on the host, and the store accepts them in the container (it refuses files another user owns). A workspace owned by root keeps root. The data mount's top directories and `<data>/home` (the server's `HOME`) are given to the same user; the files under them are not.
+
+Upgrading from an older image, which ran as root: the files it wrote under the data mount still belong to root, and runs that write beside them fail with a permission error. Give them back once on the host:
+
+```bash
+sudo chown -R "$USER" docker/data      # or the folder MAS_DATA_MOUNT names
 ```
 
 `docker/data/` is the default data directory. Docker creates it automatically. Git ignores its contents; only `.gitkeep` is tracked.
@@ -85,7 +104,7 @@ Run `mas-lab init` on the host to update this shared user config. For a self-con
 
 | Variable | Default (container) | Purpose |
 |----------|---------------------|---------|
-| `OPENAI_API_KEY` | — | LLM API key in `docker/.env` (canonical; shell exports are ignored) |
+| (file store) | `<workspace>/.mas/secrets` | API keys. Set with `mas-ctl secrets set NAME` in the cli container (value on stdin) |
 | `MAS_WORKSPACE_ROOT` | `/workspace` | Project folder for `config.yaml` and the writable Workspace library |
 | `MAS_DATA_ROOT` | `/data` | Root for lab data |
 | `MAS_TRACE_CACHE` | `/data/trace-cache` | Benchmark trace cache |
@@ -93,12 +112,11 @@ Run `mas-lab init` on the host to update this shared user config. For a self-con
 | `MAS_LAB_ROOT` | `/workspace` (set it to `/data` to browse precalculated output, see above) | Directory whose `labs/` the controller's Experiment page reads |
 | `MAS_RUNS_ROOT` | `/data/runs` | Agent session folders |
 | `MAS_CONTROLLER_PORT` | `8090` | Controller HTTP port inside the container |
+| `MAS_BIND_ADDRESS` | `127.0.0.1` | Host address `docker compose` publishes both ports on |
 | `MAS_BACKEND_PORT` / `MAS_UI_PORT` | `8090` / `8080` | Host ports published by `docker compose` |
 | `VITE_API_BASE_URL` | `http://localhost:8090` | API URL injected into the UI (browser-side) |
 
-Put secrets in `docker/.env`. Git ignores it. A shell `export OPENAI_API_KEY=…` is not passed into containers. This avoids stale keys from another terminal or project. After editing `docker/.env`, run `task restart`. Never commit API keys.
-
-For one-off overrides (CI), use: `docker compose --env-file /path/to/secrets.env up`.
+The containers get only the variables `compose.yaml` lists under `environment:`; `docker/.env` holds non-secret values only. Keys come from the file store (see [secrets](../docs/references/secrets.md)).
 
 ## Run modes
 
@@ -147,7 +165,7 @@ docker compose run --rm backend mas-lab config
 
 1. Copy [`library-samples/sample-workspace/config.yaml`](../library-samples/sample-workspace/config.yaml)
    to your project root, or edit an existing copy under `MAS_WORKSPACE_MOUNT`.
-2. Put secrets in `docker/.env` or `/workspace/.env`.
+2. Put API keys in the file store: `printf %s "$KEY" | docker compose run --rm -T cli mas-ctl secrets set openai`.
 3. Restart: `task restart` from the repo root (rebuild + recreate both services).
 
 Check effective paths:

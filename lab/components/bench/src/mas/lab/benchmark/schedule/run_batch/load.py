@@ -69,6 +69,7 @@ def load_experiment(
             ManifestValidationError,
             validate_manifest,
         )
+        from mas.runtime.secrets import check_manifest
         from mas.runtime.spec.source import load_yaml_file
 
         raw = load_yaml_file(experiment_yaml)
@@ -92,6 +93,8 @@ def load_experiment(
         if pipeline_attachments:
             raw = merge_pipeline_attachments(raw, pipeline_attachments)
 
+        check_manifest(raw, source=str(experiment_yaml))
+        check_manifest(parse_step_overrides(step_overrides), source="--set")
         validate_manifest(
             raw,
             source=str(experiment_yaml),

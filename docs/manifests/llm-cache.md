@@ -226,7 +226,7 @@ mas-ctl chat "$AGENT" \
 
 ## Live provider (OpenAI)
 
-This needs `OPENAI_API_KEY`.
+This needs secret `openai` (`echo KEY | mas-ctl secrets set openai`).
 The bundled refs `standard:llm-cache` and `standard:llm-proxy-cached` leave `cache_path` unset.
 The runtime fills it with the user cache file `$XDG_CACHE_HOME/mas/llm_cache.json` (default `~/.cache/mas/llm_cache.json`).
 These refs read and write.

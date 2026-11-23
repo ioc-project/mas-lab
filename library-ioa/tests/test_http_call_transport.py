@@ -24,19 +24,29 @@ def test_call_transport_accepts_plain_http_on_an_internal_host_and_no_url() -> N
 
 
 def test_client_carries_headers_redirects_and_mcp_timeouts() -> None:
-    http = HttpCallTransport.from_params(
-        {"url": "https://mcp.example/mcp", "headers": {"Authorization": "Bearer x"}, "follow_redirects": True}
-    )
+    from secret_fakes import bound_secrets
 
-    async def grab() -> httpx.AsyncClient:
-        return http.aclient
+    with bound_secrets({"mcp": "x"}):
+        http = HttpCallTransport.from_params(
+            {
+                "url": "https://mcp.example/mcp",
+                "headers": {"Authorization": {"secret": {"name": "mcp", "prefix": "Bearer "}}},
+                "follow_redirects": True,
+            }
+        )
 
-    client = asyncio.run(grab())
-    assert client.headers["authorization"] == "Bearer x"
-    assert client.follow_redirects is True
-    assert (client.timeout.connect, client.timeout.read) == (30.0, 300.0)
-    assert http.client.headers["authorization"] == "Bearer x"
-    assert http.client is http.client
+        async def grab() -> httpx.AsyncClient:
+            return http.aclient
+
+        client = asyncio.run(grab())
+        # the header is set on each request, never kept on the client
+        assert "authorization" not in client.headers and "authorization" not in http.client.headers
+        assert client.follow_redirects is True
+        assert (client.timeout.connect, client.timeout.read) == (30.0, 300.0)
+        request = http.client.build_request("POST", "https://mcp.example/mcp")
+        http._headers_hook.apply(request)
+        assert request.headers["authorization"] == "Bearer x"
+        assert http.client is http.client
 
 
 def test_a_given_timeout_applies() -> None:
@@ -164,6 +174,27 @@ def test_http_layer_wrap_picks_the_call_transport_for_llm_and_tool() -> None:
 
 def test_redirects_are_not_followed_unless_the_row_asks() -> None:
     assert HttpCallTransport.from_params({"url": "https://x.example/v1"}).client.follow_redirects is False
+
+
+def test_a_cross_origin_redirect_is_refused_even_without_secret_headers() -> None:
+    from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+
+    transport = HttpCallTransport.from_params(
+        {"url": "https://mcp.example/mcp", "headers": {"X-Tenant": "lab"}, "follow_redirects": True}
+    )
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        if request.url.host == "mcp.example":
+            return httpx.Response(307, headers={"location": "https://elsewhere.example/mcp"})
+        return httpx.Response(200)
+
+    client = transport.client
+    client._transport = httpx.MockTransport(answer)
+    with pytest.raises(AgentCommError, match="refusing a redirect"):
+        client.post(transport.url, json={})
+    assert seen == ["https://mcp.example/mcp"]
 
 
 def test_a_client_whose_loop_is_gone_is_closed_not_leaked() -> None:

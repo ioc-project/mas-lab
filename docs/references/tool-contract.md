@@ -91,7 +91,7 @@ These fields say **where** the server lives. They do not say **what** the tool i
 | Field | Place |
 |-------|--------|
 | `url` / `endpoint`, `transport`, `command` / `args` / `env` / `cwd` | Infra tool server |
-| HTTP `headers` (secrets: `env:VAR`; omit when unused) | Infra tool server |
+| HTTP `headers` (secrets: `{secret: NAME}`; omit when unused) | Infra tool server |
 | Connection `timeout` | Infra tool server |
 | `follow_pagination` (flatten `nextCursor`; default `true`) | Infra tool server |
 | `cache_ttl_ms` / `cache_scope` (list-result cache policy) | Infra tool server |

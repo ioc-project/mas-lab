@@ -24,8 +24,9 @@ from mas.lab.controller.constants import LIBRARIES_DIR, MAS_LAB_ROOT
 from mas.lab.controller.deps import _manifest_store, get_manifest_store
 from mas.lab.controller.jobs import Job, JobStatus, _jobs
 from mas.lab.controller.routes import register_routes
-from mas.lab.controller.settings import ControllerSettings, is_loopback_host
+from mas.lab.controller.settings import ControllerSettings
 from mas.runtime import hostenv
+from mas.runtime.secrets import is_loopback_host
 from starlette.middleware.base import BaseHTTPMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -156,12 +157,20 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
     return application
 
 
-app = create_app()
+def served_app() -> FastAPI:
+    """The app ``uvicorn --factory`` serves (the Docker backend), an entry point like the daemon."""
+    from mas.lab.secret_host import SecretHostSettings
+    from mas.lab.workspace import WorkspaceConfig
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()
+    SecretHostSettings.from_workspace(WorkspaceConfig.load()).install_process()
+    return create_app()
 
 
 __all__ = [
-    "app",
     "create_app",
+    "served_app",
     "Job",
     "JobStatus",
     "LIBRARIES_DIR",

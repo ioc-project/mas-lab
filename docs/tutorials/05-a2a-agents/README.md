@@ -42,7 +42,7 @@ spec:
 | `protocol` | `a2a` selects the A2A transport for that route. |
 | `url` | Required. The remote agent endpoint. |
 | `usage` | `connect` consumes the peer; `listen` exposes a local A2A server; `[connect, listen]` does both. The old `use`, `deploy`, `use-and-deploy` still work and are deprecated. |
-| `headers` | Optional auth. Use `env:VAR`, never static secrets. |
+| `headers` | Optional auth. Write `{secret: NAME}` for a secret header, never a literal token. |
 
 The legacy `expose: true` reads as `usage: [connect, listen]`. Prefer `usage`.
 
@@ -73,7 +73,7 @@ mas-ctl serve \
   --infra-ref "$PWD/library-samples/infra/mixed-agents.infra.yaml"
 ```
 
-`mas-ctl serve` blocks and listens on port 9006. It starts without a key, but a request that reaches the LLM needs `OPENAI_API_KEY`.
+`mas-ctl serve` blocks and listens on port 9006. It starts without a key, but a request that reaches the LLM needs `{secret: openai}` (`echo KEY | mas-ctl secrets set openai`).
 In a second terminal, fetch the agent card:
 
 ```bash
@@ -165,7 +165,7 @@ Two callers with the same `contextId` share one turn queue: the second turn wait
 
 ## Step 6 — Test the remote agent directly
 
-With the Step 2 server running (both commands reach the LLM, so they need `OPENAI_API_KEY`):
+With the Step 2 server running (both commands reach the LLM, so they need `{secret: openai}`):
 
 ```bash
 a2a send -a http://127.0.0.1:9006 \

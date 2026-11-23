@@ -12,7 +12,6 @@
 
 ```text
 mas-lab telemetry [COMMAND] [ARGS]...
-mas-lab otel [COMMAND] [ARGS]...
 ```
 
 ## DESCRIPTION
@@ -20,8 +19,6 @@ mas-lab otel [COMMAND] [ARGS]...
 Library CLI component (entry point `mas.lab.cli.components`). There is no
 separate `mas-telemetry` binary. Commands call the same functions as the
 [pipeline YAML](../../pipelines/README.md).
-
-`mas-lab otel` is an alias of this group ([otel.md](otel.md)).
 
 When this component registers it **replaces** the core `mas-lab telemetry`
 stubs for `push` / `verify` / `dump` and **keeps** core inspection commands
@@ -41,7 +38,6 @@ stubs for `push` / `verify` / `dump` and **keeps** core inspection commands
 | `dump` | ClickHouse → JSONL | [dump](dump.md) |
 | `compare` | Span-file parity | [compare](compare.md) |
 | `kinds` | Registered native event kinds | [kinds](kinds.md) |
-| `list-apps` | Apps in ClickHouse `otel_traces` | [list-apps](list-apps.md) |
 
 Core inspection (owned by mas-lab, merged into this group):
 

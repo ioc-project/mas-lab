@@ -370,14 +370,15 @@ class PipedLLMProvider(Lifecycle):
     kind: str = ""
     provider_id: str = ""
     api_base: str = ""
-    api_key_env: str = ""
+    api_key: object = None
 
     def __post_init__(self) -> None:
         inner = self.inner
         self.kind = str(getattr(inner, "kind", None) or getattr(inner, "provider_id", None) or self.kind or "")
         self.provider_id = str(getattr(inner, "provider_id", None) or self.kind)
         self.api_base = str(getattr(inner, "api_base", None) or self.api_base or "")
-        self.api_key_env = str(getattr(inner, "api_key_env", None) or self.api_key_env or "")
+        inner_key = getattr(inner, "api_key", None)
+        self.api_key = inner_key if inner_key is not None else (self.api_key if self.api_key is not None else "")
         self._leaf = _ProviderCallEngine(
             inner=inner,
             api_base=self.api_base,

@@ -37,3 +37,18 @@ def test_upload_and_dataset_create(client):
         json={"kind": "dataset", "name": "up"},
     )
     assert created.status_code == 201, created.text
+
+
+@pytest.mark.parametrize("name", ["u.yaml.", "u.yaml ", "U.YAML", "u.Json.."])
+def test_a_manifest_name_in_another_spelling_is_checked_at_upload(client, name: str):
+    canary = "sk-S3CR3T-upload-canary"
+    body = f"apiVersion: mas/v1\nkind: Agent\nmetadata: {{name: t}}\nspec:\n  llm:\n    api_key: {canary}\n"
+    response = client.post("/api/uploads", files={"file": (name, body.encode(), "text/plain")})
+    assert response.status_code == 422
+    assert canary not in response.text
+    assert not [p for p in get_upload_store().root.iterdir() if canary.encode() in p.read_bytes()]
+
+
+def test_an_archive_upload_is_kept_unchecked(client):
+    response = client.post("/api/uploads", files={"file": ("run.tar.gz", b"\x1f\x8b binary", "application/gzip")})
+    assert response.status_code == 201

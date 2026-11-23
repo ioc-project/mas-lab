@@ -16,6 +16,12 @@ Sends each delegation as an A2A `SendMessage` to the server at `url`
 (`headers`, `timeout` are its other params) through the A2A SDK client,
 and returns the agent's reply. It honours the `task` intent only.
 
+A SecretRef header goes only to the origin (scheme, host, port) of `url`, over
+https unless the host is loopback. The agent card names the interface urls the
+client then posts to; a request to another origin is refused, naming both
+origins. List an origin the card may name in `allowed_origins` to send the
+header there too.
+
 `a2a` is this link, a transport, so it is only the bottom of a chain. The layer
 that frames A2A over another transport is a different id,
 [`a2a-framing`](a2a-framing.md), whose requests are MAS Lab's own JSON-RPC and

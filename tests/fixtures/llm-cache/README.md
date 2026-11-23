@@ -12,7 +12,7 @@ instead of calling a provider. An empty fixture is a CI failure, not a skip.
 Re-record after prompt, tool, or overlay changes (needs a live provider):
 
 ```bash
-# from repo root, with OPENAI_API_KEY set
+# from repo root, after `echo KEY | mas-ctl secrets set openai`
 python scripts/record_ci_llm_cache.py
 ```
 

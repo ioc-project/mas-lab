@@ -18,8 +18,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from mas.runtime import hostenv
 from mas.runtime.boundary.related_state import RelatedStateRef
+from mas.runtime.secrets import child_env
 
 
 class GitWorktreeRelatedState:
@@ -40,10 +40,9 @@ class GitWorktreeRelatedState:
                 locator=str(self.root),
                 adapter="content-hash",
             )
-        env = hostenv.snapshot()
-        env["GIT_INDEX_FILE"] = str(self.root / ".git" / "mas-lab-index")
-        _git(self.root, "add", "-A", env=env)
-        tree = _git(self.root, "write-tree", env=env).strip()
+        index = {"GIT_INDEX_FILE": str(self.root / ".git" / "mas-lab-index")}
+        _git(self.root, "add", "-A", extra=index)
+        tree = _git(self.root, "write-tree", extra=index).strip()
         commit = _git(
             self.root,
             "-c",
@@ -54,7 +53,7 @@ class GitWorktreeRelatedState:
             tree,
             "-m",
             f"mas-related-state {session_id}",
-            env=env,
+            extra=index,
         ).strip()
         _git(self.root, "update-ref", f"refs/mas-lab/{session_id}/{commit[:12]}", commit)
         return RelatedStateRef(
@@ -70,13 +69,14 @@ class GitWorktreeRelatedState:
             _git(self.root, "clean", "-fd")
 
 
-def _git(root: Path, *args: str, env: dict[str, str] | None = None) -> str:
+def _git(root: Path, *args: str, extra: dict[str, str] | None = None) -> str:
+    """Run git with the child allowlist plus *extra*, never the process's environment."""
     proc = subprocess.run(
         ["git", "-C", str(root), *args],
         check=True,
         capture_output=True,
         text=True,
-        env=env,
+        env=child_env(extra),
     )
     return proc.stdout
 

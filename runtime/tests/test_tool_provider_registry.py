@@ -337,6 +337,39 @@ def test_discovery_failure_does_not_fall_back_to_local():
         provider.list_tools()
 
 
+def test_a_discovery_failure_is_logged_and_refused_without_the_error_body_or_traceback(caplog):
+    # kills: the raw provider error (an HTTP response body echoing a credential) logged with its traceback
+    import logging
+
+    import httpx
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
+
+    canary = "sk-canary-Zq81"
+    request = httpx.Request("POST", f"https://tools.example/mcp?token={canary}")
+    response = httpx.Response(401, json={"error": {"message": f"bad token {canary}"}}, request=request)
+
+    class _Remote:
+        provider_name = "search-remote"
+        tools_claim = "*"
+        origin = "external"
+
+        def discover_tools(self, *, ctx=None):
+            raise httpx.HTTPStatusError(f"bad token {canary} for {request.url}", request=request, response=response)
+
+        def list_tools(self, *, ctx=None):
+            return self.discover_tools(ctx=ctx)
+
+        def call_tool(self, tool_name, arguments, *, ctx=None, user=""):
+            return {}
+
+    provider = ManifestToolProvider(overlay_providers=[_Remote()])
+    with caplog.at_level(logging.DEBUG), pytest.raises(RuntimeError, match="discovery failed") as raised:
+        provider.list_tools()
+    assert canary not in str(raised.value)
+    assert str(raised.value).endswith("HTTPStatusError: HTTP 401")
+    assert all(canary not in r.getMessage() and r.exc_info is None for r in caplog.records)
+
+
 async def test_star_claim_queries_discover_before_routing():
     from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
 
@@ -471,7 +504,7 @@ def test_apply_tool_server_defaults_fills_unset_connection_fields():
             "timeout": 30,
             "follow_pagination": True,
             "cache_scope": "private",
-            "headers": {"Authorization": "env:MCP_AUTH_HEADER"},
+            "headers": {"Authorization": {"secret": "mcp-upstream"}},
         }
     ]
     filled = apply_tool_server_defaults(
@@ -481,7 +514,23 @@ def test_apply_tool_server_defaults_fills_unset_connection_fields():
     assert filled["url"] == "http://127.0.0.1:9001/mcp"
     assert filled["timeout"] == 30
     assert filled["follow_pagination"] is True
-    assert filled["headers"] == {"Authorization": "env:MCP_AUTH_HEADER"}
+    assert filled["headers"] == {"Authorization": {"secret": "mcp-upstream"}}
+
+
+def test_apply_tool_server_defaults_refuses_env_header_strings():
+    from mas.runtime.registry.tool_provider_registry import apply_tool_server_defaults
+    from mas.runtime.secrets.errors import SecretRefError
+
+    with pytest.raises(SecretRefError, match="env:"):
+        apply_tool_server_defaults(
+            {"name": "localhost-mcp-tools", "kind": "mcp", "tools": "*"},
+            [
+                {
+                    "id": "localhost-mcp-tools",
+                    "headers": {"Authorization": "env:MCP_AUTH_HEADER"},
+                }
+            ],
+        )
 
 
 def test_apply_tool_server_defaults_keeps_inlined_overlay_url():

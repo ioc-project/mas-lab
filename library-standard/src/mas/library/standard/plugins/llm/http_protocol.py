@@ -10,11 +10,21 @@ from typing import Any, Callable
 
 import httpx
 from mas.library.standard.lib.stack.call import LayerLifecycle
-from mas.library.standard.plugins.llm.http import arequest_once, resolve_ssl_verify
+from mas.library.standard.lib.tls import resolve_ssl_verify
+from mas.library.standard.plugins.llm.http import arequest_once
 from mas.library.standard.plugins.llm.structured import apply_structured_result, schema_from_format
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, coerce_reasoning_settings
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
-from mas.runtime.reliability.classify import classify_llm_failure, classify_llm_http_error
+from mas.runtime.reliability.classify import (
+    classify_llm_failure,
+    classify_llm_http_error,
+    safe_exception_text,
+    shown_urls,
+)
+from mas.runtime.secrets.errors import SecretMissing, SecretRefError
+from mas.runtime.secrets.ref import SecretRef, parse_secret_ref
+from mas.runtime.secrets.resolver import SecretResolver, current_resolver
+from mas.runtime.secrets.transport import PlainHttpRefused, httpx_client_kwargs_for, reveal_headers_for
 
 logger = logging.getLogger(__name__)
 
@@ -153,15 +163,15 @@ class HttpLlmProtocol(LayerLifecycle):
     provider_id = ""
     kind = ""
     default_api_base = ""
-    default_api_key_env = ""
+    default_secret: SecretRef | None = None
     default_timeout = 120.0
 
     def __init__(
         self,
         *,
         api_base: str | None = None,
-        api_key: str | None = None,
-        api_key_env: str | None = None,
+        api_key: SecretRef | dict[str, Any] | None = None,
+        secret_resolver: SecretResolver | None = None,
         llm_proxy: dict[str, Any] | None = None,
         stream: bool = False,
         reasoning_effort: str | None = None,
@@ -173,8 +183,8 @@ class HttpLlmProtocol(LayerLifecycle):
     ) -> None:
         super().__init__()
         self.api_base = api_base or self.default_api_base
-        self.api_key = str(api_key).strip() if api_key else ""
-        self.api_key_env = api_key_env or self.default_api_key_env
+        self.api_key = self._coerce_api_key(api_key)
+        self._secret_resolver = secret_resolver
         self.llm_proxy = llm_proxy
         self.stream = stream
         self.reasoning = coerce_reasoning_settings(reasoning, effort=reasoning_effort)
@@ -183,6 +193,22 @@ class HttpLlmProtocol(LayerLifecycle):
         self.http_timeout = http_timeout
         self.inner = inner
         self._aclient: httpx.AsyncClient | None = None
+
+    def _coerce_api_key(self, api_key: SecretRef | dict[str, Any] | None) -> SecretRef | None:
+        """The leaf's SecretRef; absent is the class's default secret, only when ``api_base`` is the class's own
+        default endpoint (never sent to another host)."""
+        if api_key is None or api_key == "":
+            from mas.runtime.registry.llm_provider_registry import default_secret_for
+
+            return default_secret_for(type(self), self.api_base)
+        if isinstance(api_key, str):
+            raise SecretRefError(
+                "api_key must be a SecretRef object, not a string. "
+                "Write {secret: NAME} or {secret: {name: NAME, key: value}}."
+            )
+        if isinstance(api_key, SecretRef):
+            return api_key
+        return parse_secret_ref(api_key, field="api_key")
 
     def protocol_params(self) -> dict[str, Any]:
         """Flat proxy fields, plus nested ``proxy`` when the spec kept that shape."""
@@ -203,7 +229,11 @@ class HttpLlmProtocol(LayerLifecycle):
         if self.inner is not None:
             return self.inner.aclient
         if self._aclient is None:
-            self._aclient = httpx.AsyncClient(timeout=self._timeout(), verify=resolve_ssl_verify(self.llm_proxy))
+            self._aclient = httpx.AsyncClient(
+                timeout=self._timeout(),
+                verify=resolve_ssl_verify(self.llm_proxy),
+                **httpx_client_kwargs_for(self.api_base),
+            )
         return self._aclient
 
     async def _adiscard_client_after_transport_failure(self, exc: BaseException) -> None:
@@ -220,11 +250,12 @@ class HttpLlmProtocol(LayerLifecycle):
     async def _areraise_stream_failure(self, exc: BaseException, *, emitted_any: bool) -> None:
         await self._adiscard_client_after_transport_failure(exc)
         if emitted_any:
+            classified = classify_llm_failure(exc)
             raise ClassifiedFailure(
-                "stream failed after output was already shown",
+                f"stream failed after output was already shown ({classified.code})",
                 failure_class=FailureClass.APPLICATION,
                 code="STREAM_PARTIAL",
-            ) from exc
+            ) from None
         raise exc
 
     @classmethod
@@ -261,9 +292,9 @@ class HttpLlmProtocol(LayerLifecycle):
                 break
         return cls(
             api_base=str(proxy.get("api_base") or spec.get("api_base") or spec.get("url") or cls.default_api_base),
-            api_key=_secret(spec, proxy, llm_proxy if isinstance(llm_proxy, dict) else None),
-            api_key_env=str(proxy.get("api_key_env") or spec.get("api_key_env") or cls.default_api_key_env),
-            llm_proxy=_without_secret(llm_proxy if isinstance(llm_proxy, dict) else spec),
+            api_key=_secret_ref(spec, proxy, llm_proxy if isinstance(llm_proxy, dict) else None),
+            secret_resolver=spec.get("secret_resolver"),
+            llm_proxy=llm_proxy if isinstance(llm_proxy, dict) else spec,
             stream=bool(spec.get("stream", False)),
             reasoning=spec.get("reasoning"),
             reasoning_effort=str(spec["reasoning_effort"]) if spec.get("reasoning_effort") else None,
@@ -281,12 +312,37 @@ class HttpLlmProtocol(LayerLifecycle):
         call = {key: value for key, value in payload.items() if key != "_result"}
         return _provider_result_return(io, payload, await self.achat_completion(**call))
 
-    def _api_key(self, api_key: str | None) -> str:
-        key = api_key if api_key is not None else self.api_key
-        if not str(key or "").strip():
-            env_name = self.api_key_env or "api_key_env"
-            raise RuntimeError(f"Missing API key for live LLM: set {env_name} in the environment.")
-        return str(key)
+    def _auth_header(self) -> tuple[str, str]:
+        """``(header name, value prefix)`` the key travels in."""
+        return "Authorization", "Bearer "
+
+    def _key_headers(self) -> dict[str, str]:
+        """The auth header for this request, the key revealed here (none while an optional key is not set).
+
+        A key goes only over https or to a loopback host; otherwise the call fails and nothing is sent.
+        """
+        ref = self.api_key
+        if ref is None:
+            raise RuntimeError(
+                f"Missing API key for live LLM at {shown_urls(self.api_base)!r}: set api_key to a SecretRef "
+                "({secret: {name: NAME, optional: true}} for a server that may take none); a default "
+                "secret is only sent to the provider's own endpoint."
+            )
+        name, prefix = self._auth_header()
+        try:
+            revealed = reveal_headers_for(
+                self.api_base,
+                {name: ref},
+                what="API key",
+                resolver=self._secret_resolver or current_resolver(),
+            )
+        except PlainHttpRefused as exc:
+            raise ClassifiedFailure(
+                f"{self.kind or 'llm'} layer: {exc}", failure_class=FailureClass.FATAL, code="PLAIN_HTTP_KEY"
+            ) from None
+        except SecretMissing as exc:
+            raise RuntimeError(f"Missing API key for live LLM: {exc}") from exc
+        return {name: prefix + revealed[name]} if name in revealed else {}
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(kind={self.kind!r}, api_base={self.api_base!r})"
@@ -294,30 +350,46 @@ class HttpLlmProtocol(LayerLifecycle):
     async def achat_completion(self, **kwargs: Any) -> dict[str, Any]:
         try:
             return await self._complete(**kwargs)
-        except ClassifiedFailure:
+        except ClassifiedFailure as failure:
+            # A provider exception (its response, url and body) never travels with the failure.
+            failure.__cause__ = failure.__context__ = None
             raise
         except Exception as exc:
-            logger.debug("%s LLM call failed", self.kind or "protocol", exc_info=True)
+            logger.debug("%s LLM call failed: %s", self.kind or "protocol", safe_exception_text(exc))
             classified = classify_llm_failure(exc)
-            raise ClassifiedFailure(
+            failure = ClassifiedFailure(
                 classify_llm_http_error(exc),
                 failure_class=classified.failure_class,
                 code=classified.code,
                 retry_after_s=classified.retry_after_s,
-            ) from exc
+            )
+        raise failure
 
     async def _complete(self, **kwargs: Any) -> dict[str, Any]:
-        key = self._api_key(kwargs.get("api_key"))
         use_stream = self.stream if kwargs.get("stream") is None else bool(kwargs.get("stream"))
         settings = coerce_reasoning_settings(
             kwargs["reasoning"] if kwargs.get("reasoning") is not None else self.reasoning,
             effort=kwargs.get("reasoning_effort"),
         )
-        call = dict(kwargs)
-        call["api_key"] = key
-        call["stream"] = use_stream
-        call["reasoning"] = settings
-        return await self._apost_chat(**_post_kwargs(call))
+        return await self._apost_chat(
+            model=kwargs.get("model") or "",
+            messages=list(kwargs.get("messages") or []),
+            tools=kwargs.get("tools"),
+            temperature=0.7 if kwargs.get("temperature") is None else kwargs["temperature"],
+            max_tokens=kwargs.get("max_tokens"),
+            max_completion_tokens=kwargs.get("max_completion_tokens"),
+            stream=use_stream,
+            on_stream_chunk=kwargs.get("on_stream_chunk"),
+            reasoning=settings,
+            extra_body=kwargs.get("extra_body"),
+            extra_headers=kwargs.get("extra_headers"),
+            extra_query=kwargs.get("extra_query"),
+            sampling=kwargs.get("sampling"),
+            tool_choice=kwargs.get("tool_choice"),
+            stream_options=kwargs.get("stream_options"),
+            response_format=kwargs.get("response_format"),
+            **({"reasoning_stream": kwargs["reasoning_stream"]} if kwargs.get("reasoning_stream") is not None else {}),
+        )
 
     def _build_chat_request(self, **kwargs: Any) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         raise NotImplementedError
@@ -389,39 +461,12 @@ async def araise_for_status(resp: httpx.Response) -> None:
     resp.raise_for_status()
 
 
-def _secret(*sources: dict[str, Any] | None) -> str:
+def _secret_ref(*sources: dict[str, Any] | None) -> SecretRef | None:
     for src in sources:
-        if isinstance(src, dict) and str(src.get("api_key") or "").strip():
-            return str(src["api_key"]).strip()
-    return ""
-
-
-def _without_secret(raw: Any) -> Any:
-    if not isinstance(raw, dict) or "api_key" not in raw:
-        return raw
-    return {key: value for key, value in raw.items() if key != "api_key"}
-
-
-def _post_kwargs(call: dict[str, Any]) -> dict[str, Any]:
-    out = {
-        "model": call.get("model") or "",
-        "messages": list(call.get("messages") or []),
-        "tools": call.get("tools"),
-        "temperature": 0.7 if call.get("temperature") is None else call["temperature"],
-        "max_tokens": call.get("max_tokens"),
-        "max_completion_tokens": call.get("max_completion_tokens"),
-        "api_key": call["api_key"],
-        "stream": bool(call.get("stream")),
-        "on_stream_chunk": call.get("on_stream_chunk"),
-        "reasoning": call["reasoning"],
-        "extra_body": call.get("extra_body"),
-        "extra_headers": call.get("extra_headers"),
-        "extra_query": call.get("extra_query"),
-        "sampling": call.get("sampling"),
-        "tool_choice": call.get("tool_choice"),
-        "stream_options": call.get("stream_options"),
-        "response_format": call.get("response_format"),
-    }
-    if call.get("reasoning_stream") is not None:
-        out["reasoning_stream"] = call["reasoning_stream"]
-    return out
+        if not isinstance(src, dict) or src.get("api_key") in (None, ""):
+            continue
+        raw = src["api_key"]
+        if isinstance(raw, SecretRef):
+            return raw
+        return parse_secret_ref(raw, field="api_key")
+    return None

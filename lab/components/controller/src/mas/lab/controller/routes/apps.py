@@ -7,18 +7,26 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import yaml
 from fastapi import APIRouter, HTTPException
-
 from mas.ctl.overlay.canvas import apply_ui_canvas_to_yaml, persist_ui_canvas_yaml
 from mas.lab.controller.lab_registry import LabRegistry
+from mas.lab.controller.manifest_validation import refuse_secret_values
 from mas.lab.controller.models import SaveMASResourceRequest
-from mas.lab.controller.routes._api import deps, jobs, LIBRARIES_DIR, validate_pipeline_yaml
+from mas.lab.controller.routes._api import deps
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 router = APIRouter()
 
 
-def _persist_ui_canvas(app_dir: Path, mas_yaml: str, agents: dict[str, str], mas_name: str) -> tuple[str, dict[str, str]]:
+def _refuse_secrets_in_resource(mas_yaml: str, agents: dict[str, str]) -> None:
+    refuse_secret_values(mas_yaml, source="mas.yaml")
+    for agent_name, agent_content in (agents or {}).items():
+        refuse_secret_values(agent_content, source=f"agents/{agent_name}")
+
+
+def _persist_ui_canvas(
+    app_dir: Path, mas_yaml: str, agents: dict[str, str], mas_name: str
+) -> tuple[str, dict[str, str]]:
     """Move canvas ``x-*`` fields from MAS/agent YAML onto a layout-only Overlay."""
     return persist_ui_canvas_yaml(app_dir, mas_yaml, agents, mas_name=mas_name)
 
@@ -61,6 +69,7 @@ async def save_mas_resource(library_name: str, req: SaveMASResourceRequest):
             detail=f"MAS resource '{req.mas_name}' already exists",
         )
 
+    _refuse_secrets_in_resource(req.mas_yaml, req.agents)
     result = _write_mas_resource(apps_dir, req.mas_name, req.mas_yaml, req.agents)
     return result
 
@@ -78,6 +87,7 @@ async def update_mas_resource(library_name: str, old_mas_name: str, req: SaveMAS
             detail=f"MAS resource '{old_mas_name}' not found",
         )
 
+    _refuse_secrets_in_resource(req.mas_yaml, req.agents)
     renaming = req.mas_name != old_mas_name
     if renaming:
         new_app_dir = apps_dir / req.mas_name
@@ -109,9 +119,7 @@ async def update_mas_resource(library_name: str, old_mas_name: str, req: SaveMAS
     return {
         "mas_name": req.mas_name,
         "mas_file": f"apps/{req.mas_name}/mas.yaml",
-        "agents": sorted(
-            f"{a}.yaml" if not a.endswith(".yaml") else a for a in agents
-        ),
+        "agents": sorted(f"{a}.yaml" if not a.endswith(".yaml") else a for a in agents),
     }
 
 
@@ -143,7 +151,7 @@ async def get_mas_resource(library_name: str, mas_name: str):
         registry = LabRegistry._ephemeral()
     target_name = mas_name
     try:
-        mas_doc = yaml.safe_load(mas_yaml) or {}
+        mas_doc = safe_yaml_load(mas_yaml) or {}
         if isinstance(mas_doc, dict):
             target_name = str((mas_doc.get("metadata") or {}).get("name") or mas_name).strip() or mas_name
     except Exception:
@@ -157,9 +165,7 @@ async def get_mas_resource(library_name: str, mas_name: str):
                 continue
             seen.add(key)
             matched.append((path, doc))
-    mas_yaml, agents, overlay_path = apply_ui_canvas_to_yaml(
-        mas_dir, mas_yaml, agents, overlays=matched
-    )
+    mas_yaml, agents, overlay_path = apply_ui_canvas_to_yaml(mas_dir, mas_yaml, agents, overlays=matched)
     body: dict = {
         "mas_name": mas_name,
         "mas_yaml": mas_yaml,

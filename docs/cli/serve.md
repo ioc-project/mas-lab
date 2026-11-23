@@ -19,9 +19,10 @@ mas-lab serve --host 127.0.0.1 --port 8090
 | `--host` | Bind address. Loopback stays CORS-permissive; non-loopback binds send no CORS headers unless `--cors-origin` is set. |
 | `--port` | Listen port (default 8090). |
 | `--cors-origin URL` | Repeatable. Allowed browser origin for a remote UI. |
-| `--token-file PATH` | Bearer token. Clients send `Authorization: Bearer`. None = open (warning on non-loopback). |
+| `--token-file PATH` | Bearer token. Clients send `Authorization: Bearer`. None = open (loopback only). |
 | `--state-dir PATH` | Persist jobs, runs, and uploads (SQLite + upload files). Default: the controller state directory. |
 | `--workspace PATH` | Project folder for `config.yaml`, labs, libraries, and the writable Workspace library. Sets `MAS_WORKSPACE_ROOT`. An explicit `mas_lab.labs_search_paths` in that folder makes the catalog exclusive. |
+| `--secrets-dir DIR` / `--secret-store file\|env` | Not flags of `serve`: give them before the command, `mas-lab --secrets-dir DIR serve`. They select the secret store the controller resolves `{secret: NAME}` references against. |
 
 Pin a lab or a workshop tree:
 
@@ -42,6 +43,8 @@ mas-lab serve --host 0.0.0.0 --port 8090 \
 
 Detached daemon: `mas-lab control start` (default port **9000**). Workers:
 `mas-lab worker`.
+
+The daemon process itself, `python -m mas.lab.controller`, takes `--port`, `--host`, `--socket`, `--no-http`, `--cors-origin`, `--token-file`, `--state-dir`, `--workspace`, `--secrets-dir` and `--secret-store`. Its HTTP app is a factory: serve it with `uvicorn --factory mas.lab.controller.fastapi_app:served_app` (the Docker backend does). There is no module-level `app`. The daemon serves one secret store, the one it started with; a `mas-lab benchmark run` that selects another store is refused (restart the controller with `mas-lab control stop`).
 
 Docker: `docker compose up` publishes the API on http://localhost:8090 and the
 studio on http://localhost:8080. See [Web UI](../ui/index.md).
@@ -64,6 +67,14 @@ an **item id** (`name` or `name@version`). The UI never derives an id from
 lab-local libraries are separate library scopes with `origin: lab`. Writes go
 through `KindLayout`; runs persist under `--state-dir`; artifacts are read by
 opaque id.
+
+---
+
+## Trust boundary
+
+The HTTP API is a local-trust boundary: a caller who can start a job acts as
+the user that runs the controller. It binds `127.0.0.1` by default; a
+non-loopback `--host` is refused unless `--token-file` is given.
 
 ---
 

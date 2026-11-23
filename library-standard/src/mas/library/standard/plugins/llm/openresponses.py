@@ -29,6 +29,8 @@ from mas.library.standard.plugins.llm.thinking import thinking_off, wants_thinki
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
+from mas.runtime.reliability.classify import provider_failure
+from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +46,7 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
     provider_id = "openresponses"
     kind = "openresponses"
     default_api_base = "https://api.openai.com/v1"
-    default_api_key_env = "OPENAI_API_KEY"
+    default_secret = SecretRef(name="openresponses")
 
     def _build_chat_request(
         self,
@@ -54,7 +56,6 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
-        api_key: str,
         reasoning: ReasoningSettings,
         max_completion_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
@@ -108,7 +109,7 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
         if extra:
             payload.update(extra)
         payload.pop("response_format", None)
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        headers = {**self._key_headers(), "Content-Type": "application/json"}
         if extra_headers:
             headers.update({str(k): str(v) for k, v in extra_headers.items()})
         query = {str(k): v for k, v in extra_query.items()} if extra_query else None
@@ -373,22 +374,13 @@ def _message(data: dict[str, Any], reasoning: ReasoningSettings) -> dict[str, An
     return sanitize_assistant_message(message, exclude=reasoning.exclude)
 
 
-_TRANSIENT_CODES = frozenset({"server_error", "rate_limit_exceeded", "overloaded", "timeout"})
-
-
 def _response_error(err: dict[str, Any]) -> ClassifiedFailure:
-    code = str(err.get("code") or "response_failed")
-    return ClassifiedFailure(
-        f"Open Responses call failed: {code}: {err.get('message') or 'no detail'}",
-        failure_class=FailureClass.TRANSIENT if code in _TRANSIENT_CODES else FailureClass.APPLICATION,
-        code=code,
-    )
+    return provider_failure("Open Responses", error=err)
 
 
 def _stream_error(event: dict[str, Any]) -> ClassifiedFailure:
     """An in-stream ``error`` event: the HTTP status was 200, the answer is not usable."""
-    err = event.get("error") if isinstance(event.get("error"), dict) else event
-    return _response_error({"code": err.get("code"), "message": err.get("message")})
+    return _response_error(event.get("error") if isinstance(event.get("error"), dict) else event)
 
 
 def _sse_event(raw_line: Any) -> dict[str, Any] | None:

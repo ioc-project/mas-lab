@@ -11,7 +11,7 @@ metadata:
 spec:
   proxy:
     api_base: __API_BASE_URL__
-    api_key_env: __API_KEY_ENV__
+    api_key: {secret: openai}
 
   models:
     mappings:

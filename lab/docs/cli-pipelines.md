@@ -43,8 +43,6 @@ Man pages (one page per command, grouped by owner):
 | `mas-lab kg dump` | `kg:neo4j-dump` | `library-kg/pipelines/neo4j-dump.yaml` | `neo4j_dump` |
 | `mas-lab plot multilevel-trajectory` | `kg:native-plots` | `library-kg/pipelines/native-plots.yaml` | `plot_multilevel_trajectory`, `plot_multilevel_trajectory_kg` |
 
-`mas-lab otel …` is an alias of `mas-lab telemetry …` (same Click group).
-
 Standalone pipeline run:
 
 ```bash
@@ -59,8 +57,7 @@ These stay in the same CLI groups but do not wrap a `kind: Pipeline` file:
 |---------|----------------|
 | `mas-lab telemetry inspect` | Span-file summary (no validation) |
 | `mas-lab telemetry kinds` | Native event kinds with a registered span handler |
-| `mas-lab telemetry list-apps` | Apps in ClickHouse `otel_traces` |
-| `mas-lab telemetry show` / `apps` / `sessions` / `traces` | Native trace inspection (core stub; kept when the library group replaces `push`/`dump`) |
+| `mas-lab telemetry show` / `apps` / `sessions` / `traces` | Native trace inspection and ClickHouse listings (core) |
 | `mas-lab plot trajectory` | Delegation-flow diagram from `events.jsonl` |
 | `mas-lab plot communication-flow` | Agent-to-agent routing graph |
 | `mas-lab plot list` | Discover generated plot artefacts |

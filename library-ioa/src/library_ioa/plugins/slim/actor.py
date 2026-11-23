@@ -9,9 +9,8 @@ import concurrent.futures
 import logging
 import threading
 from collections.abc import Coroutine
-from typing import Any
+from typing import Any, NoReturn
 
-from mas.library.standard.lib.comm.text import safe_text
 from mas.runtime.aio import new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
 
@@ -22,6 +21,57 @@ logger = logging.getLogger(__name__)
 
 # Read failures in a row (after the backoff between them) before a link drops its connection and reconnects.
 MAX_READ_ERRORS = 5
+
+
+# What the bindings say when a read found nothing before its deadline (slim-bindings 2.2: a ReceiveError).
+IDLE_READ_MESSAGES = ("listen_for_session timed out", "receive timeout")
+
+_BINDING_MESSAGES = {
+    "idle_timeout": "slim read timed out",
+    "session_closed": "slim session closed",
+    "retries_exhausted": "slim session retries exhausted",
+    "start": "slim link start failed",
+    "error": "slim binding error",
+}
+
+
+class SlimBindingError(AgentCommError):
+    """A failure inside slim-bindings, reported by ``kind`` with a fixed message.
+
+    The bindings may echo their arguments (the shared secret among them) in their own errors, so
+    neither their text nor the exception object leaves the place where it is caught.
+    """
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(_BINDING_MESSAGES[kind])
+        self.kind = kind
+
+
+def binding_failure(exc: BaseException, sb: Any = None, *, start: bool = False) -> SlimBindingError:
+    """Classify a binding exception into a ``SlimBindingError``. Only the exception type name is logged."""
+    text = str(exc).lower()
+    if start:
+        kind = "start"
+    elif (sb is not None and isinstance(exc, sb.SlimError.Timeout)) or any(m in text for m in IDLE_READ_MESSAGES):
+        kind = "idle_timeout"
+    elif "session closed" in text:
+        kind = "session_closed"
+    elif "retries exhausted" in text:
+        kind = "retries_exhausted"
+    else:
+        kind = "error"
+    if kind in {"start", "error"}:
+        logger.warning("%s (%s)", _BINDING_MESSAGES[kind], type(exc).__name__)
+    return SlimBindingError(kind)
+
+
+def raise_clean(error: AgentCommError) -> NoReturn:
+    """Raise ``error`` with no cause and no context, so no binding exception rides along the chain."""
+    try:
+        raise error
+    finally:
+        error.__cause__ = None
+        error.__context__ = None
 
 
 def _service_id(name: str) -> str:
@@ -152,12 +202,12 @@ class ConnectionActor:
         except concurrent.futures.TimeoutError:
             self._abort_start()
             raise AgentCommError("slim link did not start") from None
-        except (AttributeError, TypeError):
+        except AgentCommError:
             self._abort_start()
             raise
         except Exception as exc:
             self._abort_start()
-            raise AgentCommError(safe_text(exc) or "slim link start failed") from exc
+            raise_clean(binding_failure(exc, self._sb, start=True))
 
     def _abort_start(self) -> None:
         self.failed = True
@@ -190,7 +240,7 @@ class ConnectionActor:
         except (asyncio.CancelledError, concurrent.futures.CancelledError):
             raise AgentCommError("slim link is stopped") from None
         except Exception as exc:
-            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
+            raise_clean(binding_failure(exc, self._sb))
 
     async def asubmit(self, coro: Coroutine[Any, Any, Any], *, timeout: float) -> Any:
         """``submit`` for a caller that awaits: run ``coro`` on the SLIM loop and wait at most ``timeout`` seconds.
@@ -213,6 +263,10 @@ class ConnectionActor:
             raise AgentCommError("slim link call timed out") from None
         except concurrent.futures.CancelledError:
             raise AgentCommError("slim link is stopped") from None
+        except AgentCommError:
+            raise
+        except Exception as exc:
+            raise_clean(binding_failure(exc, self._sb))
 
     def spawn(self, coro: Coroutine[Any, Any, Any]) -> None:
         loop = self._loop
@@ -307,10 +361,8 @@ class ConnectionActor:
             raise
         except asyncio.CancelledError:
             raise
-        except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
-            raise
         except Exception as exc:
-            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
+            raise_clean(binding_failure(exc, self._sb))
 
     async def _ashutdown(self) -> None:
         self._stopping = True

@@ -36,7 +36,7 @@ else `gpt-4o`.
 | `--json` | Output results as JSON instead of a human-readable table. |
 | `--overlay` | Label for display (e.g. inject-C7-backend). |
 | `--engine` | Metric computation engine: mce-v1. |
-| `--api-key-env` | Name of the environment variable holding the API key (default: OPENAI_API_KEY). |
+| `--api-base` | Judge API base from workspace infra. The key is `{secret: openai}`. |
 | `--recursive` | Score every events.jsonl under SOURCE when SOURCE is a directory. |
 
 ## SEE ALSO

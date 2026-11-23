@@ -28,10 +28,6 @@ verify = [
   "pyyaml>=6.0.0",
   "jsonschema>=4.0.0",
 ]
-# Dump spans back out of a ClickHouse otel_traces table
-clickhouse = [
-  "clickhouse-connect>=0.7",
-]
 # Benchmark-pipeline adapters (PipelineStep wrappers in mas.library.telemetry.bench)
 # + the `mas-lab telemetry` CLI component (mas.library.telemetry.lab_cli).
 # Discovered via the entry-point groups below.
@@ -62,7 +58,7 @@ dev = [
 # NO_OPTIONAL=true on `task ci`/`task install-dev`) for a faster,
 # dependency-light loop.
 all = [
-  "mas-lab-library-telemetry[dev,bench,clickhouse]",
+  "mas-lab-library-telemetry[dev,bench]",
 ]
 
 # No standalone console script — the library exposes its functionality as
@@ -99,7 +95,7 @@ packages = ["src/mas"]
 # mas.runtime.package_refs.resolve_path_ref).
 telemetry = "mas.library.telemetry"
 
-# `mas-lab telemetry` (and legacy `mas-lab otel`) — thin CLI wrapper. Replaces
+# `mas-lab telemetry` — thin CLI wrapper. Replaces
 # the one previously provided by the deleted mas-lab-telemetry package.
 [project.entry-points."mas.lab.cli.components"]
 telemetry = "mas.library.telemetry.lab_cli:TelemetryCliComponent"

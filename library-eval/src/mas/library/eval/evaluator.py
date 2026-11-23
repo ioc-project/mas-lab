@@ -29,6 +29,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, NotRequired, Optional, Sequence, TypedDict
 
+from mas.library.eval.errors import judge_error_text
+
 if TYPE_CHECKING:
     from mas.library.eval.metrics import EvalMetric, MetricContext, RunInputs
 
@@ -126,14 +128,14 @@ class EvalProvider:
             try:
                 score = await metric.compute(inputs, ctx)
             except Exception as exc:
-                score = {"value": None, "reasoning": "", "error": str(exc)}
+                score = {"value": None, "reasoning": "", "error": judge_error_text(exc)}
             results[metric.metric_id] = normalize_score(score)
         for _key, family in grouped.items():
             cls = type(family[0])
             try:
                 batch = await cls.compute_batch(family, inputs, ctx)
             except Exception as exc:
-                batch = {m.metric_id: {"value": None, "reasoning": "", "error": str(exc)} for m in family}
+                batch = {m.metric_id: {"value": None, "reasoning": "", "error": judge_error_text(exc)} for m in family}
             for mid, score in batch.items():
                 results[mid] = normalize_score(score)
         return results

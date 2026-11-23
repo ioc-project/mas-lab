@@ -29,12 +29,17 @@ def test_gov_state_lives_in_kernel_types():
 
 def test_orchestrator_imports_without_machines_lifecycle_at_module_level():
     """lifecycle → coupling is deferred; orchestrator should not pull machines at import."""
+    import mas.runtime.kernel as kernel_pkg
+
     saved = {k: sys.modules.pop(k) for k in list(sys.modules) if k.startswith("mas.runtime.machines.lifecycle")}
+    original = sys.modules.pop("mas.runtime.kernel.orchestrator", None)
     try:
-        if "mas.runtime.kernel.orchestrator" in sys.modules:
-            del sys.modules["mas.runtime.kernel.orchestrator"]
         mod = importlib.import_module("mas.runtime.kernel.orchestrator")
         assert "mas.runtime.machines.lifecycle" not in sys.modules
         assert mod.RuntimeKernel is not None
     finally:
+        # Later tests patch the module the kernel already runs from, not this fresh copy.
+        if original is not None:
+            sys.modules["mas.runtime.kernel.orchestrator"] = original
+            kernel_pkg.orchestrator = original
         sys.modules.update(saved)

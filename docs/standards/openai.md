@@ -33,12 +33,12 @@ metadata:
   name: openai
 spec:
   provider: openai
-  api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
-  api_key_env: OPENAI_API_KEY
+  api_base: https://api.openai.com/v1
+  api_key: {secret: openai}
 ```
 
-Pass `--infra-ref standard:openai` or set `OPENAI_API_KEY`. For a proxy, use
-`standard:llm-proxy` and `LLM_PROXY_API_BASE`. Sampling, reasoning, streaming,
+Pass `--infra-ref standard:openai` and `mas-ctl secrets set openai`. For a proxy, use
+`standard:llm-proxy` and set `proxy.api_base` with an overlay. Sampling, reasoning, streaming,
 and extra body fields are
 [`spec.models[]`](../manifests/agent.md) and the
 [LLM reasoning](../manifests/llm-reasoning.md) manifest.

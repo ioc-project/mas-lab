@@ -66,3 +66,11 @@ def is_hidden_under(root: Path, target: Path) -> bool:
     except ValueError:
         return True
     return any(part.startswith(".") for part in rel.parts)
+
+
+def is_relative_name(text: str) -> bool:
+    """True for ``a.yaml`` or ``dir/a.yaml``: every segment passes :func:`validate_name` unchanged."""
+    try:
+        return all(validate_name(part) == part for part in str(text or "").split("/"))
+    except UnsafeNameError:
+        return False

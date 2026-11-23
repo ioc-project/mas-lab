@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 import pytest
-from mas.library.telemetry.infra import OtelCollectorTarget, otel_collector_target
+from mas.library.telemetry.infra import OtelCollectorTarget, clickhouse_target, otel_collector_target
 
 _MANIFEST = {
     "apiVersion": "mas/v1",
@@ -105,3 +105,38 @@ def test_push_step_uses_infra(tmp_path):
     result = run_push_otlp(spans, infra=infra, dry_run=True)
     assert result["status"] == "dry-run"
     assert result["spans"] == 1
+
+
+_CANARY = "Hunter2-otel-canary"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        {"kind": "OtelCollector", "endpoint": f"https://ops:{_CANARY}@collector.example/"},
+        {"kind": "OtelCollector", "endpoint": f"https://collector.example/?api_key={_CANARY}"},
+        {"kind": "ClickHouse", "host": f"u:{_CANARY}@evil"},
+        {"kind": "ClickHouse", "host": "127.0.0.1", "password": _CANARY},
+    ],
+)
+def test_an_infra_file_with_a_credential_is_refused(tmp_path: Path, target: dict) -> None:
+    import yaml
+    from mas.runtime.secrets import SecretRefError
+
+    path = tmp_path / "infra.yaml"
+    path.write_text(yaml.safe_dump({"kind": "Infra", "spec": {"targets": [target]}}), encoding="utf-8")
+    for load in (otel_collector_target, clickhouse_target):
+        with pytest.raises(SecretRefError) as caught:
+            load(path)
+        assert str(path) in str(caught.value) and "spec.targets[0]" in str(caught.value)
+        assert _CANARY not in str(caught.value)
+
+
+def test_an_endpoint_override_with_a_credential_is_refused() -> None:
+    from mas.library.telemetry.infra import resolve_otel_collector
+    from mas.runtime.secrets import SecretRefError
+
+    for infra in (None, _MANIFEST):
+        with pytest.raises(SecretRefError, match="endpoint") as caught:
+            resolve_otel_collector(infra, endpoint=f"http:/ops:{_CANARY}@collector.example")
+        assert _CANARY not in str(caught.value)

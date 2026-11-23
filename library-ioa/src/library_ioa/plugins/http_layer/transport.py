@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import re
 import threading
 from collections.abc import Mapping
 from typing import Any, ClassVar
@@ -14,24 +13,24 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from mas.library.standard.lib.comm.capabilities import capability_set
-from mas.library.standard.lib.comm.endpoint import LOOPBACK, split_url
+from mas.library.standard.lib.comm.endpoint import split_url
 from mas.library.standard.lib.comm.headers import validate_headers
 from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
 from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack import Envelope, Layer
 from mas.library.standard.lib.stack.call import LayerLifecycle
-from mas.library.standard.plugins.llm.http import resolve_ssl_verify
+from mas.library.standard.lib.tls import resolve_ssl_verify
 from mas.runtime.aio import LoopCache, new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+from mas.runtime.secrets import is_loopback_host
+from mas.runtime.secrets.transport import reveal_headers_for
+from mas.runtime.secrets.url import has_unsafe_chars, origin
 
 # Headers the HTTP client writes from the request itself; a row or a send that set them could split or
 # re-route the request.
 _FRAMING_HEADERS = frozenset(
     {"host", "content-length", "transfer-encoding", "connection", "keep-alive", "upgrade", "te", "trailer"}
 )
-
-
-_UNSAFE_URL = re.compile(r"[\\\s\x00-\x1f\x7f]")
 
 
 def _sendable(headers: Mapping[str, str] | None) -> dict[str, str]:
@@ -41,6 +40,20 @@ def _sendable(headers: Mapping[str, str] | None) -> dict[str, str]:
     if framing:
         raise AgentCommError(f"http transport sets {', '.join(framing)} itself")
     return checked
+
+
+def _check_header_names(headers: Mapping[str, Any] | None) -> None:
+    """Refuse a framing or unsendable header name now. SecretRef values are not stringified or stored."""
+    from mas.runtime.secrets.ref import is_ref
+
+    probe: dict[str, str] = {}
+    for key, value in dict(headers or {}).items():
+        if is_ref(value):
+            probe[str(key)] = "x"
+        else:
+            probe[str(key)] = str(value)
+    if probe:
+        _sendable(probe)
 
 
 def shown_url(url: str) -> str:
@@ -81,7 +94,7 @@ def _call_url(url: str) -> None:
     text = str(url or "").strip()
     if not text:
         return
-    if _UNSAFE_URL.search(text):
+    if has_unsafe_chars(text):
         raise AgentCommError("call transport url has a backslash, a space or a control character")
     parsed = urlsplit(text)
     if "@" in parsed.netloc:
@@ -117,15 +130,29 @@ class HttpCallTransport(LayerLifecycle):
         self.url = str(url or "").strip()
         self.follow_redirects = bool(follow_redirects)
         _call_url(self.url)
-        self._headers = _sendable({str(k): str(v) for k, v in dict(headers or {}).items()}) if headers else {}
+        from mas.runtime.secrets.ref import check_http_header_secrets
+
+        self._header_refs = dict(headers or {})
+        check_http_header_secrets(self._header_refs)
+        _check_header_names(self._header_refs)
         # Without a timeout the MCP SDK's own budget applies: 30s to connect, 300s to read a stream.
         self.timeout = float(timeout) if timeout is not None else None
-        scheme = urlsplit(self.url).scheme.lower()
-        host = (urlsplit(self.url).hostname or "").lower()
-        if bool(dev) and scheme == "https" and host in LOOPBACK:
+        scheme, host, _port = origin(self.url)
+        if bool(dev) and scheme == "https" and is_loopback_host(host):
             self._verify: Any = False
         else:
             self._verify = resolve_ssl_verify({"verify_ssl": verify_ssl, "ca_bundle": ca_bundle})
+        from library_ioa.utils.secret_headers import SecretHeaderHook
+
+        # Headers are set on each request (a rotated secret is picked up, none is kept in the client), and a
+        # secret header only goes to this url's origin; a redirect may not leave it.
+        self._headers_hook = SecretHeaderHook(
+            self._header_refs,
+            owner_url=self.url,
+            error=AgentCommError,
+            what="http call transport",
+            prepare=_sendable,
+        )
         self._client: httpx.Client | None = None
         # One async client per event loop, keyed by the loop's id. The loop is held so a closed one can be seen
         # and its client closed before it is forgotten.
@@ -146,13 +173,20 @@ class HttpCallTransport(LayerLifecycle):
             follow_redirects=bool(raw.get("follow_redirects")),
         )
 
-    def _options(self) -> dict[str, Any]:
+    def _options(self, *, sync: bool) -> dict[str, Any]:
         timeout = httpx.Timeout(self.timeout) if self.timeout is not None else httpx.Timeout(30.0, read=300.0)
+        hook = self._headers_hook
+        hooks: dict[str, list[Any]] = {"request": [hook.apply if sync else hook.arequest], "response": []}
+        if self.follow_redirects:
+            hooks["response"].append(hook.check_redirect if sync else hook.acheck_redirect)
+        from mas.runtime.secrets.transport import httpx_client_kwargs_for
+
         return {
             "timeout": timeout,
             "verify": self._verify,
-            "headers": self._headers,
             "follow_redirects": self.follow_redirects,
+            "event_hooks": hooks,
+            **httpx_client_kwargs_for(self.url),
         }
 
     @property
@@ -161,7 +195,7 @@ class HttpCallTransport(LayerLifecycle):
             if self._stopped:
                 raise AgentCommError("http transport is stopped")
             if self._client is None:
-                self._client = httpx.Client(**self._options())
+                self._client = httpx.Client(**self._options(sync=True))
             return self._client
 
     @property
@@ -177,7 +211,7 @@ class HttpCallTransport(LayerLifecycle):
             dropped = [self._aclients.pop(key)[1] for key in orphans]
             held = self._aclients.get(id(loop))
             if held is None or held[1].is_closed:
-                held = self._aclients[id(loop)] = (loop, httpx.AsyncClient(**self._options()))
+                held = self._aclients[id(loop)] = (loop, httpx.AsyncClient(**self._options(sync=False)))
             client = held[1]
         for orphan in dropped:
             _close_orphan(orphan)
@@ -283,15 +317,16 @@ class HttpLayer(Layer):
         self.max_message_size = max_message_size
         self.url = str(url).strip()
         self.endpoint = self.url
-        # names are lowercased, like the envelope's, so one header is never sent twice under two spellings;
-        # a name that is not a token or a value with a control character is refused here, not on the wire
-        self._headers = {
-            **validate_headers({"content-type": str(content_type)}),
-            **_sendable({str(k): str(v) for k, v in dict(headers or {}).items()}),
-        }
+        from mas.runtime.secrets.ref import check_http_header_secrets
+
+        # Keep SecretRef objects until send. Stringifying here would put ``secret:name/key`` on the wire.
+        self._header_refs = dict(headers or {})
+        check_http_header_secrets(self._header_refs)
+        _check_header_names(self._header_refs)
+        self._headers = validate_headers({"content-type": str(content_type)})
         self.timeout = float(timeout)
         # dev skips TLS verification, and only on a loopback https url
-        self._verify = not (bool(dev) and scheme == "https" and host in LOOPBACK)
+        self._verify = not (bool(dev) and scheme == "https" and is_loopback_host(host))
         self._clients = LoopCache()  # one client per event loop: connections are reused across sends
 
     @classmethod
@@ -328,6 +363,8 @@ class HttpLayer(Layer):
 
     def _request_headers(self, envelope: Envelope) -> dict[str, Any]:
         out: dict[str, Any] = dict(self._headers)
+        if self._header_refs:
+            out.update(_sendable(reveal_headers_for(self.url, self._header_refs, what="http transport headers")))
         for key, value in _sendable(envelope.headers).items():
             out[key] = value.encode("utf-8")  # a header value may hold any text; send it as UTF-8 bytes
         return out

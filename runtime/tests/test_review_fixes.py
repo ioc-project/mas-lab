@@ -100,7 +100,7 @@ def test_a_retry_or_breaker_layer_cannot_sit_on_the_shared_engine_call() -> None
     from mas.runtime.driver.mocks import AutoCtxAssembler
     from mas.runtime.engine.llm_live import LiveLlmEngine
 
-    engine = LiveLlmEngine(ctx=AutoCtxAssembler(), api_base="http://127.0.0.1:9/v1", api_key_env="K", model="m")
+    engine = LiveLlmEngine(ctx=AutoCtxAssembler(), api_base="http://127.0.0.1:9/v1", model="m")
     with pytest.raises(ValueError, match="per: destination"):
         engine.install_infra_pipeline([{"layer": "retry", "per": "all", "for": ["llm"]}])
 

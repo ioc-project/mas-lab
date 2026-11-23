@@ -32,7 +32,8 @@ Config keys::
 
     model: str            embedding model  (default: "text-embedding-3-small")
     api_base: str         OpenAI-compatible endpoint
-    api_key_env: str      env-var name for the API key (default: "OPENAI_API_KEY")
+    api_key: SecretRef    secret for the API key; without one, {secret: openai} is used for
+                          the OpenAI endpoint only, another api_base needs its own
     levels: list[str]     which levels to embed (default: ["session"])
     fields: list[str]     which fields to embed (default: ["input", "output"])
     max_items: int | null cap (default: null = all)
@@ -54,7 +55,6 @@ from typing import Any
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
-from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -74,14 +74,15 @@ class EmbedStep(PipelineStep):
 
         model = self.config.get("model", "text-embedding-3-small")
         api_base = self.config.get("api_base", "")
-        api_key_env = self.config.get("api_key_env", "OPENAI_API_KEY")
+        from mas.library.standard.lib.openai_client import reveal_openai_key
+
         levels = self.config.get("levels", ["session"])
         fields = self.config.get("fields", ["input", "output"])
         max_items: int | None = self.config.get("max_items")
         overwrite = self.config.get("overwrite", False)
         batch_size = int(self.config.get("batch_size", 64))
 
-        api_key = hostenv.get(api_key_env, "")
+        api_key = None
 
         embeddings_dir = bench_dir / "embeddings"
         embeddings_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +132,8 @@ class EmbedStep(PipelineStep):
                 run_ids = [t["run_id"] for t in to_embed]
 
                 logger.info("EmbedStep: embedding %d texts for %s/%s", len(texts), level, field)
+                if api_key is None:
+                    api_key = reveal_openai_key(self.config.get("api_key"), api_base)
                 vectors = _embed_batch(texts, model=model, api_base=api_base, api_key=api_key, batch_size=batch_size)
 
                 ts = datetime.now(timezone.utc).isoformat()
@@ -201,13 +204,13 @@ def _embed_batch(
     batch_size: int,
 ) -> list[list[float] | None]:
     """Call the embedding endpoint in batches.  Returns one vector per text."""
+    from mas.library.standard.lib.openai_client import build_openai_client
+
     try:
-        from openai import OpenAI  # type: ignore[import]
+        client = build_openai_client(api_key, api_base)
     except ImportError:
         logger.error("openai package required for EmbedStep")
         return [None] * len(texts)
-
-    client = OpenAI(api_key=api_key or "no-key", base_url=api_base or None)
 
     vectors: list[list[float] | None] = []
     for i in range(0, len(texts), batch_size):
@@ -216,7 +219,9 @@ def _embed_batch(
             response = client.embeddings.create(model=model, input=batch)
             vectors.extend(item.embedding for item in response.data)
         except Exception as exc:
-            logger.warning("Embedding batch %d failed: %s", i // batch_size, exc)
+            from mas.runtime.reliability.classify import error_summary
+
+            logger.warning("Embedding batch %d failed: %s", i // batch_size, error_summary(exc))
             vectors.extend([None] * len(batch))
 
     return vectors

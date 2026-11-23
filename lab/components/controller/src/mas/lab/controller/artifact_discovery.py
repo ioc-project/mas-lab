@@ -4,9 +4,24 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
-import yaml
+from mas.runtime.secrets.manifest import load_checked_document
+from mas.runtime.spec.yaml_errors import safe_yaml_load
+
+logger = logging.getLogger(__name__)
+
+
+def _listed_yaml(path: Path) -> dict | None:
+    """The mapping at *path*, or None (one warning line, position only) when it does not load or holds a secret."""
+    try:
+        return load_checked_document(path)
+    except (OSError, UnicodeDecodeError) as exc:  # the text of either may quote bytes of the file
+        logger.warning("skipped: %s: %s", path, type(exc).__name__)
+    except ValueError as exc:  # YamlLoadError, SecretRefError, not a mapping: never a value
+        logger.warning("skipped: %s", exc)
+    return None
 
 
 def discover_tools(base_dir: Path, namespaces: list[str] | None = None) -> list[dict]:
@@ -21,7 +36,7 @@ def discover_tools(base_dir: Path, namespaces: list[str] | None = None) -> list[
             tools_dir = base_dir / "tools"
             if tools_dir.exists():
                 for tf in sorted(tools_dir.rglob("*.tool.yaml")):
-                    data = yaml.safe_load(tf.read_text(encoding="utf-8"))
+                    data = _listed_yaml(tf)
                     if (data or {}).get("kind") != "Tool":
                         continue
                     meta = (data or {}).get("metadata", {})
@@ -32,7 +47,7 @@ def discover_tools(base_dir: Path, namespaces: list[str] | None = None) -> list[
             infra_dir = base_dir / "infra"
             if infra_dir.exists():
                 for infra_file in infra_dir.rglob("*.yaml"):
-                    data = yaml.safe_load(infra_file.read_text(encoding="utf-8"))
+                    data = _listed_yaml(infra_file)
                     if (data or {}).get("kind") == "ToolProvider":
                         for name in (data or {}).get("spec", {}).get("tools", {}).keys():
                             tools.setdefault(f"global/{name}", "")
@@ -40,7 +55,7 @@ def discover_tools(base_dir: Path, namespaces: list[str] | None = None) -> list[
             app_tools_dir = base_dir / "apps" / ns / "tools"
             if app_tools_dir.exists():
                 for tf in sorted(app_tools_dir.rglob("*.tool.yaml")):
-                    data = yaml.safe_load(tf.read_text(encoding="utf-8"))
+                    data = _listed_yaml(tf)
                     if (data or {}).get("kind") != "Tool":
                         continue
                     meta = (data or {}).get("metadata", {})
@@ -79,7 +94,7 @@ def discover_skills(base_dir: Path, namespaces: list[str] | None = None) -> list
                 parts = content.split("---", 2)
                 if len(parts) >= 3:
                     try:
-                        frontmatter = yaml.safe_load(parts[1])
+                        frontmatter = safe_yaml_load(parts[1])
                         if frontmatter:
                             name = frontmatter.get("name", name)
                             description = frontmatter.get("description", "").strip()

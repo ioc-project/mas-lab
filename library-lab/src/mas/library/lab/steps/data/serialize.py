@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """SerializeStep — generic artifact encoding step.
 
 Encodes an artifact produced by a previous step and writes it to a target
@@ -29,7 +28,7 @@ store : dict
           host: localhost
           port: 8123
           user: admin
-          password_env: CLICKHOUSE_PASSWORD
+          password: {secret: clickhouse}
           database: default
 opts : dict, optional
     Extra keyword arguments forwarded to :meth:`~mas.lab.benchmark.codecs.base.Codec.encode`.
@@ -48,17 +47,18 @@ Example YAML::
           host: localhost
           port: 8123
           user: admin
-          password_env: CLICKHOUSE_PASSWORD
+          password: {secret: clickhouse}
           database: default
 """
 
+from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Any, Optional
 
 from mas.lab.benchmark.codecs import get_codec
-from mas.lab.benchmark.pipeline import PipelineStep, StepOutput, ConfigParam
+from mas.lab.benchmark.pipeline import ConfigParam, PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
 from mas.lab.benchmark.pipeline.schema_validation import validate_payload
 from mas.lab.infra.datastore import DatastoreSpec
@@ -85,28 +85,43 @@ class SerializeStep(PipelineStep):
     type: str = "serialize"
 
     PARAMS = [
-        ConfigParam("artifact_kind", str,
-                    description="Logical artifact kind (e.g. 'otel_traces', 'kg')."),
-        ConfigParam("source_step", str,
-                    description="Name of the dependency step that produced the artifact."),
-        ConfigParam("source_key", str, default=None,
-                    description="Key in the source step's data dict.  "
-                                "If omitted, the whole data dict is passed."),
-        ConfigParam("store", dict, default=None,
-                    description="Inline DatastoreSpec: type, host/uri, port, user, "
-                                "password_env, database, path."),
-        ConfigParam("store_name", str, default=None,
-                    description="Named store ID from the workspace infra manifest "
-                                "(config/infra/*.yaml).  Alternative to inline 'store:'."),
-        ConfigParam("infra", str, default=None,
-                    description="Experiment infra bundle name (e.g. 'local', 'prod'). "
-                                "Auto-selects the store matching artifact_kind+write from "
-                                "<experiment_dir>/infra/<name>.yaml."),
-        ConfigParam("opts", dict, default=None,
-                    description="Extra keyword arguments forwarded to Codec.encode()."),
-        ConfigParam("artifact_schema", dict, default=None,
-                description="Optional JSON Schema (inline dict or file path) "
-                    "used to validate the artifact payload before encoding."),
+        ConfigParam("artifact_kind", str, description="Logical artifact kind (e.g. 'otel_traces', 'kg')."),
+        ConfigParam("source_step", str, description="Name of the dependency step that produced the artifact."),
+        ConfigParam(
+            "source_key",
+            str,
+            default=None,
+            description="Key in the source step's data dict.  If omitted, the whole data dict is passed.",
+        ),
+        ConfigParam(
+            "store",
+            dict,
+            default=None,
+            description="Inline DatastoreSpec: type, host/uri, port, user, password (SecretRef), database, path.",
+        ),
+        ConfigParam(
+            "store_name",
+            str,
+            default=None,
+            description="Named store ID from the workspace infra manifest "
+            "(config/infra/*.yaml).  Alternative to inline 'store:'.",
+        ),
+        ConfigParam(
+            "infra",
+            str,
+            default=None,
+            description="Experiment infra bundle name (e.g. 'local', 'prod'). "
+            "Auto-selects the store matching artifact_kind+write from "
+            "<experiment_dir>/infra/<name>.yaml.",
+        ),
+        ConfigParam("opts", dict, default=None, description="Extra keyword arguments forwarded to Codec.encode()."),
+        ConfigParam(
+            "artifact_schema",
+            dict,
+            default=None,
+            description="Optional JSON Schema (inline dict or file path) "
+            "used to validate the artifact payload before encoding.",
+        ),
     ]
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
@@ -116,11 +131,7 @@ class SerializeStep(PipelineStep):
         extra_opts: dict[str, Any] = self.config.get("opts") or {}
         artifact_schema: Any = self.config.get("artifact_schema")
 
-        schema_base_dir = (
-            ctx.pipeline.config_path.parent
-            if getattr(ctx.pipeline, "config_path", None)
-            else Path.cwd()
-        )
+        schema_base_dir = ctx.pipeline.config_path.parent if getattr(ctx.pipeline, "config_path", None) else Path.cwd()
 
         store = _resolve_store(
             self.name,
@@ -144,7 +155,9 @@ class SerializeStep(PipelineStep):
 
         logger.info(
             "[%s] encoding %r → %s store",
-            self.name, artifact_kind, store.type,
+            self.name,
+            artifact_kind,
+            store.type,
         )
         streamed = encode_streaming(codec, artifact, extra_opts)
 
@@ -222,6 +235,7 @@ def encode_streaming(codec: Any, artifact: Any, extra_opts: dict[str, Any]) -> b
 # Shared store-resolution helpers (used by DeserializeStep too)
 # ---------------------------------------------------------------------------
 
+
 def _resolve_store(
     step_name: str,
     config: dict[str, Any],
@@ -262,7 +276,7 @@ def _build_store(cfg: dict[str, Any]) -> DatastoreSpec:
         port=int(cfg.get("port", 0)),
         path=cfg.get("path", ""),
         user=cfg.get("user", ""),
-        password_env=cfg.get("password_env", ""),
+        password=cfg.get("password"),
         database=cfg.get("database", ""),
         description=cfg.get("description", ""),
     )
@@ -271,11 +285,11 @@ def _build_store(cfg: dict[str, Any]) -> DatastoreSpec:
 def _load_named_store(step_name: str, store_name: str) -> DatastoreSpec:
     """Load a :class:`DatastoreSpec` by ID from the workspace infra manifest."""
     from mas.lab.connections import _load_infra_store
+
     spec = _load_infra_store(store_name)
     if spec is None:
         raise ValueError(
-            f"Step '{step_name}': store '{store_name}' not found in workspace "
-            "infra manifest (config/infra/*.yaml)."
+            f"Step '{step_name}': store '{store_name}' not found in workspace infra manifest (config/infra/*.yaml)."
         )
     return spec
 
@@ -290,9 +304,8 @@ def _load_bundle_store(
     """Load the first store from an experiment infra bundle that handles
     *artifact_kind* with *op* (``'read'`` or ``'write'``)."""
     import yaml
-    config_path: Optional[Path] = getattr(
-        getattr(ctx, "pipeline", None), "config_path", None
-    )
+
+    config_path: Optional[Path] = getattr(getattr(ctx, "pipeline", None), "config_path", None)
     exp_dir = config_path.parent if config_path else Path(".")
     bundle_path = exp_dir / "infra" / f"{infra_name}.yaml"
 
@@ -321,6 +334,5 @@ def _load_bundle_store(
                 return _build_store(cfg)
 
     raise ValueError(
-        f"Step '{step_name}': no store in bundle '{infra_name}' handles "
-        f"artifact_kind='{artifact_kind}' with op='{op}'."
+        f"Step '{step_name}': no store in bundle '{infra_name}' handles artifact_kind='{artifact_kind}' with op='{op}'."
     )

@@ -20,6 +20,7 @@ from mas.lab.controller.constants import MAX_TIMEOUT
 from mas.lab.controller.deps import store_from_request
 from mas.lab.controller.item_service import ItemError, get_item
 from mas.lab.controller.kinds import KIND_CATALOG
+from mas.lab.controller.manifest_validation import refuse_secret_fields, refuse_secret_values
 from mas.lab.controller.run_store import _now, get_run_store, new_run
 from pydantic import BaseModel, Field
 
@@ -43,6 +44,9 @@ class StartRunRequest(BaseModel):
 
 @router.post("/api/runs", tags=["Runs"], status_code=202)
 async def start_run(req: StartRunRequest, request: Request):
+    if req.manifest:
+        refuse_secret_values(req.manifest)
+    refuse_secret_fields(req.model_dump(exclude={"manifest"}))
     store = store_from_request(request)
     action = (req.action or "run").lower()
     if action not in _RUN_ACTIONS:

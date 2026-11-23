@@ -212,6 +212,9 @@ def cmd_clean(args):
 
 
 def main():
+    from mas.runtime.entrypoint import install_host_environment
+
+    install_host_environment()  # an entry point (python -m): hostenv first, process scrubbed
     parser = argparse.ArgumentParser(description="Pipeline CLI for declarative evaluations")
     subparsers = parser.add_subparsers(dest="command", help="Command")
 

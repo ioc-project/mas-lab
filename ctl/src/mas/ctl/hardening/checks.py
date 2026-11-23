@@ -12,7 +12,7 @@ What MAS Lab already refuses (an HTTP url for a transport on a non-loopback host
 
 from __future__ import annotations
 
-import re
+import sys
 from collections.abc import Iterator
 from typing import Any
 from urllib.parse import urlsplit
@@ -27,19 +27,21 @@ from mas.ctl.hardening.model import (
     HardeningInput,
 )
 from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
+from mas.runtime.secrets import check_plain_http
+from mas.runtime.secrets.ref import is_ref
+from mas.runtime.secrets.transport import PlainHttpRefused
 
-_LOOPBACK = {"127.0.0.1", "localhost", "::1"}
 _INGRESS_PLUGINS = {"retry_on_error", "backtrack_on_error"}
-_SECRET_KEY = re.compile(
-    r"(^|_|-)(api_?key|token|secret|password|passwd|authorization|credentials?|private_key|cookie)$", re.IGNORECASE
-)
-_HEADER_SECRETS = {"authorization", "proxy-authorization", "cookie", "x-api-key", "api-key"}
-_REFERENCE_PREFIXES = ("env:", "file:")
 
 
 def _walk(value: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[tuple[str, ...], Any]]:
-    """Every ``(path, value)`` of a nested mapping and list, the containers included."""
+    """Every ``(path, value)`` of a nested mapping and list, the containers included.
+
+    A SecretRef object is one node: do not walk into ``secret`` / ``name`` / ``key``.
+    """
     yield path, value
+    if is_ref(value):
+        return
     if isinstance(value, dict):
         for key, item in value.items():
             yield from _walk(item, (*path, str(key)))
@@ -114,7 +116,11 @@ def plain_http_remote(inp: HardeningInput) -> list[str]:
     problems = []
     for where, url in inp.urls:
         parts = urlsplit(str(url))
-        if parts.scheme.lower() in {"http", "ws"} and (parts.hostname or "").lower() not in _LOOPBACK:
+        if parts.scheme.lower() not in {"http", "ws"}:
+            continue
+        try:
+            check_plain_http(url, what="traffic")
+        except PlainHttpRefused:
             problems.append(f"{where} reaches {parts.hostname or 'a host'} over {parts.scheme}, not TLS")
     return problems
 
@@ -141,19 +147,19 @@ def mcp_tools_wildcard(inp: HardeningInput) -> list[str]:
     ]
 
 
-def secret_literal(inp: HardeningInput) -> list[str]:
-    problems = []
-    for source, document in inp.raw_documents:
-        for path, value in _walk(document):
-            if not path or not isinstance(value, str) or not value.strip():
-                continue
-            key = path[-1]
-            token_table = len(path) >= 3 and path[-3] == "admission" and path[-2] == "callers"
-            header = len(path) >= 2 and path[-2] == "headers" and key.lower() in _HEADER_SECRETS
-            named = bool(_SECRET_KEY.search(key)) and not key.endswith("_env")
-            if (token_table or header or named) and not value.startswith(_REFERENCE_PREFIXES):
-                problems.append(f"{source} holds a secret as a literal at {_where(path)}; use env: or file:")
-    return problems
+def secret_store_env(inp: HardeningInput) -> list[str]:
+    if str(inp.secret_store or "").strip() == "env":
+        return ["the secret store is env; use the file store in production"]
+    return []
+
+
+def secret_store_loose_permissions(inp: HardeningInput) -> list[str]:
+    """On Windows the file store reads only with ``allow_loose_permissions``, so this fires there too."""
+    if str(inp.secret_store or "file").strip() == "file" and inp.allow_loose_permissions:
+        if sys.platform == "win32":
+            return ["the file secret store runs without permission checks (Windows)"]
+        return ["the file secret store allows loose permissions"]
+    return []
 
 
 def sizes_unbounded(inp: HardeningInput) -> list[str]:
@@ -186,7 +192,7 @@ CHECKS: tuple[Check, ...] = (
         CRITICAL,
         STATIC,
         "A listener that verifies no caller lets anyone who can reach the port run the agent and its tools.",
-        "Give the A2A row `a2a.admission.callers` (name to `env:` token), or serve on loopback only.",
+        "Give the A2A row `a2a.admission.callers` (name to `{secret: NAME}`), or serve on loopback only.",
         listener_without_identity,
     ),
     Check(
@@ -198,12 +204,20 @@ CHECKS: tuple[Check, ...] = (
         tls_verification_disabled,
     ),
     Check(
-        "secret-literal",
+        "secret-store-env",
         HIGH,
         STATIC,
-        "A secret written in a file ends up in version control, logs and checkpoints.",
-        "Write `env:NAME` or `file:PATH` instead of the value.",
-        secret_literal,
+        "The env store reads process variables; a production session should use the file store.",
+        "Set `secrets.store: file` (the default) and `mas-ctl secrets set NAME`.",
+        secret_store_env,
+    ),
+    Check(
+        "secret-store-loose-permissions",
+        HIGH,
+        STATIC,
+        "A file store that allows group- or world-readable files leaks secrets on disk.",
+        "Remove `allow_loose_permissions` so files stay mode 0400 and the directory 0700.",
+        secret_store_loose_permissions,
     ),
     Check(
         "plain-http-remote",

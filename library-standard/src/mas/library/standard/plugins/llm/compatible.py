@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any, ClassVar
 
 from mas.library.standard.plugins.llm.openai import OpenAILLMProvider
+from mas.runtime.secrets.ref import SecretRef
 
 
 class OpenAICompatibleLLMProvider(OpenAILLMProvider):
@@ -32,7 +33,7 @@ class GroqLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "groq"
     kind = "groq"
     default_api_base = "https://api.groq.com/openai/v1"
-    default_api_key_env = "GROQ_API_KEY"
+    default_secret = SecretRef(name="groq")
     remap_max_completion_tokens = True
 
 
@@ -42,7 +43,7 @@ class OpenRouterLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "openrouter"
     kind = "openrouter"
     default_api_base = "https://openrouter.ai/api/v1"
-    default_api_key_env = "OPENROUTER_API_KEY"
+    default_secret = SecretRef(name="openrouter")
     forwards_prompt_cache_fields = True
 
 
@@ -52,7 +53,7 @@ class XaiLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "xai"
     kind = "xai"
     default_api_base = "https://api.x.ai/v1"
-    default_api_key_env = "XAI_API_KEY"
+    default_secret = SecretRef(name="xai")
 
 
 class LiteLLMLLMProvider(OpenAICompatibleLLMProvider):
@@ -61,7 +62,7 @@ class LiteLLMLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "litellm"
     kind = "litellm"
     default_api_base = "http://localhost:4000/v1"
-    default_api_key_env = "LITELLM_API_KEY"
+    default_secret = SecretRef(name="litellm")
     forwards_prompt_cache_fields = True
 
 
@@ -71,7 +72,7 @@ class CerebrasLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "cerebras"
     kind = "cerebras"
     default_api_base = "https://api.cerebras.ai/v1"
-    default_api_key_env = "CEREBRAS_API_KEY"
+    default_secret = SecretRef(name="cerebras")
     remap_max_completion_tokens = True
 
 
@@ -81,7 +82,7 @@ class MistralLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "mistral"
     kind = "mistral"
     default_api_base = "https://api.mistral.ai/v1"
-    default_api_key_env = "MISTRAL_API_KEY"
+    default_secret = SecretRef(name="mistral")
     remap_max_completion_tokens = True
 
 
@@ -91,7 +92,7 @@ class VllmLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "vllm"
     kind = "vllm"
     default_api_base = "http://localhost:8000/v1"
-    default_api_key_env = "VLLM_API_KEY"
+    default_secret = SecretRef(name="vllm")
 
 
 class HuggingFaceLLMProvider(OpenAICompatibleLLMProvider):
@@ -100,7 +101,7 @@ class HuggingFaceLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "huggingface"
     kind = "huggingface"
     default_api_base = "https://router.huggingface.co/v1"
-    default_api_key_env = "HF_TOKEN"
+    default_secret = SecretRef(name="hf")
 
 
 class DatabricksLLMProvider(OpenAICompatibleLLMProvider):
@@ -109,13 +110,13 @@ class DatabricksLLMProvider(OpenAICompatibleLLMProvider):
     provider_id = "databricks"
     kind = "databricks"
     default_api_base = ""
-    default_api_key_env = "DATABRICKS_TOKEN"
+    default_secret = SecretRef(name="databricks")
 
     def _build_chat_request(self, **kwargs: Any) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
-        url, payload, headers, query = super()._build_chat_request(**kwargs)
         host = self.api_base.rstrip("/")
         if not host:
             raise RuntimeError("Databricks needs proxy.api_base (workspace host)")
+        url, payload, headers, query = super()._build_chat_request(**kwargs)
         model = str(payload.get("model") or kwargs.get("model") or "").strip()
         url = f"{host}/serving-endpoints/{model}/invocations"
         return url, payload, headers, query

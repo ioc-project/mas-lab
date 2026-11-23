@@ -43,3 +43,4 @@ force-include = {"src/mas/runtime/aliases.yaml" = "mas/runtime/aliases.yaml", "s
 addopts = "-p no:deepeval"
 asyncio_mode = "auto"
 norecursedirs = [".git", "node_modules", "pending_port"]
+pythonpath = ["../tests/support"]  # secret_fakes, shared with the other test trees

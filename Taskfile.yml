@@ -261,7 +261,7 @@ tasks:
       - python3 scripts/ruff_changed.py format-check --root {{.LIB}}
       - |
         {{.VENV}}/pytest {{.LIB}}/tests \
-          --cov={{.COV}} \
+          {{range splitList "," .COV}}--cov={{.}} {{end}}\
           --cov-report=term-missing \
           --cov-report=xml:coverage.xml \
           --cov-fail-under=0 \
@@ -613,8 +613,7 @@ tasks:
     desc: "Start MAS Lab UI + backend via Docker Compose (detached)."
     summary: |
       Builds images if needed, then runs UI (8080) and backend (8090) in the background.
-      OPENAI_API_KEY must be in docker/.env (containers do not see shell exports).
-      On first run, copies your shell OPENAI_API_KEY into docker/.env when the file has none.
+      Live LLM runs need `echo KEY | mas-ctl secrets set openai` on the mounted workspace.
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - task: ensure-docker-env
@@ -650,27 +649,11 @@ tasks:
       - defer: docker compose -f docker/compose.yaml logs --no-color --tail 80
 
   ensure-docker-env:
-    desc: "Ensure docker/.env exists and contains OPENAI_API_KEY for containers."
+    desc: "Ensure docker/.env exists (mounts only; secrets are the file store)."
     internal: true
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - test -f .env || cp .env.example .env
-      - |
-        if grep -qE '^OPENAI_API_KEY=.+$' .env 2>/dev/null; then
-          exit 0
-        fi
-        if [ -n "${OPENAI_API_KEY:-}" ]; then
-          if grep -q '^OPENAI_API_KEY=' .env 2>/dev/null; then
-            sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${OPENAI_API_KEY}|" .env && rm -f .env.bak
-          else
-            printf '\nOPENAI_API_KEY=%s\n' "${OPENAI_API_KEY}" >> .env
-          fi
-          echo "Wrote OPENAI_API_KEY to docker/.env (containers do not read shell exports)."
-          exit 0
-        fi
-        echo "OPENAI_API_KEY is not set in docker/.env and not exported in your shell."
-        echo "Add it to docker/.env, then run: task restart"
-        exit 1
 
   restart-backend:
     desc: "Recreate backend only (reload docker/.env; no UI restart)."
@@ -680,14 +663,13 @@ tasks:
       - task: verify-env
 
   verify-env:
-    desc: "Check OPENAI_API_KEY inside the running backend container."
+    desc: "Check whether the openai file-store secret is present in the container workspace."
     summary: |
-      Reads the container environment directly (use single quotes — do not echo $VAR
-      from your shell into docker exec, that only prints your host value).
+      Looks at `/workspace/.mas/secrets/openai` (mode and size only). Does not print a value.
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - |
-        docker exec mas-lab-backend-1 sh -c 'if [ -n "${OPENAI_API_KEY:-}" ]; then echo "OPENAI_API_KEY set in container (len=${#OPENAI_API_KEY})"; else echo "OPENAI_API_KEY empty — set it in docker/.env (not shell export) then: task restart"; exit 1; fi'
+        docker exec mas-lab-backend-1 sh -c 'p=/workspace/.mas/secrets/openai; if [ -f "$p" ]; then echo "secret openai present (bytes=$(wc -c < "$p"))"; else echo "secret openai missing — echo KEY | mas-ctl secrets set openai"; exit 1; fi'
 
   license:
     desc: "Add SPDX Apache-2.0 headers to source files (dry-run by default)"
@@ -840,8 +822,7 @@ tasks:
     desc: "Start MAS Lab UI + backend via Docker Compose (detached)."
     summary: |
       Builds images if needed, then runs UI (8080) and backend (8090) in the background.
-      OPENAI_API_KEY must be in docker/.env (containers do not see shell exports).
-      On first run, copies your shell OPENAI_API_KEY into docker/.env when the file has none.
+      Live LLM runs need `echo KEY | mas-ctl secrets set openai` on the mounted workspace.
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - task: ensure-docker-env
@@ -863,27 +844,11 @@ tasks:
       - docker compose ps
 
   ensure-docker-env:
-    desc: "Ensure docker/.env exists and contains OPENAI_API_KEY for containers."
+    desc: "Ensure docker/.env exists (mounts only; secrets are the file store)."
     internal: true
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - test -f .env || cp .env.example .env
-      - |
-        if grep -qE '^OPENAI_API_KEY=.+$' .env 2>/dev/null; then
-          exit 0
-        fi
-        if [ -n "${OPENAI_API_KEY:-}" ]; then
-          if grep -q '^OPENAI_API_KEY=' .env 2>/dev/null; then
-            sed -i.bak "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${OPENAI_API_KEY}|" .env && rm -f .env.bak
-          else
-            printf '\nOPENAI_API_KEY=%s\n' "${OPENAI_API_KEY}" >> .env
-          fi
-          echo "Wrote OPENAI_API_KEY to docker/.env (containers do not read shell exports)."
-          exit 0
-        fi
-        echo "OPENAI_API_KEY is not set in docker/.env and not exported in your shell."
-        echo "Add it to docker/.env, then run: task restart"
-        exit 1
 
   restart-backend:
     desc: "Recreate backend only (reload docker/.env; no UI restart)."
@@ -893,14 +858,13 @@ tasks:
       - task: verify-env
 
   verify-env:
-    desc: "Check OPENAI_API_KEY inside the running backend container."
+    desc: "Check whether the openai file-store secret is present in the container workspace."
     summary: |
-      Reads the container environment directly (use single quotes — do not echo $VAR
-      from your shell into docker exec, that only prints your host value).
+      Looks at `/workspace/.mas/secrets/openai` (mode and size only). Does not print a value.
     dir: "{{.DOCKER_DIR}}"
     cmds:
       - |
-        docker exec mas-lab-backend-1 sh -c 'if [ -n "${OPENAI_API_KEY:-}" ]; then echo "OPENAI_API_KEY set in container (len=${#OPENAI_API_KEY})"; else echo "OPENAI_API_KEY empty — set it in docker/.env (not shell export) then: task restart"; exit 1; fi'
+        docker exec mas-lab-backend-1 sh -c 'p=/workspace/.mas/secrets/openai; if [ -f "$p" ]; then echo "secret openai present (bytes=$(wc -c < "$p"))"; else echo "secret openai missing — echo KEY | mas-ctl secrets set openai"; exit 1; fi'
 
   license:
     desc: "Add SPDX Apache-2.0 headers to source files (dry-run by default)"

@@ -114,11 +114,17 @@ def isolate_lab_env(monkeypatch: Any, tmp_path: Path) -> None:
         monkeypatch.setenv(name, str(folder))
     (xdg / "config" / "mas").mkdir(parents=True, exist_ok=True)
     (xdg / "config" / "mas" / "config.yaml").write_text("mas_ctl: {}\n", encoding="utf-8")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    secrets = tmp_path / "secrets"
+    from mas.ctl.secrets import write_file_secret
+
+    write_file_secret(secrets, "openai", "test-key")
+    ws = tmp_path / "workspace"
+    ws.mkdir(parents=True, exist_ok=True)
+    (ws / "config.yaml").write_text(f"secrets:\n  dir: {secrets}\n", encoding="utf-8")
+    monkeypatch.setenv("MAS_WORKSPACE_ROOT", str(ws))
     monkeypatch.setenv("NO_PROXY", "127.0.0.1,localhost")
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
     monkeypatch.delenv("MAS_INFRA_REFS", raising=False)
-    monkeypatch.delenv("MAS_WORKSPACE_ROOT", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
 

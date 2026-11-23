@@ -171,7 +171,7 @@ What each target can patch:
 - **Flavour** overlays cannot select models or API keys. They change the Flavour's `bind`, `control` refs, and leftover keys only.
 - **Agent** overlays can patch every Agent `spec` field. That includes `models[]` rows (sampling, `reasoning`, `extra`), `description`, `behavior`, and `tools_ref`.
 - `spec.models[]` deep-merges by `id`, then `model`, then `main`.
-- Access fields (`api_base`, `api_key_env`) stay on infra.
+- Access fields (`api_base`, `api_key`) stay on infra.
 
 Examples: [llm-reasoning.yaml](../schemas/examples/overlays/llm-reasoning.yaml), [llm-sampling.yaml](../schemas/examples/overlays/llm-sampling.yaml).
 

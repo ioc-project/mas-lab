@@ -118,28 +118,19 @@ def test_mcp_tools_wildcard() -> None:
     assert len(_problems("mcp-tools-wildcard", _inp(tool_servers=rows))) == 2
 
 
-def test_secret_literal_is_found_and_never_repeated() -> None:
-    # kills: literals passing, env:/file: refs failing, *_env names failing, the secret echoed in the finding
-    secret = "sk-live-SUPERSECRET"
-    bad = {
-        "kind": "LLMProxy",
-        "spec": {
-            "proxy": {"api_key": secret, "api_key_env": "OPENAI_API_KEY"},
-            "headers": {"Authorization": f"Bearer {secret}"},
-            "endpoints": {"a": {"a2a": {"admission": {"callers": {"alice": secret}}}}},
-        },
-    }
-    problems = _problems("secret-literal", _inp(raw_documents=(("infra.yaml", bad),)))
-    assert len(problems) == 3
-    assert secret not in " ".join(problems)
-    good = {
-        "spec": {
-            "proxy": {"api_key": "env:KEY", "api_key_env": "OPENAI_API_KEY", "max_tokens": 5},
-            "headers": {"Authorization": "env:AUTH", "Accept": "x"},
-            "x": {"token": "file:/run/secrets/t", "secret_env": "SLIM_SECRET", "callers": {"a": "t"}},
-        }
-    }
-    assert not _problems("secret-literal", _inp(raw_documents=(("ok.yaml", good),)))
+def test_secret_store_loose_permissions_names_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.ctl.hardening import checks
+
+    monkeypatch.setattr(checks.sys, "platform", "win32")
+    assert "Windows" in _problems("secret-store-loose-permissions", _inp(allow_loose_permissions=True))[0]
+
+
+def test_secret_store_env_and_loose_permissions() -> None:
+    assert _problems("secret-store-env", _inp(secret_store="env"))
+    assert not _problems("secret-store-env", _inp())
+    assert _problems("secret-store-loose-permissions", _inp(allow_loose_permissions=True))
+    assert not _problems("secret-store-loose-permissions", _inp(secret_store="env", allow_loose_permissions=True))
+    assert not _problems("secret-store-loose-permissions", _inp())
 
 
 @pytest.mark.parametrize("value", [0, -1, MAX_MESSAGE_SIZE + 1, None, True, "big"])

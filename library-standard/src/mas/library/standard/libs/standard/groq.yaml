@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: groq
   description: >
-    Groq chat-completions host. Same wire as openai. Requires GROQ_API_KEY.
+    Groq chat-completions host. Same wire as openai. The key is `{secret: groq}`.
 
 spec:
   protocol: groq
   proxy:
-    api_base: env:GROQ_API_BASE|https://api.groq.com/openai/v1
-    api_key_env: GROQ_API_KEY
+    api_base: https://api.groq.com/openai/v1
+    api_key: {secret: groq}

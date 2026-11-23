@@ -68,17 +68,21 @@ properties:
   env:
     type: object
     additionalProperties:
-      type: string
+      oneOf:
+        - type: string
+        - $ref: "./secret-ref.schema.yaml"
+    description: >
+      stdio child environment. A secret value is a SecretRef object.
   cwd:
     type: string
   headers:
     type: object
     additionalProperties:
-      type: string
+      oneOf:
+        - type: string
+        - $ref: "./secret-ref.schema.yaml"
     description: >
-      HTTP headers for streamable-http / SSE. Omit when unused. Secret
-      values use env:VAR_NAME (unset omits the header). Do not hardcode
-      credentials.
+      HTTP headers for streamable-http / SSE. Auth headers are SecretRef objects.
   timeout:
     type: number
     description: Per-call timeout in seconds (MCP read_timeout_seconds).

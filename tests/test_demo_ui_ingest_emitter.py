@@ -35,7 +35,7 @@ def test_ingest_subscriber_posts_native_and_control(monkeypatch) -> None:
         "mas.lab.benchmark.pipeline.ui_bridge._CLI_DEFAULT",
         _binding("http://127.0.0.1:8090/api/ingest", {"overlay": "overlay-b"}),
     )
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("mas.lab.benchmark.pipeline.ui_bridge.open_ingest", fake_urlopen)
     post_ingest({"kind": "tool_call_start", "agent_id": "specialist"})
     assert len(posted) == 1
     body = json.loads(posted[0])
@@ -71,7 +71,7 @@ def test_post_ingest_explicit_url_does_not_mutate_env(monkeypatch) -> None:
         return _Resp()
 
     monkeypatch.setenv("MAS_DEMO_UI_INGEST_URL", "http://env.invalid/api/ingest")
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("mas.lab.benchmark.pipeline.ui_bridge.open_ingest", fake_urlopen)
     post_ingest({"kind": "metric", "metrics": {"n": 1}}, url="http://127.0.0.1:9/api/ingest")
     assert posted == ["http://127.0.0.1:9/api/ingest"]
     # the library never reads the variable: without a bound target nothing is posted
@@ -102,7 +102,7 @@ def test_post_ingest_merges_scenario_scope(monkeypatch) -> None:
     monkeypatch.setattr(
         "mas.lab.benchmark.pipeline.ui_bridge._CLI_DEFAULT", _binding("http://127.0.0.1:8090/api/ingest")
     )
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("mas.lab.benchmark.pipeline.ui_bridge.open_ingest", fake_urlopen)
     scope = push_demo_ui_scope({"scenario": "overlay-b"})
     try:
         post_ingest({"kind": "tool_call_start", "agent_id": "specialist"})
@@ -128,7 +128,10 @@ def test_bound_run_target_wins_and_is_restored(monkeypatch) -> None:
         def __exit__(self, *a):
             return False
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=0.4: (seen.append(req.full_url), _Resp())[1])
+    monkeypatch.setattr(
+        "mas.lab.benchmark.pipeline.ui_bridge.open_ingest",
+        lambda req, timeout=0.4: (seen.append(req.full_url), _Resp())[1],
+    )
     monkeypatch.setattr("mas.lab.benchmark.pipeline.ui_bridge._CLI_DEFAULT", _binding("http://cli/api"))
     with bind_demo_ui(DemoUiBinding(ingest_url="http://run/api")):
         post_ingest({"kind": "metric"})

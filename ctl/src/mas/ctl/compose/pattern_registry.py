@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.spec.plugin_binding import plugin_binding_id
 
@@ -65,9 +64,9 @@ def pattern_for_agent(
         if ref and mas_base_dir:
             agent_path = (mas_base_dir / ref).resolve()
             if agent_path.is_file():
-                raw = yaml.safe_load(agent_path.read_text(encoding="utf-8"))
-                if isinstance(raw, dict):
-                    dp = (raw.get("spec") or {}).get("design_pattern")
-                    return resolve_design_pattern_registry_id(dp)
+                from mas.runtime.secrets import load_checked_document
+
+                dp = (load_checked_document(agent_path).get("spec") or {}).get("design_pattern")
+                return resolve_design_pattern_registry_id(dp)
         return default_pattern_plugin_id()
     return default_pattern_plugin_id()

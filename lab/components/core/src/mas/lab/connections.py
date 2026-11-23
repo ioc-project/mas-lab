@@ -1,24 +1,20 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Connection credential resolution — mirroring the k8s secretKeyRef pattern.
+"""Connection resolution for lab codecs: hosts from hostenv, passwords as SecretRef.
 
-Credentials are declared in ``config/infra/neo4j.yaml`` (committed, no secrets)
-and resolved at runtime from the process environment or a ``.env`` file, exactly
-like Kubernetes resolves ``secretKeyRef`` from a Secret.
+Credentials are declared in an infra Datastore manifest (committed, no secrets).
+The password is a SecretRef; the value lives in the secret store
+(``mas-ctl secrets set neo4j`` / ``mas-ctl secrets set clickhouse``).
 
-Resolution order for each field (highest → lowest priority):
+Resolution order for each non-secret field (highest → lowest priority):
   1. **CLI flag**                    ``--uri``, ``--user``, ``--database``
   2. **InfraManifest**               ``config/infra/neo4j.yaml`` / ``kind: Datastore``
                                      discovered via the nearest ``config.yaml``
-  3. **``$XDG_CONFIG_HOME/mas/connections.yaml``**  personal override (same ``env:VAR`` syntax)
-  4. **``NEO4J_*`` environment variables**  backward compatibility
+  3. **User connections** (ctl loads ``$XDG_CONFIG_HOME/mas/connections.yaml`` and binds it)
+  4. **Host values**                 ``NEO4J_URI`` / ``NEO4J_USER`` / ``CLICKHOUSE_HOST`` (non-secret)
   5. **Built-in default**            ``bolt://localhost:7687``, user ``neo4j``, db ``neo4j``
 
-The ``password`` field is intentionally absent from the CLI signature — it is
-always resolved through the ``password_env`` name declared in the infra manifest,
-the ``env:VAR`` indirection in connections.yaml, or directly from ``NEO4J_PASSWORD``.
-
-Canonical infra manifest (committed, gitignored.free)::
+Canonical infra manifest (committed)::
 
     # config/infra/neo4j.yaml
     api_version: infra/v1
@@ -26,38 +22,29 @@ Canonical infra manifest (committed, gitignored.free)::
     spec:
       stores:
         neo4j:
-          uri:          bolt://localhost:7687
-          user:         neo4j
-          password_env: NEO4J_PASSWORD   # secretKeyRef — env var name, never the value
-          database:     neo4j
-
-Personal secrets (gitignored)::
-
-    # config/secrets/.env  OR  export in shell
-    NEO4J_PASSWORD=<your-password>
-
-Quick-start (Neo4j graph store — internal extension, not shipped in OSS)::
-
-    export NEO4J_PASSWORD=<secret>
+          uri:      bolt://localhost:7687
+          user:     neo4j
+          password: {secret: neo4j}
+          database: neo4j
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Dict, Optional
+from contextvars import ContextVar, Token
+from typing import Any, Dict, Mapping, Optional
 
 from mas.runtime import hostenv
 
-try:
-    import yaml as _yaml  # type: ignore
-except ImportError:
-    _yaml = None  # type: ignore
+_USER_CONNECTIONS: ContextVar[Mapping[str, Any] | None] = ContextVar("mas_lab_user_connections", default=None)
 
 
-from mas.runtime.constants import CONNECTIONS_CONFIG_FILENAME, WORKSPACE_CONFIG_FILENAME
-from mas.runtime.xdg import mas_config_dir
+def bind_user_connections(data: Mapping[str, Any] | None) -> Token[Mapping[str, Any] | None]:
+    """Hand the ctl-loaded connections file to lab resolvers. Lab never reads the host file."""
+    return _USER_CONNECTIONS.set(dict(data or {}))
 
-_CONNECTIONS_FILE = mas_config_dir() / CONNECTIONS_CONFIG_FILENAME
+
+def reset_user_connections(token: Token[Mapping[str, Any] | None]) -> None:
+    _USER_CONNECTIONS.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -65,77 +52,33 @@ _CONNECTIONS_FILE = mas_config_dir() / CONNECTIONS_CONFIG_FILENAME
 # ---------------------------------------------------------------------------
 
 
-def _load_dotenv() -> Dict[str, str]:
-    """Minimal .env parser (walks up from CWD).  Does NOT modify os.environ.
+def _resolve_value(v: Any) -> str:
+    """Resolve a single config value. Secrets are SecretRef objects; hosts are plain strings.
 
-    Search order:
-      1. Walk up from CWD, looking for ``.env`` in each directory.
-      2. ``<workspace_root>/config/secrets/.env`` — for secrets stored in the
-         dedicated gitignored secrets directory.
+    A missing optional secret resolves to ``""``; a missing required one raises.
     """
-    result: Dict[str, str] = {}
+    from mas.runtime.secrets import SecretRefError, current_resolver
+    from mas.runtime.secrets.ref import is_ref, parse_secret_ref
 
-    def _parse_file(path: Path) -> Dict[str, str]:
-        out: Dict[str, str] = {}
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            k = k.strip()
-            v = v.strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in ('"', "'"):
-                v = v[1:-1]
-            out[k] = v
-        return out
-
-    # 1. Walk up from CWD
-    here = Path.cwd()
-    for parent in (here, *here.parents):
-        candidate = parent / ".env"
-        if candidate.exists():
-            result.update(_parse_file(candidate))
-            break
-
-    # 2. <workspace_root>/config/secrets/.env (higher priority — declared secrets)
-    for parent in (here, *here.parents):
-        if (parent / WORKSPACE_CONFIG_FILENAME).exists():
-            secrets_env = parent / "config" / "secrets" / ".env"
-            if secrets_env.exists():
-                result.update(_parse_file(secrets_env))
-            break
-
-    return result
-
-
-def _resolve_value(v: Any, dotenv: Dict[str, str]) -> str:
-    """Resolve a single config value.
-
-    - ``"env:VAR_NAME"``         → look up *VAR_NAME* in ``os.environ`` then *dotenv*
-    - ``"env:VAR_NAME|default"`` → same, but fall back to *default* when unset
-    - anything else              → ``str(v)`` (literal — allowed for non-secrets)
-    """
     if isinstance(v, str) and v.startswith("env:"):
-        rest = v[4:].strip()
-        if "|" in rest:
-            var, default = rest.split("|", 1)
-            var = var.strip()
-            default = default.strip()
-        else:
-            var, default = rest, ""
-        return hostenv.get(var) or dotenv.get(var) or default
+        raise SecretRefError(
+            "env: prefix is removed; write a SecretRef ({secret: NAME}) for a secret, "
+            "or a plain overlay value for a host"
+        )
+    if is_ref(v):
+        return current_resolver().reveal_or_none(parse_secret_ref(v)) or ""
     return str(v) if v is not None else ""
 
 
 def _load_named_connection(name: str) -> Dict[str, Any]:
-    """Return the raw config entry for *name* from the user connections file.
+    """Return the raw config entry for *name* from the mapping ctl bound.
 
-    Returns an empty dict if the file does not exist or the entry is absent.
+    Empty when nothing is bound or the entry is absent. Lab never opens the host file.
     """
-    if _yaml is None or not _CONNECTIONS_FILE.exists():
-        return {}
-    raw = _yaml.safe_load(_CONNECTIONS_FILE.read_text(encoding="utf-8")) or {}
-    return (raw.get("connections") or {}).get(name) or {}
+    raw = _USER_CONNECTIONS.get() or {}
+    block = raw.get("connections") if isinstance(raw.get("connections"), dict) else raw
+    entry = (block or {}).get(name) if isinstance(block, dict) else None
+    return dict(entry) if isinstance(entry, dict) else {}
 
 
 def _load_infra_store(store_id: str) -> Optional[Any]:
@@ -182,35 +125,29 @@ def resolve_clickhouse_conn(
     user: Optional[str] = None,
     database: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Return fully-resolved ClickHouse HTTP connection parameters.
+    """Return the ClickHouse HTTP connection data, without a password.
 
     Resolution order per field:
-        CLI flag > $XDG_CONFIG_HOME/mas/connections.yaml >
-        CLICKHOUSE_* env vars > built-in default
+        CLI flag > user connections (bound by ctl) > CLICKHOUSE_* host values > built-in default
 
-    The ``password`` is always resolved from the ``password_env`` indirection in
-    connections.yaml, or directly from ``CLICKHOUSE_PASSWORD``.
+    Nothing here touches the secret store: a caller that authenticates asks
+    :func:`resolve_clickhouse_password` for the password when it connects.
+
+    ``uri`` (``https://...`` for TLS) comes from the user connections only.
 
     Returns:
-        Dict with keys: ``host``, ``port`` (int), ``user``, ``password``, ``database``.
+        Dict with keys: ``host``, ``port`` (int), ``user``, ``database``, ``uri``.
     """
-    dotenv = _load_dotenv()
     cfg = _load_named_connection("clickhouse")
 
     def _pick_ch(key: str, cli_val, env_var: str, default: Any) -> Any:
         if cli_val is not None:
             return cli_val
         if key in cfg:
-            resolved = _resolve_value(cfg[key], dotenv)
+            resolved = _resolve_value(cfg[key])
             if resolved:
                 return resolved
-        return hostenv.get(env_var) or dotenv.get(env_var) or default
-
-    password = ""
-    if "password" in cfg:
-        password = _resolve_value(cfg["password"], dotenv)
-    if not password:
-        password = hostenv.get("CLICKHOUSE_PASSWORD") or dotenv.get("CLICKHOUSE_PASSWORD") or ""
+        return hostenv.get(env_var) or default
 
     raw_port = _pick_ch("port", port, "CLICKHOUSE_PORT", 8123)
     try:
@@ -222,9 +159,23 @@ def resolve_clickhouse_conn(
         "host": _pick_ch("host", host, "CLICKHOUSE_HOST", "localhost"),
         "port": resolved_port,
         "user": _pick_ch("user", user, "CLICKHOUSE_USER", "admin"),
-        "password": password,
         "database": _pick_ch("database", database, "CLICKHOUSE_DATABASE", "default"),
+        "uri": cfg.get("uri") or "",
     }
+
+
+def reveal_password(raw: Any) -> str:
+    """The declared password (a SecretRef, required unless optional), ``""`` when none is declared."""
+    from mas.runtime.secrets import current_resolver
+    from mas.runtime.secrets.ref import parse_secret_ref_optional
+
+    ref = parse_secret_ref_optional(raw, field="password")
+    return (current_resolver().reveal_or_none(ref) or "") if ref else ""
+
+
+def resolve_clickhouse_password() -> str:
+    """Reveal the ClickHouse password the user connections declare, at the call that connects."""
+    return reveal_password(_load_named_connection("clickhouse").get("password"))
 
 
 def resolve_neo4j_conn(
@@ -234,59 +185,39 @@ def resolve_neo4j_conn(
     database: Optional[str] = None,
     store_id: str = "neo4j",
 ) -> Dict[str, Any]:
-    """Return fully-resolved Neo4j Bolt connection parameters.
+    """Return the Neo4j Bolt connection data, without a password.
 
     Resolution order per field:
-        CLI flag > infra manifest store (store_id) >
-        $XDG_CONFIG_HOME/mas/connections.yaml >
-        NEO4J_* env vars > built-in default
+        CLI flag > infra manifest store (store_id) > user connections (bound by ctl) > built-in default
+
+    Nothing here touches the secret store: a caller that authenticates reads the password from its target.
 
     Returns:
-        Dict with keys: ``uri``, ``user``, ``password``, ``database``.
+        Dict with keys: ``uri``, ``user``, ``database``.
     """
-    dotenv = _load_dotenv()
-    cfg = _load_named_connection("neo4j")
-
-    # Try infra manifest store first
     store = _load_infra_store(store_id) if store_id else None
     if store is not None:
-        store_uri = getattr(store, "uri", None) or ""
-        store_user = getattr(store, "user", None) or ""
-        store_db = getattr(store, "database", None) or ""
-        pw_env = getattr(store, "password_env", None) or "NEO4J_PASSWORD"
-        store_pass = hostenv.get(pw_env) or dotenv.get(pw_env) or ""
         return {
-            "uri": uri or store_uri or hostenv.get("NEO4J_URI") or dotenv.get("NEO4J_URI") or "bolt://localhost:7687",
-            "user": user or store_user or hostenv.get("NEO4J_USER") or dotenv.get("NEO4J_USER") or "neo4j",  # noqa: E501
-            "password": store_pass,
-            "database": database
-            or store_db
-            or hostenv.get("NEO4J_DATABASE")
-            or dotenv.get("NEO4J_DATABASE")
-            or "neo4j",  # noqa: E501
+            "uri": uri or getattr(store, "uri", None) or "bolt://localhost:7687",
+            "user": user or getattr(store, "user", None) or "neo4j",
+            "database": database or getattr(store, "database", None) or "neo4j",
         }
 
-    def _pick(key: str, cli_val, env_var: str, default: Any) -> Any:
+    cfg = _load_named_connection("neo4j")
+
+    def _pick(key: str, cli_val, default: Any) -> Any:
         if cli_val is not None:
             return cli_val
         if key in cfg:
-            resolved = _resolve_value(cfg[key], dotenv)
+            resolved = _resolve_value(cfg[key])
             if resolved:
                 return resolved
-        return hostenv.get(env_var) or dotenv.get(env_var) or default
-
-    password = ""
-    if "password" in cfg:
-        password = _resolve_value(cfg["password"], dotenv)
-    if not password:
-        pw_env = cfg.get("password_env", "NEO4J_PASSWORD")
-        password = hostenv.get(pw_env) or dotenv.get(pw_env) or ""
+        return default
 
     return {
-        "uri": _pick("uri", uri, "NEO4J_URI", "bolt://localhost:7687"),
-        "user": _pick("user", user, "NEO4J_USER", "neo4j"),
-        "password": password,
-        "database": _pick("database", database, "NEO4J_DATABASE", "neo4j"),
+        "uri": _pick("uri", uri, "bolt://localhost:7687"),
+        "user": _pick("user", user, "neo4j"),
+        "database": _pick("database", database, "neo4j"),
     }
 
 

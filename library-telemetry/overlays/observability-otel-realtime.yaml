@@ -6,7 +6,8 @@
 # *.graph span (realtime replaces it). They go to
 # traces/otel_sdk_spans_runtime_events.jsonl and to OTLP /v1/logs. Same toggle as
 # $OBSERVE_REALTIME_OBSERVABILITY_ENABLED=true, as a Control instead of
-# an env var.
+# an env var. otlp_endpoint is the collector's OTLP HTTP base URL; override it
+# in an overlay for another collector.
 apiVersion: control/v1
 kind: Control
 metadata:
@@ -16,5 +17,5 @@ spec:
   - otel:
       output_path: traces/otel_sdk_spans.jsonl
       converter_profile: observe_sdk
-      otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT
+      otlp_endpoint: http://localhost:4318
       realtime: true

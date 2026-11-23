@@ -5,7 +5,7 @@
 # The lines below that are not commented out are the minimal setup.
 # Every other option is listed commented out, with its default when it has
 # one: uncomment a line to change it. Secrets never go in this file; put API
-# keys in the file named by `mas_ctl.env` or in the process environment.
+# keys in the file store (`mas-ctl secrets set`).
 # Reference: docs/references/config.yaml.md
 
 mas_ctl:
@@ -13,7 +13,7 @@ mas_ctl:
   trace: summary
   # --- Optional, all commented out. The value shown is the default. ---
   # flavour: local                  # deployment preset (library-standard or ./flavours/)
-  # env: .env                       # gitignored secrets file, relative to the workspace
+  # env: .env                       # dotenv for non-secret MAS_LLM_* keys, relative to the workspace
   # deployment: deployment.yaml     # deployment manifest, relative to the workspace
   # runtime_id: my-runtime          # kernel / runtime id override
   # runtime_profile: runtime/profile.yaml

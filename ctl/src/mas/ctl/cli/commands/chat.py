@@ -393,17 +393,23 @@ def chat_cmd(
             if candidates:
                 load_checkpoint_path = max(candidates, key=lambda item: item.stat().st_mtime_ns)
 
-        resolved_infra = resolve_session_infra(
-            agent_data,
-            workspace,
-            user,
-            infra_refs_cli=infra_refs_cli,
-            overrides=overrides,
-            runtime_refs_cli=runtime_refs_cli,
-            middleware_refs=middleware_refs,
-            anchor=session.manifest_dir or session.original_cwd,
-            with_interceptors=True,
-        )
+        from mas.ctl.infra.resolve import InfraResolveError
+
+        try:
+            resolved_infra = resolve_session_infra(
+                agent_data,
+                workspace,
+                user,
+                infra_refs_cli=infra_refs_cli,
+                overrides=overrides,
+                runtime_refs_cli=runtime_refs_cli,
+                middleware_refs=middleware_refs,
+                anchor=session.manifest_dir or session.original_cwd,
+                with_interceptors=True,
+            )
+        except InfraResolveError as exc:
+            click.echo(f"error: {exc}", err=True)
+            raise SystemExit(1) from None
         from mas.ctl.cli.chains import bind_or_exit, single_agent_chains
 
         agent_id = require_agent_id_from_manifest(agent_data)

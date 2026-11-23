@@ -16,7 +16,9 @@ mas-lab telemetry dump [OPTIONS]
 
 ## DESCRIPTION
 
-Fetch a session (or trace) from ClickHouse `otel_traces` to JSONL. Requires the `[clickhouse]` extra. Same `clickhouse_dump` step as `telemetry:dump-session`.
+Fetch a session (or trace) from ClickHouse `otel_traces` to JSONL. Same `clickhouse_dump` step as `telemetry:dump-session`.
+
+The ClickHouse password is the `clickhouse` secret: `mas-ctl secrets set clickhouse`.
 
 ## OPTIONS
 
@@ -29,7 +31,6 @@ Fetch a session (or trace) from ClickHouse `otel_traces` to JSONL. Requires the 
 | `--host` | ClickHouse host (overrides config/env). |
 | `--port` | ClickHouse HTTP port. |
 | `--user` | ClickHouse user. |
-| `--password` | ClickHouse password. |
 | `--database` | ClickHouse database. |
 | `--table` | OTel traces table. |
 | `--json-output` | Print summary as JSON. |

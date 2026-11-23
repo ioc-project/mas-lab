@@ -42,7 +42,7 @@ def _provider(transport: _Transport, monkeypatch: pytest.MonkeyPatch, **params: 
     del monkeypatch
     return OpenAILLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "openai"}, **params},
         call_kinds=("llm",),
     )
 
@@ -68,7 +68,10 @@ def test_protocol_layers_is_http_then_openai_with_the_provider_timeout_and_tls()
     assert [step["layer"] for step in steps] == ["http", "openai"]
     assert steps[0]["params"] == {"url": "http://127.0.0.1:9/v1", "timeout": 120.0}
     tls = OpenAILLMProvider.protocol_layers(
-        {"proxy": {"api_base": "https://x/v1", "timeout": 5, "verify_ssl": False}, "ca_bundle": "/ca.pem"}
+        {
+            "proxy": {"api_base": "https://x/v1", "api_key": {"secret": "openai"}, "timeout": 5, "verify_ssl": False},
+            "ca_bundle": "/ca.pem",
+        }
     )
     assert tls[0]["params"] == {"url": "https://x/v1", "timeout": 5.0, "verify_ssl": False, "ca_bundle": "/ca.pem"}
     assert "proxy" not in tls[1]["params"]

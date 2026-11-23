@@ -49,7 +49,7 @@ class _Transport:
 
 
 def _run(cls: type[HttpLlmProtocol], transport: _Transport, **call: Any) -> dict[str, Any]:
-    params = {"api_base": "http://127.0.0.1:9/v1", "api_key": "k", "api_key_env": "K", "project": "p"}
+    params = {"api_base": "http://127.0.0.1:9/v1", "project": "p", "api_key": cls.default_secret}
     provider = cls.wrap(transport, params, call_kinds=("llm",))
     call.setdefault("messages", _USER)
     return asyncio.run(provider.achat_completion(**call))

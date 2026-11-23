@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -25,6 +26,44 @@ _FAILED_STATES = {
 def _kind(response: Any) -> str:
     """Which payload a stream response carries; ``""`` for anything that is not a ``StreamResponse``."""
     return response.WhichOneof("payload") or "" if isinstance(response, StreamResponse) else ""
+
+
+_JSONRPC_FALLBACK = re.compile(r"^JSON-RPC Error (-?\d+):")
+
+
+def peer_error(exc: BaseException) -> AgentCommError:
+    """What a failed A2A call may say: a closed reason and code, never the peer's message.
+
+    The SDK turns a JSON-RPC error into an exception carrying the peer's ``message`` (``TaskNotFoundError``
+    for -32001), and an HTTP error status into text holding the response; both are the peer's to write.
+    Our own refusals (``AgentCommError``) are kept as they are.
+    """
+    from a2a.client.errors import A2AClientError, A2AClientTimeoutError, AgentCardResolutionError
+    from a2a.utils.errors import A2A_ERROR_MAPPING, JSON_RPC_ERROR_CODE_MAP, A2AError
+    from mas.runtime.reliability.classify import safe_exception_text
+
+    if isinstance(exc, AgentCommError):
+        return exc
+    if isinstance(exc, A2AClientTimeoutError):
+        return AgentCommError("remote A2A peer timed out")
+    if isinstance(exc, AgentCardResolutionError):
+        status = f": HTTP {exc.status_code}" if isinstance(exc.status_code, int) else ""
+        return AgentCommError(f"remote A2A agent card could not be read{status}")
+    if isinstance(exc, A2AClientError):
+        cause = exc.__cause__
+        if isinstance(cause, httpx.HTTPError):
+            return AgentCommError(f"remote A2A peer: {safe_exception_text(cause)}")
+        match = _JSONRPC_FALLBACK.match(str(exc))
+        if match:
+            return AgentCommError(f"remote A2A peer answered JSON-RPC error {match.group(1)}")
+        return AgentCommError("remote A2A peer sent an answer that is not valid A2A")
+    if isinstance(exc, A2AError):
+        mapping = A2A_ERROR_MAPPING.get(type(exc))
+        reason = mapping.reason if mapping else type(exc).__name__
+        code = JSON_RPC_ERROR_CODE_MAP.get(type(exc))
+        shown = f"{reason} ({code})" if code is not None else reason
+        return AgentCommError(f"remote A2A peer answered an error: {shown}")
+    return AgentCommError(f"remote A2A call failed: {safe_exception_text(exc)}")
 
 
 def raise_if_failed(responses: list[Any]) -> None:
@@ -92,12 +131,14 @@ class A2AClient:
         self,
         *,
         url: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: dict[str, Any] | None = None,
         timeout: float | None = None,
         transport: str | None = None,
+        allowed_origins: list[str] | None = None,
     ) -> None:
         self.url = (url or "http://127.0.0.1:8000").rstrip("/")
         self.headers = dict(headers or {})
+        self.allowed_origins = list(allowed_origins or ())
         self.timeout = timeout or 10.0
         self.transport = transport
         self._agent_card_cache: dict[str, Any] | None = None
@@ -286,12 +327,34 @@ class _Connection:
     """What one event loop keeps for one remote agent: an HTTP client, its card and the SDK client per binding."""
 
     def __init__(self, owner: A2AClient) -> None:
+        from mas.runtime.secrets.transport import httpx_client_kwargs_for
+
+        from library_ioa.utils.secret_headers import SecretHeaderHook
+
         self._owner = owner
-        self._http = httpx.AsyncClient(headers=owner.headers, timeout=owner.timeout)
+        # The row's headers go on each request, revealed then. A secret one goes only to the origin of the
+        # configured url (or a listed ``allowed_origins`` entry), over https unless the host is loopback: an
+        # agent card names the hosts the SDK then posts to, and a card is the peer's to write.
+        self._headers = SecretHeaderHook(
+            owner.headers,
+            owner_url=owner.url,
+            allowed_origins=owner.allowed_origins,
+            error=AgentCommError,
+            what="a2a client",
+        )
+        # a loopback peer is reached without the environment's proxy: its plain-http secret headers stay local
+        self._http = httpx.AsyncClient(
+            timeout=owner.timeout,
+            event_hooks={"request": [self._attach_headers]},
+            **httpx_client_kwargs_for(owner.url),
+        )
         self._card: Any = None
         self.card_data: dict[str, Any] | None = None
         self._clients: dict[bool, Any] = {}
         self._lock = asyncio.Lock()
+
+    async def _attach_headers(self, request: httpx.Request) -> None:
+        self._headers.apply(request)
 
     async def fetch_card(self, *, force: bool = False) -> dict[str, Any]:
         async with self._lock:

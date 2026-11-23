@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: openresponses
   description: >
-    Open Responses host (POST /responses). Requires OPENRESPONSES_API_KEY.
+    Open Responses host (POST /responses). The key is `{secret: openresponses}`.
 
 spec:
   protocol: openresponses
   proxy:
-    api_base: env:OPENRESPONSES_API_BASE|https://api.openai.com/v1
-    api_key_env: OPENRESPONSES_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openresponses}

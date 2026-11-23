@@ -18,6 +18,10 @@ mas-lab telemetry sessions list [OPTIONS]
 
 List sessions in the native telemetry / ClickHouse store.
 
+The ClickHouse password is the `password` ref of the `clickhouse` user connection
+(for example `password: {secret: clickhouse}`); store its value with `mas-ctl secrets set clickhouse`.
+With none declared, the password is empty.
+
 ## OPTIONS
 
 | Flag | Meaning |
@@ -28,7 +32,6 @@ List sessions in the native telemetry / ClickHouse store.
 | `--host` | ClickHouse host. |
 | `--port` | ClickHouse HTTP port. |
 | `--user` | ClickHouse user. |
-| `--password` | ClickHouse password. |
 | `--database` | ClickHouse database. |
 | `--table` | OTel traces table. |
 | `--json-output` | Print result as JSON. |

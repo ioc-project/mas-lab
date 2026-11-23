@@ -52,9 +52,7 @@ __all__ = [
 ]
 
 
-def _resolve_run_file(
-    ctx: "ExecutionContext", config: dict, filename: str
-) -> Optional[str]:
+def _resolve_run_file(ctx: "ExecutionContext", config: dict, filename: str) -> Optional[str]:
     """Resolve ``<run_dir>/traces/<filename>`` (or ``<run_dir>/<filename>``)."""
     run_dir = run_dir_from_ctx(ctx, config)
     if not run_dir:
@@ -93,9 +91,7 @@ class EventsToOtelStep(PipelineStep):
             or _dep_path(ctx, self.depends_on, "events_path")
         )
         if not events_path or not Path(events_path).exists():
-            raise FileNotFoundError(
-                f"Step '{self.name}': events.jsonl not found ({events_path})"
-            )
+            raise FileNotFoundError(f"Step '{self.name}': events.jsonl not found ({events_path})")
 
         output_dir = ctx.get_step_output_dir(self.name)
         out_name = check_simple_name(
@@ -112,11 +108,7 @@ class EventsToOtelStep(PipelineStep):
             converter_profile=str(config.get("converter_profile") or "observe_sdk"),
             realtime=bool(config.get("realtime", False)),
             replay_speed=float(config.get("replay_speed") or 0),
-            extensions=(
-                None
-                if config.get("extensions") is None
-                else bool(config.get("extensions"))
-            ),
+            extensions=(None if config.get("extensions") is None else bool(config.get("extensions"))),
             shift_to_now=bool(config.get("shift_to_now", False)),
             new_session_id=bool(config.get("new_session_id", False)),
         )
@@ -147,9 +139,7 @@ class VerifyOtelStep(PipelineStep):
             or _dep_path(ctx, self.depends_on, "otel_path")
         )
         if not spans_path or not Path(spans_path).exists():
-            raise FileNotFoundError(
-                f"Step '{self.name}': spans file not found ({spans_path})"
-            )
+            raise FileNotFoundError(f"Step '{self.name}': spans file not found ({spans_path})")
 
         report = run_verify_spans(
             spans_path,
@@ -162,14 +152,11 @@ class VerifyOtelStep(PipelineStep):
         output_dir = ctx.get_step_output_dir(self.name)
         output_dir.mkdir(parents=True, exist_ok=True)
         report_file = output_dir / "otel_verify_report.json"
-        report_file.write_text(
-            json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
-        )
+        report_file.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 
         if fail_on_err and not report["ok"]:
             raise RuntimeError(
-                f"Step '{self.name}': OTel verification failed — "
-                f"{len(report['errors'])} error(s). See {report_file}"
+                f"Step '{self.name}': OTel verification failed — {len(report['errors'])} error(s). See {report_file}"
             )
         out = StepOutput(
             data={
@@ -192,19 +179,12 @@ class CompareOtelSpansStep(PipelineStep):
 
     async def execute(self, ctx: "ExecutionContext") -> "StepOutput":
         config = self.config
-        reference = config.get("reference") or _dep_path(
-            ctx, self.depends_on, "otel_path"
-        )
+        reference = config.get("reference") or _dep_path(ctx, self.depends_on, "otel_path")
         candidate = config.get("candidate")
         if config.get("candidate_filename"):
-            candidate = (
-                _resolve_run_file(ctx, config, config["candidate_filename"])
-                or candidate
-            )
+            candidate = _resolve_run_file(ctx, config, config["candidate_filename"]) or candidate
         if not reference or not candidate:
-            raise ValueError(
-                f"Step '{self.name}': compare needs 'reference' and 'candidate' span files"
-            )
+            raise ValueError(f"Step '{self.name}': compare needs 'reference' and 'candidate' span files")
         output_dir = ctx.get_step_output_dir(self.name)
         output_dir.mkdir(parents=True, exist_ok=True)
         report_file = output_dir / "otel_parity_report.json"
@@ -216,9 +196,7 @@ class CompareOtelSpansStep(PipelineStep):
             fail_on_error=bool(config.get("assert_equivalent", False)),
         )
         if config.get("assert_equivalent") and not report.get("passed"):
-            raise RuntimeError(
-                f"Step '{self.name}': span parity FAILED. See {report_file}"
-            )
+            raise RuntimeError(f"Step '{self.name}': span parity FAILED. See {report_file}")
         return StepOutput(
             data={
                 "passed": report.get("passed"),
@@ -242,11 +220,7 @@ class ExportOtelStep(PipelineStep):
         config = self.config
         spans_path = (
             config.get("spans_path")
-            or (
-                _resolve_run_file(ctx, config, config["spans_filename"])
-                if config.get("spans_filename")
-                else None
-            )
+            or (_resolve_run_file(ctx, config, config["spans_filename"]) if config.get("spans_filename") else None)
             or _dep_path(ctx, self.depends_on, "otel_path")
         )
         if not spans_path:
@@ -262,9 +236,7 @@ class ExportOtelStep(PipelineStep):
             new_session_id=bool(config.get("new_session_id", False)),
         )
         if result.get("status") not in {"ok", "dry-run"}:
-            raise RuntimeError(
-                f"Step '{self.name}': OTLP export failed — {result.get('detail')}"
-            )
+            raise RuntimeError(f"Step '{self.name}': OTLP export failed — {result.get('detail')}")
         return StepOutput(
             data=result,
             metadata={"step": self.name, "step_type": self.type},
@@ -285,20 +257,21 @@ class ClickhouseDumpStep(PipelineStep):
         config = self.config
         session_id = config.get("session_id") or config.get("run_id")
         if not session_id:
-            raise ValueError(
-                f"Step '{self.name}': 'session_id' (or 'run_id') is required"
-            )
+            raise ValueError(f"Step '{self.name}': 'session_id' (or 'run_id') is required")
+        from mas.lab.connections import resolve_clickhouse_conn, resolve_clickhouse_password
+
         span_set: OtelSpanSet = OtelSpanSet.fetch_from_clickhouse(
+            resolve_clickhouse_conn(),
             session_id,
-            query_by=str(config.get("by", "session")),
+            by=str(config.get("by", "session")),
+            password=resolve_clickhouse_password(),
             app_name=config.get("app_name"),
             table=str(config.get("table", "otel_traces")),
         )
         output_dir = ctx.get_step_output_dir(self.name)
         out_path = span_set.save(
-            output_dir / check_simple_name(
-                self.name, "output_filename", config.get("output_filename") or "otel_sdk_spans.jsonl"
-            )
+            output_dir
+            / check_simple_name(self.name, "output_filename", config.get("output_filename") or "otel_sdk_spans.jsonl")
         )
         return StepOutput(
             data={"otel_path": str(out_path), "span_count": span_set.span_count},

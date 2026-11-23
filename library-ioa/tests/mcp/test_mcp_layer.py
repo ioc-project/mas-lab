@@ -98,23 +98,30 @@ def test_http_inner_is_none_without_the_runtime_or_when_the_layer_will_not_load(
 
 
 async def test_mcp_session_uses_the_row_headers_and_the_http_transport() -> None:
+    from secret_fakes import bound_secrets
+
     spec = {
         "name": "demo",
         "protocol": "mcp",
         "url": "https://mcp.example/mcp",
-        "headers": {"Authorization": "Bearer x"},
+        "headers": {"Authorization": {"secret": {"name": "mcp", "prefix": "Bearer "}}},
         "tools": ["echo"],
     }
     seen: list = []
     session = _Session()
     first, second = _provider(spec, session, seen)
-    with first, second:
-        provider = MCPToolProvider.from_provider_spec(spec)
-        try:
-            assert await provider.acall_tool("echo", {"q": 1})
-        finally:
-            provider.close()
-    assert isinstance(seen[0], httpx.AsyncClient) and seen[0].headers["authorization"] == "Bearer x"
+    with bound_secrets({"mcp": "x"}):
+        with first, second:
+            provider = MCPToolProvider.from_provider_spec(spec)
+            try:
+                assert await provider.acall_tool("echo", {"q": 1})
+                assert isinstance(seen[0], httpx.AsyncClient) and "authorization" not in seen[0].headers
+                request = seen[0].build_request("POST", "https://mcp.example/mcp")
+                for hook in seen[0].event_hooks["request"]:
+                    await hook(request)
+                assert request.headers["authorization"] == "Bearer x"
+            finally:
+                provider.close()
     assert session.call_tool.await_count == 1
 
 

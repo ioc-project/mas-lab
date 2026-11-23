@@ -24,12 +24,13 @@ from __future__ import annotations
 
 import logging
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-
 from mas.ctl.overlay.merge import apply_document_extensions
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load
 
 _LOG = logging.getLogger(__name__)
 
@@ -53,9 +54,7 @@ _NODE_ID_ALIASES: dict[str, str] = {
 }
 
 
-def overlay_targets(
-    doc: Any, *, kind: str, name: str, require_name: bool = False
-) -> bool:
+def overlay_targets(doc: Any, *, kind: str, name: str, require_name: bool = False) -> bool:
     """True when *doc* is an Overlay whose ``spec.target`` selects *kind*/*name*."""
     if not isinstance(doc, dict):
         return False
@@ -109,8 +108,8 @@ def is_ui_canvas_overlay(doc: Any, *, path: Path | None = None) -> bool:
 
 def _load_yaml_mapping(path: Path) -> dict[str, Any] | None:
     try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except Exception as exc:
+        doc = safe_yaml_load(path.read_text(encoding="utf-8"))
+    except (OSError, YamlLoadError) as exc:
         _LOG.debug("skip unreadable YAML %s: %s", path, exc)
         return None
     return doc if isinstance(doc, dict) else None
@@ -148,9 +147,7 @@ def iter_layout_overlays(
             doc = _load_yaml_mapping(path)
             if doc is None:
                 continue
-            if not overlay_targets(
-                doc, kind=target_kind, name=target_name, require_name=require_name
-            ):
+            if not overlay_targets(doc, kind=target_kind, name=target_name, require_name=require_name):
                 continue
             if not overlay_is_layout_only(doc):
                 continue
@@ -172,12 +169,8 @@ def iter_targeting_canvas_overlays(
             extra.append(path)
     if local_dir.is_dir():
         local.append(local_dir)
-    named = iter_layout_overlays(
-        extra, target_kind="MAS", target_name=mas_name, require_name=True
-    )
-    folder = iter_layout_overlays(
-        local, target_kind="MAS", target_name=mas_name, require_name=False
-    )
+    named = iter_layout_overlays(extra, target_kind="MAS", target_name=mas_name, require_name=True)
+    folder = iter_layout_overlays(local, target_kind="MAS", target_name=mas_name, require_name=False)
     return named + folder
 
 
@@ -193,9 +186,7 @@ def find_layout_overlay(
         matched = iter_targeting_canvas_overlays(mas_dir, mas_name, extra_overlay_dirs)
     else:
         dirs = [mas_dir, *(extra_overlay_dirs or [])]
-        matched = iter_layout_overlays(
-            dirs, target_kind=target_kind, target_name=mas_name, require_name=True
-        )
+        matched = iter_layout_overlays(dirs, target_kind=target_kind, target_name=mas_name, require_name=True)
     return matched[-1][0] if matched else None
 
 
@@ -273,9 +264,9 @@ def apply_ui_canvas_to_yaml(
     list means no canvas; ``None`` walks overlay folders (ctl / tests).
     """
     try:
-        mas_doc = yaml.safe_load(mas_yaml) or {}
-        agent_docs = {name: (yaml.safe_load(text) or {}) for name, text in agents.items()}
-    except Exception as exc:
+        mas_doc = safe_yaml_load(mas_yaml) or {}
+        agent_docs = {name: (safe_yaml_load(text) or {}) for name, text in agents.items()}
+    except YamlLoadError as exc:
         _LOG.debug("skip canvas apply; unreadable MAS/agent YAML: %s", exc)
         return mas_yaml, agents, None
     if not isinstance(mas_doc, dict):
@@ -285,9 +276,7 @@ def apply_ui_canvas_to_yaml(
         return mas_yaml, agents, None
     mas_name = str((mas_doc.get("metadata") or {}).get("name") or mas_dir.name).strip() or mas_dir.name
     matched = (
-        overlays
-        if overlays is not None
-        else iter_targeting_canvas_overlays(mas_dir, mas_name, extra_overlay_dirs)
+        overlays if overlays is not None else iter_targeting_canvas_overlays(mas_dir, mas_name, extra_overlay_dirs)
     )
     if not matched:
         return mas_yaml, agents, None
@@ -314,8 +303,8 @@ def apply_ui_canvas_to_overlay_yaml(
     canvas; ``None`` walks *overlay_dir* plus *extra_overlay_dirs*.
     """
     try:
-        doc = yaml.safe_load(overlay_yaml) or {}
-    except Exception as exc:
+        doc = safe_yaml_load(overlay_yaml) or {}
+    except YamlLoadError as exc:
         _LOG.debug("skip overlay canvas apply; unreadable YAML: %s", exc)
         return overlay_yaml, None
     if not isinstance(doc, dict) or overlay_is_layout_only(doc):
@@ -328,9 +317,7 @@ def apply_ui_canvas_to_overlay_yaml(
         for extra in extra_overlay_dirs or []:
             if extra.resolve() != overlay_dir.resolve():
                 dirs.append(extra)
-        matched = iter_layout_overlays(
-            dirs, target_kind="Overlay", target_name=name, require_name=True
-        )
+        matched = iter_layout_overlays(dirs, target_kind="Overlay", target_name=name, require_name=True)
     else:
         matched = overlays
     if not matched:
@@ -383,9 +370,7 @@ def extract_ui_canvas_overlay(
     )
 
 
-def extract_overlay_document_canvas(
-    overlay_doc: dict[str, Any], *, overlay_name: str
-) -> dict[str, Any] | None:
+def extract_overlay_document_canvas(overlay_doc: dict[str, Any], *, overlay_name: str) -> dict[str, Any] | None:
     """Pull canvas ``x-*`` off a spec overlay into a layout-only overlay."""
     positions = overlay_doc.pop("x-canvas-positions", None)
     node_ids = overlay_doc.pop("x-canvas-node-ids", None)
@@ -414,10 +399,7 @@ def _layout_overlay_doc(
         "kind": "Overlay",
         "metadata": {
             "name": target_name,
-            "description": (
-                f"UI-only canvas layout for {target_kind} {target_name}. "
-                "Ignored by the runtime."
-            ),
+            "description": (f"UI-only canvas layout for {target_kind} {target_name}. Ignored by the runtime."),
         },
         "spec": {
             "target": {"kind": target_kind, "name": target_name},
@@ -433,9 +415,7 @@ def _layout_overlay_doc(
     return overlay
 
 
-def _layout_persist_path(
-    overlay_dir: Path, *, target_kind: str, target_name: str
-) -> Path:
+def _layout_persist_path(overlay_dir: Path, *, target_kind: str, target_name: str) -> Path:
     matched = iter_layout_overlays(
         [overlay_dir],
         target_kind=target_kind,
@@ -460,21 +440,33 @@ def _layout_persist_path(
     return overlay_dir / f"{target_name}-layout.yaml"
 
 
-def write_ui_canvas_overlay(
+@dataclass(frozen=True)
+class CanvasLayoutWrite:
+    """The layout-only overlay file a canvas save would write: its path and full text."""
+
+    path: Path
+    content: str
+
+    def write(self) -> Path:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(self.content, encoding="utf-8")
+        return self.path
+
+
+def plan_ui_canvas_overlay(
     mas_dir: Path,
     overlay: dict[str, Any],
     *,
     mas_name: str | None = None,
     target_kind: str = "MAS",
     target_name: str | None = None,
-) -> Path:
-    """Write *overlay* onto the layout-only overlay for the target document."""
+) -> CanvasLayoutWrite:
+    """*overlay* merged onto the layout-only overlay for the target document; nothing is written."""
     name = target_name or mas_name
     if not name:
         raise ValueError("target_name is required")
     overlay_dir = mas_dir / "overlays" if target_kind.upper() == "MAS" else mas_dir
     dest = _layout_persist_path(overlay_dir, target_kind=target_kind, target_name=name)
-    dest.parent.mkdir(parents=True, exist_ok=True)
     existing: dict[str, Any] = {}
     if dest.is_file():
         loaded = _load_yaml_mapping(dest)
@@ -486,8 +478,52 @@ def write_ui_canvas_overlay(
         meta = dict(existing["metadata"])
         meta.update(overlay["metadata"])
         merged["metadata"] = meta
-    dest.write_text(_dump_yaml(merged), encoding="utf-8")
-    return dest
+    return CanvasLayoutWrite(dest, _dump_yaml(merged))
+
+
+def write_ui_canvas_overlay(
+    mas_dir: Path,
+    overlay: dict[str, Any],
+    *,
+    mas_name: str | None = None,
+    target_kind: str = "MAS",
+    target_name: str | None = None,
+) -> Path:
+    """Write *overlay* onto the layout-only overlay for the target document."""
+    return plan_ui_canvas_overlay(
+        mas_dir, overlay, mas_name=mas_name, target_kind=target_kind, target_name=target_name
+    ).write()
+
+
+def plan_ui_canvas_yaml(
+    mas_dir: Path,
+    mas_yaml: str,
+    agents: dict[str, str],
+    *,
+    mas_name: str,
+) -> tuple[str, dict[str, str], CanvasLayoutWrite | None]:
+    """Canvas ``x-*`` taken off MAS/agent YAML, and the layout-only Overlay write that keeps
+    them; nothing is written, so the caller can check every file before any is."""
+    try:
+        mas_doc = safe_yaml_load(mas_yaml) or {}
+    except YamlLoadError:
+        return mas_yaml, agents, None
+    if not isinstance(mas_doc, dict):
+        return mas_yaml, agents, None
+    parsed: dict[str, dict[str, Any]] = {}
+    for name, text in agents.items():
+        try:
+            doc = safe_yaml_load(text) or {}
+        except YamlLoadError:
+            return mas_yaml, agents, None
+        if not isinstance(doc, dict):
+            return mas_yaml, agents, None
+        parsed[name] = doc
+    overlay = extract_ui_canvas_overlay(mas_doc, parsed, mas_name=mas_name)
+    if overlay is None:
+        return mas_yaml, agents, None
+    layout = plan_ui_canvas_overlay(mas_dir, overlay, mas_name=mas_name)
+    return _dump_yaml(mas_doc), {name: _dump_yaml(doc) for name, doc in parsed.items()}, layout
 
 
 def persist_ui_canvas_yaml(
@@ -498,45 +534,28 @@ def persist_ui_canvas_yaml(
     mas_name: str,
 ) -> tuple[str, dict[str, str]]:
     """Move canvas ``x-*`` from MAS/agent YAML onto a layout-only Overlay."""
-    try:
-        mas_doc = yaml.safe_load(mas_yaml) or {}
-    except Exception:
-        return mas_yaml, agents
-    if not isinstance(mas_doc, dict):
-        return mas_yaml, agents
-    parsed: dict[str, dict[str, Any]] = {}
-    for name, text in agents.items():
-        try:
-            doc = yaml.safe_load(text) or {}
-        except Exception:
-            return mas_yaml, agents
-        if not isinstance(doc, dict):
-            return mas_yaml, agents
-        parsed[name] = doc
-    overlay = extract_ui_canvas_overlay(mas_doc, parsed, mas_name=mas_name)
-    if overlay is None:
-        return mas_yaml, agents
-    write_ui_canvas_overlay(mas_dir, overlay, mas_name=mas_name)
-    return _dump_yaml(mas_doc), {name: _dump_yaml(doc) for name, doc in parsed.items()}
+    mas_out, agents_out, layout = plan_ui_canvas_yaml(mas_dir, mas_yaml, agents, mas_name=mas_name)
+    if layout is not None:
+        layout.write()
+    return mas_out, agents_out
 
 
-def persist_overlay_canvas_yaml(
+def plan_overlay_canvas_yaml(
     overlay_dir: Path, overlay_yaml: str, *, overlay_name: str
-) -> str:
-    """Move canvas ``x-*`` off a spec overlay onto a layout-only Overlay."""
+) -> tuple[str, CanvasLayoutWrite | None]:
+    """Canvas ``x-*`` taken off a spec overlay, and the layout-only Overlay write that keeps
+    them; nothing is written."""
     try:
-        doc = yaml.safe_load(overlay_yaml) or {}
-    except Exception:
-        return overlay_yaml
+        doc = safe_yaml_load(overlay_yaml) or {}
+    except YamlLoadError:
+        return overlay_yaml, None
     if not isinstance(doc, dict) or overlay_is_layout_only(doc):
-        return overlay_yaml
+        return overlay_yaml, None
     layout = extract_overlay_document_canvas(doc, overlay_name=overlay_name)
     if layout is None:
-        return overlay_yaml
-    write_ui_canvas_overlay(
-        overlay_dir, layout, target_kind="Overlay", target_name=overlay_name
-    )
-    return _dump_yaml(doc)
+        return overlay_yaml, None
+    planned = plan_ui_canvas_overlay(overlay_dir, layout, target_kind="Overlay", target_name=overlay_name)
+    return _dump_yaml(doc), planned
 
 
 def _dump_yaml(doc: dict[str, Any]) -> str:

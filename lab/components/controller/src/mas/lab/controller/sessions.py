@@ -13,7 +13,13 @@ from mas.runtime import hostenv
 if TYPE_CHECKING:
     from mas.lab.controller.api import ControllerAPI
 
-IDLE_SHUTDOWN_SEC = float(hostenv.get("MAS_CONTROLLER_IDLE_SEC", "30"))
+DEFAULT_IDLE_SHUTDOWN_SEC = 30.0
+
+
+def idle_shutdown_sec() -> float:
+    """``MAS_CONTROLLER_IDLE_SEC``, read when asked: the daemon installs the host environment first."""
+    raw = hostenv.get("MAS_CONTROLLER_IDLE_SEC", "")
+    return float(raw) if str(raw).strip() else DEFAULT_IDLE_SHUTDOWN_SEC
 
 
 class SessionRegistry:
@@ -42,7 +48,7 @@ class SessionRegistry:
 
     def should_shutdown(self, api: ControllerAPI, *, idle_sec: float | None = None) -> bool:
         """True when no sessions, no active workers, and idle for *idle_sec*."""
-        threshold = idle_sec if idle_sec is not None else IDLE_SHUTDOWN_SEC
+        threshold = idle_sec if idle_sec is not None else idle_shutdown_sec()
         if self._sessions or self.active_worker_count(api) > 0:
             self._idle_since = None
             return False
@@ -56,5 +62,5 @@ class SessionRegistry:
         return {
             "sessions": self.count(),
             "idle_since": self._idle_since,
-            "idle_shutdown_sec": IDLE_SHUTDOWN_SEC,
+            "idle_shutdown_sec": idle_shutdown_sec(),
         }

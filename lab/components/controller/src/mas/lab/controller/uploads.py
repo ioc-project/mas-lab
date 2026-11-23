@@ -8,6 +8,18 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+MANIFEST_UPLOAD_SUFFIXES = frozenset({".yaml", ".yml", ".json"})
+
+
+def is_manifest_upload(filename: str) -> bool:
+    """True for a YAML or JSON file name, read as a file system would store it.
+
+    Surrounding spaces and trailing dots are dropped and case is ignored, so ``u.yaml.`` and
+    ``"u.yaml "`` count as YAML, exactly as the item that reads the upload sees them.
+    """
+    name = Path(str(filename or "")).name.strip().rstrip(". ").casefold()
+    return Path(name).suffix in MANIFEST_UPLOAD_SUFFIXES
+
 
 @dataclass
 class Upload:
@@ -41,6 +53,11 @@ class UploadStore:
 
     def get(self, upload_id: str) -> Upload | None:
         return self._items.get(upload_id)
+
+    def delete(self, upload_id: str) -> None:
+        item = self._items.pop(upload_id, None)
+        if item is not None:
+            item.path.unlink(missing_ok=True)
 
 
 _store: UploadStore | None = None

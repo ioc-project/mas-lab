@@ -12,6 +12,7 @@ from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.overrides import apply_cli_overrides, parse_override
 from mas.ctl.session.flavour_control import is_control_document
 from mas.ctl.validate import validate_data, validate_file, validation_enabled
+from mas.runtime.secrets.manifest import check_manifest
 from mas.runtime.spec.source import load_yaml_file, resolve_manifest_source
 
 _ROOTS_APPLIED_ELSEWHERE = frozenset({"infra", "flavour", "workspace"})
@@ -131,6 +132,7 @@ def load_merged_agent_manifest(
         validate_file(resolve_yaml_path(manifest.strip(), anchor), kind="agent").raise_if_failed()
 
     data = resolve_manifest_source(manifest, anchor=anchor)
+    check_manifest(data, source="agent manifest" if isinstance(manifest, dict) else str(manifest))
     if data is None:
         plugin = pattern or "react@v1"
         cli_ov = build_cli_overlay(
@@ -148,6 +150,7 @@ def load_merged_agent_manifest(
     for ov in overlays:
         ov_path = Path(ov)
         raw = load_yaml_file(ov_path)
+        check_manifest(raw, source=str(ov_path))
         if is_control_document(raw):
             continue
         normalized = normalize_overlay(raw, name=ov_path.stem)

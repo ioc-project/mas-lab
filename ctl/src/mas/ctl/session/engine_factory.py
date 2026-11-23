@@ -11,7 +11,7 @@ from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.infra.bind import apply_agent_call_stacks
-from mas.ctl.infra.resolve import api_key_for_infra, resolution_anchor, resolve_infra_refs
+from mas.ctl.infra.resolve import leaf_api_key_ref, resolution_anchor, resolve_infra_refs
 from mas.ctl.session.manifest_config import engine_use_tool_loop, kernel_config_from_manifest
 from mas.ctl.workspace.config import UserConfig, WorkspaceConfig, merge_infra_refs
 from mas.runtime import hostenv
@@ -70,33 +70,35 @@ def _require_leaf_credentials(
     *,
     strict_replay: bool,
 ) -> None:
-    """Each leaf resolves its own key; the engine never forwards the first leaf's."""
+    """Each leaf resolves its own key; the engine never forwards the first leaf's.
+
+    Every leaf is checked, including one on the provider's default endpoint (no ``api_base``).
+    The first required secret that is not present refuses the start, naming ``name/key``.
+    """
     if strict_replay:
         return
-    leaves = dict(llm_proxies or {})
-    if not leaves and llm_proxy.get("api_base"):
-        leaves = {"default": llm_proxy}
-    missing: list[str] = []
+    from mas.runtime.secrets import SecretMissing, current_resolver
+
+    leaves = dict(llm_proxies or {}) or {"default": llm_proxy}
+    resolver = current_resolver()
     for name, leaf in leaves.items():
-        if not str((leaf or {}).get("api_base") or "").strip():
-            continue
-        env_name = str((leaf or {}).get("api_key_env") or "OPENAI_API_KEY")
-        key = api_key_for_infra(leaf)
-        if not key:
-            missing.append(f"{env_name} (leaf {name})")
-            continue
-        if not key.isascii():
+        ref = leaf_api_key_ref(leaf or {})
+        if ref is None:
             raise RuntimeError(
-                f"{env_name} contains characters that cannot be in an API key (non-ASCII). "
-                "Did you paste a placeholder such as '…' instead of your key?"
+                f"LLM leaf {name!r} has no api_key SecretRef. A protocol's default secret is only sent to that "
+                "protocol's own endpoint: set api_key: {secret: NAME}, or {secret: {name: NAME, optional: true}} "
+                "for a server that may take none."
             )
-    if missing:
-        raise RuntimeError(
-            "Live LLM configured but API key env unset: "
-            + ", ".join(missing)
-            + ". Set the key, or replay recorded answers only with "
-            "--cache-read-only (or an llm_cache fixture with raise_on_miss: true)."
+        if ref.optional or resolver.describe(ref).present:
+            continue
+        exc = SecretMissing(ref)
+        exc.add_note(
+            f"LLM leaf {name!r} needs it. Set it with mas-ctl secrets set {ref.name}"
+            + ("" if ref.key == "value" else f" --key {ref.key}")
+            + ", or replay recorded answers only with --cache-read-only "
+            "(or an llm_cache fixture with raise_on_miss: true)."
         )
+        raise exc
 
 
 class UnresolvedModelError(RuntimeError):
@@ -315,7 +317,7 @@ def build_engine(
     env_base = _env_llm_base()
     api_base = infra_base or env_base
     if not infra_base and env_base:
-        from mas.ctl.infra.env_resolve import warn_endpoint_from_env
+        from mas.ctl.env import warn_endpoint_from_env
 
         warn_endpoint_from_env(
             "OPENAI_BASE_URL" if hostenv.get("OPENAI_BASE_URL", "").strip() else "OPENAI_API_BASE", env_base
@@ -327,7 +329,6 @@ def build_engine(
             env_base,
             infra_base,
         )
-    api_key_env = str(llm_proxy.get("api_key_env") or "OPENAI_API_KEY")
     http_timeout = float(llm_proxy["timeout"]) if llm_proxy.get("timeout") is not None else None
 
     if not api_base and not strict_replay:
@@ -395,7 +396,6 @@ def build_engine(
         ctx=ctx,
         manifest=manifest,
         api_base=api_base or "https://api.openai.com/v1",
-        api_key_env=api_key_env,
         model=model,
         temperature=_resolve_sampling_param(manifest, "temperature", 0.7, model=model),
         output_limits=resolve_output_limits(
@@ -497,7 +497,7 @@ def _bool_env(name: str) -> bool | None:
 
 
 def _env_llm_base() -> str:
-    """OpenAI SDK ``OPENAI_BASE_URL``, then the older ``OPENAI_API_BASE`` name."""
+    """OpenAI SDK ``OPENAI_BASE_URL``, then the older ``OPENAI_API_BASE`` name (refused with credentials at install)."""
     for name in ("OPENAI_BASE_URL", "OPENAI_API_BASE"):
         raw = hostenv.get(name)
         if raw and raw.strip():

@@ -459,3 +459,31 @@ def test_a_model_override_reaches_the_spawners_context(tmp_path: Path):
     )
 
     assert spawner.context.model_override == "other-model"
+
+
+_TUTORIAL_12 = Path(__file__).resolve().parents[2] / "docs" / "tutorials" / "12-subagents"
+_CANARY = "sk-S3CR3T-subagent-canary"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        f"    api_key: {_CANARY}\n",
+        f"    endpoint: https://u:{_CANARY}@api.example/v1\n",
+    ],
+)
+def test_template_loader_refuses_a_template_with_a_credential(tmp_path: Path, params: str):
+    import shutil
+
+    import yaml
+    from mas.runtime.secrets import SecretRefError
+
+    lab = tmp_path / "t12"
+    shutil.copytree(_TUTORIAL_12, lab)
+    reviewer = lab / "reviewer.yaml"
+    reviewer.write_text(reviewer.read_text(encoding="utf-8") + "\n  params:\n" + params, encoding="utf-8")
+    agent = yaml.safe_load((lab / "agent.yaml").read_text(encoding="utf-8"))
+    with pytest.raises(SecretRefError) as caught:
+        load_subagent_templates(agent, lab)
+    assert str(reviewer) in str(caught.value) and "spec.params." in str(caught.value)
+    assert _CANARY not in str(caught.value)

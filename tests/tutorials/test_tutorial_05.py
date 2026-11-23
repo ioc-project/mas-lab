@@ -103,10 +103,20 @@ class TestServeCommandOffline:
 
         venv_bin = _Path(sys.executable).parent
         exe = venv_bin / "mas-ctl"
-        env = {**os.environ, "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY") or "sk-test-not-called"}
+        # The host's own ~/.config/mas must not add infra rows to the served agent.
+        import tempfile
+
+        isolated = tempfile.mkdtemp(prefix="serve-home-")
+        env = {**os.environ, "HOME": isolated, "XDG_CONFIG_HOME": isolated}
+        from mas.ctl.secrets import init_secrets_dir, write_file_secret
+
+        store = init_secrets_dir(_Path(isolated) / "secrets")
+        write_file_secret(store, "openai", "sk-test-not-called")
         proc = subprocess.Popen(
             [
                 str(exe) if exe.exists() else "mas-ctl",
+                "--secrets-dir",
+                str(store),
                 "serve",
                 str(T02 / "agents" / "schedule-agent" / "agent.yaml"),
                 "--infra-ref",

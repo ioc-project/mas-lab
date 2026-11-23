@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: cerebras
   description: >
-    Cerebras chat-completions host. Same wire as openai. Requires CEREBRAS_API_KEY.
+    Cerebras chat-completions host. Same wire as openai. The key is `{secret: cerebras}`.
 
 spec:
   protocol: cerebras
   proxy:
-    api_base: env:CEREBRAS_API_BASE|https://api.cerebras.ai/v1
-    api_key_env: CEREBRAS_API_KEY
+    api_base: https://api.cerebras.ai/v1
+    api_key: {secret: cerebras}

@@ -51,7 +51,7 @@ import click
 @click.option(
     "--token",
     default=None,
-    help="Hugging Face access token. Overrides --token-file and HF_TOKEN.",
+    help="Hugging Face access token. Overrides --token-file and the stored secret hf.",
 )
 @click.option(
     "--token-file",
@@ -71,7 +71,7 @@ def publish_hf_cmd(
 ) -> None:
     """Upload a benchmark archive tarball to a Hugging Face dataset repo.
 
-    ctl resolves the token from ``--token``, ``--token-file``, or ``HF_TOKEN``.
+    ctl resolves the token from ``--token``, ``--token-file``, or the secret ``hf``.
     """
     from mas.ctl.env import huggingface_token
     from mas.lab.benchmark.cli.export_import import publish_hf_command

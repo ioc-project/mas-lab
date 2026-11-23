@@ -24,7 +24,11 @@ logger = logging.getLogger(__name__)
 
 
 class A2APushNotificationSender(BasePushNotificationSender):
-    """HTTP push sender that supports A2A token and authentication fields."""
+    """HTTP push sender that supports A2A token and authentication fields.
+
+    The token and credentials are the peer's own strings from its push config (protobuf text
+    fields), sent back to the peer's URL as given. They are never read as secret references.
+    """
 
     async def _dispatch_notification(
         self,
@@ -33,10 +37,12 @@ class A2APushNotificationSender(BasePushNotificationSender):
         task_id: str,
     ) -> bool:
         headers: dict[str, str] = {}
-        if push_info.authentication.scheme and push_info.authentication.credentials:
-            headers["Authorization"] = f"{push_info.authentication.scheme} {push_info.authentication.credentials}"
-        elif push_info.token:
-            headers["X-A2A-Notification-Token"] = push_info.token
+        credentials = push_info.authentication.credentials
+        token = push_info.token
+        if push_info.authentication.scheme and credentials:
+            headers["Authorization"] = f"{push_info.authentication.scheme} {credentials}"
+        elif token:
+            headers["X-A2A-Notification-Token"] = token
         try:
             response = await self._client.post(
                 push_info.url,
@@ -82,7 +88,7 @@ class A2AExposure:
         self.port = port
         self.grpc_port = grpc_port
         self.public_url: str | None = None
-        self.admission: dict[str, str] | None = None
+        self.admission: Any = None
         self.grpc_url: str | None = None
         self.capabilities = dict(capabilities or {})
         if endpoint is not None:

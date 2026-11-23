@@ -6,6 +6,7 @@ import inspect
 import json
 import logging
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from hashlib import sha256
@@ -16,6 +17,7 @@ from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
+from a2a.server.routes.common import DefaultServerCallContextBuilder
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 from a2a.server.tasks import InMemoryTaskStore, PushNotificationConfigStore, PushNotificationSender
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, TaskState
@@ -315,31 +317,71 @@ MIN_ADMISSION_TOKEN = 32
 _AGENT_CARD_PATH = "/.well-known/agent-card.json"
 
 
-def checked_admission(admission: dict[str, str]) -> dict[str, str]:
-    """``admission`` when it names at least one caller with a long enough token; ``ValueError`` otherwise.
+@dataclass
+class AdmissionCaller:
+    """One admitted caller: its name and the SecretRef of its token, revealed on every request."""
 
-    An empty table is refused, not read as "no restrictions", and so is a token that is missing or short.
-    """
+    name: str
+    ref: Any
+
+
+def checked_admission(admission: dict[str, Any] | list[AdmissionCaller]) -> list[AdmissionCaller]:
+    """Callers map of SecretRef objects. An empty policy, a bad name or a literal token is refused."""
+    if isinstance(admission, list):
+        return admission
     if not isinstance(admission, dict) or not admission:
         raise ValueError("A2A admission names no caller; an empty policy is refused, not read as open")
-    checked: dict[str, str] = {}
-    for name, token in admission.items():
+    from mas.runtime.secrets.errors import SecretRefError
+    from mas.runtime.secrets.ref import parse_secret_ref
+
+    checked: list[AdmissionCaller] = []
+    for name, raw in admission.items():
         caller = str(name or "").strip()
         if not caller or any(ord(char) < 32 or ord(char) == 127 for char in caller):
             raise ValueError("A2A admission caller names must be non-empty text without control characters")
-        if not isinstance(token, str) or len(token.encode("utf-8")) < MIN_ADMISSION_TOKEN:
-            raise ValueError(
-                f"A2A admission token for caller {caller!r} is missing or shorter than {MIN_ADMISSION_TOKEN} bytes"
-            )
-        if token in checked.values():
-            raise ValueError(f"A2A admission caller {caller!r} shares a token with another caller; tokens must differ")
-        checked[caller] = token
+        try:
+            checked.append(AdmissionCaller(name=caller, ref=parse_secret_ref(raw, field=f"admission.callers.{caller}")))
+        except SecretRefError as exc:
+            raise ValueError(str(exc)) from exc
     return checked
 
 
-def _add_admission(app: FastAPI, admission: dict[str, str]) -> None:
-    table = [(name, sha256(token.encode("utf-8")).digest()) for name, token in admission.items()]
+def admitted_caller(admission: list[AdmissionCaller], presented: str) -> str:
+    """The one caller whose current token is ``presented``, else ``""``. A missing, unreadable or short
+    token admits no one; a token two callers share admits neither."""
+    from mas.runtime.secrets import current_resolver
+    from mas.runtime.secrets.errors import SecretError
 
+    digest = sha256(presented.encode("utf-8")).digest()
+    matched = []
+    for entry in admission:  # walk the whole table: the time does not say which entry matched
+        try:
+            token = current_resolver().reveal(entry.ref).encode("utf-8")
+        except SecretError:
+            token = b""
+        if len(token) >= MIN_ADMISSION_TOKEN and hmac.compare_digest(digest, sha256(token).digest()):
+            matched.append(entry.name)
+    return matched[0] if len(matched) == 1 else ""
+
+
+def without_credential_headers(headers: Any) -> dict[str, str]:
+    """``headers`` without the credential headers (``Authorization``, ``Cookie``, API key headers): the call
+    context is logged by the SDK at debug level, and the handler is told who called, not the token."""
+    from mas.runtime.secrets.ref import HTTP_SECRET_HEADERS
+
+    return {str(key): str(value) for key, value in dict(headers).items() if str(key).lower() not in HTTP_SECRET_HEADERS}
+
+
+class _CallContextBuilder(DefaultServerCallContextBuilder):
+    """The SDK's call context with the credential headers left out of ``state["headers"]``."""
+
+    def build(self, request: Request) -> Any:
+        context = super().build(request)
+        context.state["headers"] = without_credential_headers(request.headers)
+        return context
+
+
+def _add_admission(app: FastAPI, admission: list[AdmissionCaller]) -> None:
     @app.middleware("http")
     async def admit(request: Request, call_next: Any) -> Response:
         if request.method == "GET" and request.url.path == _AGENT_CARD_PATH:
@@ -347,10 +389,7 @@ def _add_admission(app: FastAPI, admission: dict[str, str]) -> None:
         scheme, _, value = request.headers.get("authorization", "").partition(" ")
         caller = ""
         if scheme.lower() == "bearer" and value.strip():
-            presented = sha256(value.strip().encode("utf-8")).digest()
-            for name, expected in table:  # walk the whole table: the time does not say which entry matched
-                if hmac.compare_digest(presented, expected):
-                    caller = name
+            caller = await asyncio.to_thread(admitted_caller, admission, value.strip())
         if not caller:
             return JSONResponse({"error": "unauthorized"}, status_code=401, headers={"WWW-Authenticate": "Bearer"})
         request.scope["user"] = SimpleUser(caller)
@@ -364,11 +403,11 @@ def build_app(
     push_config_store: PushNotificationConfigStore | None = None,
     push_sender: PushNotificationSender | None = None,
     extended_agent_card: AgentCard | dict[str, Any] | None = None,
-    admission: dict[str, str] | None = None,
+    admission: dict[str, Any] | list[AdmissionCaller] | None = None,
 ) -> FastAPI:
     """Build an SDK-backed A2A FastAPI app with the official JSON-RPC and agent-card routes.
 
-    ``admission`` maps a caller name to its bearer token. Given, every request but the public agent
+    ``admission`` maps a caller name to a SecretRef. Given, every request but the public agent
     card must carry a token of that table, and the caller is the table's name for it, never anything
     the request says about itself. Omitted, the app admits everyone (the default).
     """
@@ -462,7 +501,7 @@ def build_app(
     add_a2a_routes_to_fastapi(
         app,
         agent_card_routes=create_agent_card_routes(card),
-        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/"),
-        rest_routes=create_rest_routes(request_handler, path_prefix="/a2a/rest"),
+        jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url="/", context_builder=_CallContextBuilder()),
+        rest_routes=create_rest_routes(request_handler, path_prefix="/a2a/rest", context_builder=_CallContextBuilder()),
     )
     return app

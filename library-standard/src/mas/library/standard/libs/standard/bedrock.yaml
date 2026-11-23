@@ -7,11 +7,11 @@ metadata:
   name: bedrock
   description: >
     Amazon Bedrock Converse over HTTP. Bearer token
-    (AWS_BEARER_TOKEN_BEDROCK). Point api_base at the bedrock-runtime
+    `{secret: bedrock}`. Point api_base at the bedrock-runtime
     host for the region.
 
 spec:
   protocol: bedrock
   proxy:
-    api_base: env:BEDROCK_API_BASE|https://bedrock-runtime.us-east-1.amazonaws.com
-    api_key_env: AWS_BEARER_TOKEN_BEDROCK
+    api_base: https://bedrock-runtime.us-east-1.amazonaws.com
+    api_key: {secret: bedrock}

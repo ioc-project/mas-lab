@@ -4,6 +4,10 @@
 
 Runtime and plugins never read the environment. This module is the one place
 that does, before protocol SDKs are imported for the run.
+
+It also writes ``OTEL_INSTRUMENTATION_A2A_SDK_ENABLED`` (``"true"`` or ``"false"``,
+nothing else): the A2A SDK reads that flag only from the process environment.
+The write is a fixed, non-secret constant; no host value passes through it.
 """
 
 from __future__ import annotations
@@ -45,7 +49,7 @@ def apply_sdk_span_env(config: TransportObservabilityConfig) -> bool:
     elif _we_set_a2a_flag:
         os.environ[A2A_SDK_OTEL_FLAG] = "false"
         _we_set_a2a_flag = False
-    else:
+    else:  # a fixed non-secret constant for an SDK that reads only the process environment
         os.environ.setdefault(A2A_SDK_OTEL_FLAG, "false")
     return bool(wanted and imported and previous not in _TRUE)
 

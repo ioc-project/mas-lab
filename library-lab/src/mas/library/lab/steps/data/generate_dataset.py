@@ -31,9 +31,9 @@ Config keys::
     topic_hint: str           Optional hint appended to the generation prompt
                               to steer the question domain.
     model: str                OpenAI-compatible model (default: gpt-4o-mini).
-    api_base: str             Optional proxy URL (default: OPENAI_BASE_URL env).
-    api_key_env: str          Env-var name for the API key
-                              (default: OPENAI_API_KEY).
+    api_base: str             Optional proxy URL (plain overlay value).
+    api_key: SecretRef        Secret for the API key. Without one, {secret: openai} is used
+                              for the OpenAI endpoint only; another api_base needs its own.
     output_filename: str      Output filename (default: generated_dataset.yaml).
     temperature: float        LLM temperature (default: 0.8).
 """
@@ -43,13 +43,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import yaml
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import resolve_step_artifact_path
 from mas.lab.benchmark.pipeline.executor import ExecutionContext
-from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
 
 logger = logging.getLogger(__name__)
@@ -122,16 +121,9 @@ def _call_llm(
     temperature: float,
 ) -> str:
     """Call the LLM and return the raw content string."""
-    try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError("openai package is required for GenerateDatasetStep") from exc
+    from mas.library.standard.lib.openai_client import build_openai_client
 
-    client_kwargs: dict[str, Any] = {"api_key": api_key}
-    if api_base:
-        client_kwargs["base_url"] = api_base
-
-    client = OpenAI(**client_kwargs)
+    client = build_openai_client(api_key, api_base)
     response = client.chat.completions.create(
         model=model,
         temperature=temperature,
@@ -185,19 +177,12 @@ class GenerateDatasetStep(PipelineStep):
         n_items: int = int(cfg.get("n_items", 5))
         model: str = cfg.get("model", "gpt-4o-mini")
         topic_hint: str = cfg.get("topic_hint", "")
-        api_base: Optional[str] = (
-            cfg.get("api_base") or hostenv.get("OPENAI_BASE_URL") or hostenv.get("OPENAI_API_BASE")
-        )
-        api_key_env: str = cfg.get("api_key_env", "OPENAI_API_KEY")
-        api_key: str = hostenv.get(api_key_env, "")
+        api_base: Optional[str] = cfg.get("api_base") or ""
+        from mas.library.standard.lib.openai_client import reveal_openai_key
+
+        api_key = reveal_openai_key(cfg.get("api_key"), api_base)
         temperature: float = float(cfg.get("temperature", 0.8))
         output_filename: str = str(cfg.get("output_filename") or "generated_dataset.yaml")
-
-        if not api_key:
-            logger.warning(
-                "GenerateDatasetStep: %s not set — LLM call will likely fail",
-                api_key_env,
-            )
 
         # ── Resolve intent_source ──────────────────────────────────────────
         intent_source_raw: Optional[str] = cfg.get("intent_source")
@@ -243,9 +228,11 @@ class GenerateDatasetStep(PipelineStep):
             raw_response = _call_llm(generation_prompt, model, api_base, api_key, temperature)
             questions = _parse_questions(raw_response, n_items)
         except Exception as exc:
-            logger.error("GenerateDatasetStep: LLM generation failed: %s", exc)
+            from mas.runtime.reliability.classify import error_summary
+
+            logger.error("GenerateDatasetStep: LLM generation failed: %s", error_summary(exc))
             return StepOutput(
-                data={"error": str(exc)},
+                data={"error": error_summary(exc)},
                 metadata={"n_items": n_items, "model": model, "success": False},
             )
 

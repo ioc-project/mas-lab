@@ -79,13 +79,7 @@ leader (`start_new_session`). Stop = SIGTERM to the group, wait
 A leftover whose command digest still matches is reaped on the next
 `benchmark run`.
 
-The fixture library reads no environment variable itself: `mas-lab benchmark run` reads the environment of its shell and sends it with the run (`fixture_env`; it is not shown in the worker listing). A process fixture does not inherit a variable of it when a word of its name (split on `_`) ends in
-`KEY`, `TOKEN`, `SECRET`, `PASSWORD` or `CREDENTIAL`, or is `AUTH`, `COOKIE`, `SESSION`, `PAT`,
-`PASS`, `BEARER` or `JWT`, or when its value is a URL that carries a password (`scheme://user:pw@host`);
-`SSH_AUTH_SOCK` and `XDG_SESSION_*` are kept. This is a deny list: a secret under another name and
-without a URL shape still gets through, so use `passthrough` and `env` deliberately. `passthrough: [NAME]` keeps one, `env: {NAME: value}`
-sets one. `env_mode: minimal` inverts the rule: only `PATH`, `HOME`, `LANG`, `LC_*`, `TMPDIR`, `TERM`,
-`USER`, `TZ` and `SYSTEMROOT` come along, plus `passthrough` and `env`. Health and clock probes and `http_call` to a loopback host never go through a proxy from
+The fixture library reads no environment variable itself: `mas-lab benchmark run` sends the lab child allowlist of its shell with the run (`fixture_env`; it is not shown in the worker listing). A process fixture gets that allowlist (`PATH`, `HOME`, locale, temp dirs, `TERM`, the CA and proxy variables, and a few `XDG_*`, `MAS_*` and Python variables), plus its declared `env` and `passthrough`; every other host variable stays out. `env: {NAME: value}` sets one; a value may be `{secret: NAME}`, revealed into this fixture's environment only when it starts. `passthrough: [NAME]` copies one key that is in the allowlist. `env_mode: minimal` narrows the base: only `PATH`, `HOME`, `LANG`, `LC_*`, `TMPDIR`, `TERM`, `USER`, `TZ` and `SYSTEMROOT` come along, plus `passthrough` and `env`. Health and clock probes and `http_call` to a loopback host never go through a proxy from
 the environment (`http_proxy`). `health.path` and `clock.path` get a leading slash if written
 without. A scope key never decides a path outside the fixture directory.
 
@@ -120,7 +114,7 @@ A process service is stopped at the end of its level unless
 fixture.
 
 A fixture named `scripted-model` is also bound as LLMProxy `openai-direct`
-for that run (`api_base` the loopback `/v1`, key `lab`, allowed
+for that run (`api_base` the loopback `/v1`, keyless: `api_key` names the optional secret `lab`, allowed
 `scripted` and `any`). Pin `experiment.models.main` to a concrete id
 (`scripted` in the example lab). If the agent still says `model: any` and
 another LLMProxy leaf is already on the flavour, pin the agent too —

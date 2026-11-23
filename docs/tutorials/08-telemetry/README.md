@@ -21,7 +21,6 @@ the run. MAS Lab writes spans in the `ioa-observe-sdk` wire format.
 
 ```bash
 uv pip install -e "library-telemetry[convert,verify]"
-# optional read-back from ClickHouse: library-telemetry[clickhouse]
 ```
 
 Offline steps use the shipped qa-agent example: no LLM key, no collector. The

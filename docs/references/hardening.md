@@ -94,9 +94,10 @@ decided: `static` before the session starts, `runtime` on each call (the report 
 
 | Id | Severity | Scope | Why | Fix |
 | --- | --- | --- | --- | --- |
-| `listener-without-identity` | critical | static | A listener that verifies no caller lets anyone who can reach the port run the agent and its tools. A listener on loopback is exempt. | Give the A2A row `a2a.admission.callers`, or serve on loopback only. SLIM counts as verified (its shared secret is required); an MCP listener has no admission policy in this release and fails. |
+| `listener-without-identity` | critical | static | A listener that verifies no caller lets anyone who can reach the port run the agent and its tools. A listener on loopback is exempt. | Give the A2A row `a2a.admission.callers` (name to `{secret: NAME}`), or serve on loopback only. SLIM counts as verified (its shared secret is required); an MCP listener has no admission policy in this release and fails. |
 | `tls-verification-disabled` | critical | static | Without certificate checks a network peer can pose as the model, tool or agent endpoint. | Remove `verify_ssl: false`, `dev: true`, `insecure: true`; use `ca_bundle` for a private CA. |
-| `secret-literal` | high | static | A secret written in a file ends up in version control, logs and checkpoints. | Write `env:NAME` or `file:PATH`. Read from the infra files a session names and the agent manifest, as written (library refs are not read). |
+| `secret-store-env` | high | static | The env store reads process variables; a production session should use the file store. | Set `secrets.store: file` (the default) and `mas-ctl secrets set NAME`. |
+| `secret-store-loose-permissions` | high | static | A file store that allows group- or world-readable files leaks secrets on disk. | Remove `allow_loose_permissions` so files stay mode 0400 and the directory 0700. |
 | `plain-http-remote` | high | static | Plain http sends prompts, tool arguments and credentials where any hop can read and change them. | Use https, or keep plain http on loopback. |
 | `hitl-auto-approve` | high | static | An agent that approves its own human-in-the-loop requests has no human in the loop. | `hitl_mode: interactive`, or `auto-deny` for an unattended run. |
 | `llm-cache-replay` | high | static | A cached model answer replays its tool calls: the same side effects without a new decision. | Remove the `llm_cache` step and `cache.read`. |
@@ -125,16 +126,17 @@ spec:
         listen: {host: 0.0.0.0, port: 8443}
         admission:
           callers:
-            billing: "env:DESK_BILLING_TOKEN"     # at least 32 bytes
-            portal:  "env:DESK_PORTAL_TOKEN"
+            billing: {secret: desk-billing}     # at least 32 bytes
+            portal:  {secret: desk-portal}
 ```
 
 Every request but the public agent card needs `Authorization: Bearer <token>` of one entry. The caller
 is the **name in this map**, never anything the request says about itself (a header, a body field, a
-claim inside the token). Tokens are compared in constant time over the whole table. An empty map, a
-token under 32 bytes, an unset `env:` variable (it expands to an empty string) and `grpc_port` next to
-`admission` are all refused at start: an empty policy is never read as open, and the gRPC listener does
-not enforce admission.
+claim inside the token). Values are SecretRefs, revealed on every request through the secret resolver,
+so a rotated token is used at once; a missing or unreadable token, one under 32 bytes, or one two callers
+share admits no one (401). Tokens are compared in constant time over the whole table. An empty map, a
+literal token and `grpc_port` next to `admission` are refused at start: an empty policy is never read as
+open, and the gRPC listener does not enforce admission.
 
 A conversation is keyed by (caller, `contextId`). The `contextId` is chosen by whoever sends it, so keyed
 by it alone a second caller that learned an id joined the first caller's conversation and its history.
@@ -161,4 +163,3 @@ raw exception again.
   environment, so no check flags it.
 - Admission covers HTTP A2A only. SLIM verifies by its shared secret; MCP and the webserver have no
   admission policy.
-- `secret-literal` reads the files a session names; a library ref (`standard:openai`) is not read.

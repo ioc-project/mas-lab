@@ -1,12 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""Standalone steps: serialize spans to an OTLP collector / ClickHouse read-back."""
+"""Standalone step: serialize spans to an OTLP collector."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -57,20 +57,4 @@ def run_push_otlp(
     return result
 
 
-def run_dump_spans(
-    session_id: str,
-    *,
-    output_path: Optional[str | Path] = None,
-    query_by: str = "session",
-    **kwargs: Any,
-) -> Dict[str, Any]:
-    """Dump a session's spans from ClickHouse to a JSONL file.
-
-    Requires the ``clickhouse`` extra.
-    """
-    from mas.library.telemetry.collector.clickhouse import dump_spans
-
-    return dump_spans(session_id, query_by=query_by, output_path=output_path, **kwargs)
-
-
-__all__ = ["run_push_otlp", "run_dump_spans"]
+__all__ = ["run_push_otlp"]

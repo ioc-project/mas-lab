@@ -29,6 +29,7 @@ from mas.ctl.workspace.config import (
     merge_infra_interceptors,
     merge_infra_refs,
 )
+from mas.runtime.secrets import check_manifest
 from mas.runtime.spec.source import load_yaml_mapping
 
 
@@ -65,7 +66,7 @@ def resolve_workspace_infra(
 
 def infra_cache_identity(resolved: ResolvedInfra) -> dict[str, Any]:
     """Non-secret part of the resolved infra that changes what a run does."""
-    llm_proxy = {k: v for k, v in resolved.llm_proxy.items() if k != "api_key_env"}
+    llm_proxy = dict(resolved.llm_proxy)
     return {
         "refs": list(resolved.refs),
         "llm_proxy": llm_proxy,
@@ -143,7 +144,13 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
     if req.validate and validation_enabled():
         validate_file(req.manifest, kind="mas").raise_if_failed()
 
-    load_mapping = req.cache.load_mapping if req.cache is not None else load_yaml_mapping
+    load_raw = req.cache.load_mapping if req.cache is not None else load_yaml_mapping
+
+    def load_mapping(path: Path) -> dict[str, Any]:
+        doc = load_raw(path)
+        check_manifest(doc, source=str(path))
+        return doc
+
     mas = load_mapping(req.manifest)
     agent_patches: dict[str, dict] = {}
     for ov_path in req.overlay_paths:

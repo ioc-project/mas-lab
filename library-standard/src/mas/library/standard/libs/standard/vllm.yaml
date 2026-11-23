@@ -6,10 +6,11 @@ kind: LLMProxy
 metadata:
   name: vllm
   description: >
-    Local vLLM OpenAI-compatible server. Same wire as openai. Optional VLLM_API_KEY.
+    Local vLLM OpenAI-compatible server. Same wire as openai. Optional key `{secret: vllm}`: no auth header
+    is sent when it is not set.
 
 spec:
   protocol: vllm
   proxy:
-    api_base: env:VLLM_API_BASE|http://localhost:8000/v1
-    api_key_env: VLLM_API_KEY
+    api_base: http://localhost:8000/v1
+    api_key: {secret: {name: vllm, optional: true}}

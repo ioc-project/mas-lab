@@ -7,7 +7,7 @@
 > **Packages:** `ctl/` (chat/validate), `runtime/` (contracts/plugins), lab CLI (plots/benchmarks)
 > **Time:** ~30 min
 > **Prerequisite:** [Tutorial 0](../00-environment-setup/README.md) (install, infra bundles, API key).
-> Run all commands from `docs/tutorials/01-building-an-agent`. Validation runs offline; live runs need `OPENAI_API_KEY` in `.env`.
+> Run all commands from `docs/tutorials/01-building-an-agent`. Validation runs offline; live runs need `echo KEY | mas-ctl secrets set openai`.
 
 You go from an empty YAML file to a question-answering agent with tools, a skill, and memory.
 You then run it from the CLI, serve it over the Agent2Agent (A2A) protocol, and inspect its trace.
@@ -15,7 +15,7 @@ You then run it from the CLI, serve it over the Agent2Agent (A2A) protocol, and 
 ## What you need
 
 - A working install from Tutorial 0, with a default infra or `--infra-ref`.
-- `OPENAI_API_KEY` in a gitignored `.env` in this directory or any parent. `mas-ctl` loads it itself.
+- An OpenAI key in the secret store (`echo KEY | mas-ctl secrets set openai`, or `mas-ctl secrets import-env .env`).
 
 ## Quick commands
 
@@ -100,7 +100,7 @@ Everything else has a default. Run `mas-ctl compile agent.yaml` to print the exp
 | `agent.yaml` | What | Model, context, tools, plugins |
 | Flavour | Glue | Which infra each agent uses (`bind`). Not the LLM. Leftover Flavour `observability` is unread. |
 | `infra/` | Where | Model endpoint, tool providers, OpenTelemetry (OTel) collector |
-| `.env` | Secret | API key, never committed |
+| `.env` | Settings | Non-secret `MAS_LLM_*` keys; the API key is in the secret store |
 
 The manifest model name (`gpt-4o`) is canonical. Infra can map it to the provider's name, such as `azure/gpt-4o`.
 The harness finds tools and skills next to the manifest first, then in the standard library.

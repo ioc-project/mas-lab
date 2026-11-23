@@ -8,6 +8,7 @@ Usage::
     mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
     mas-lab eval --list-metrics
 """
+
 from __future__ import annotations
 
 import json as _json
@@ -15,7 +16,6 @@ from pathlib import Path
 from typing import Optional
 
 import click
-
 from mas.library.eval.mce.catalog import listed_ids, resolve_metric
 from mas.library.eval.mce.runner import (
     compute_session_metrics,
@@ -77,11 +77,6 @@ _DEFAULT_METRICS = ["goal_success_rate"]
     help="Metric computation engine: mce-v1.",
 )
 @click.option(
-    "--api-key-env",
-    default=None,
-    help="Name of the environment variable holding the API key (default: OPENAI_API_KEY).",
-)
-@click.option(
     "--recursive",
     is_flag=True,
     default=False,
@@ -96,7 +91,6 @@ def eval_cmd(
     output_json: bool,
     overlay: Optional[str],
     engine: str,
-    api_key_env: Optional[str],
     list_metrics: bool,
     recursive: bool,
 ) -> None:
@@ -121,9 +115,7 @@ def eval_cmd(
         raise click.UsageError("SOURCE argument required (or use --list-metrics)")
 
     try:
-        metric_names = [
-            resolve_metric(n, session_only=True).snake for n in (metrics or _DEFAULT_METRICS)
-        ]
+        metric_names = [resolve_metric(n, session_only=True).snake for n in (metrics or _DEFAULT_METRICS)]
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
 
@@ -145,7 +137,7 @@ def eval_cmd(
     else:
         traces = [resolved]
 
-    install_openai_llm_service(model, api_key_env=api_key_env)
+    install_openai_llm_service(model)
 
     if fixture:
         if not fixture.exists():
@@ -164,9 +156,7 @@ def eval_cmd(
             click.echo(f"No results for {trace_path} — check trace content.", err=True)
             continue
         any_results = True
-        label = overlay or (
-            str(trace_path.relative_to(resolved)) if resolved.is_dir() else trace_path.stem
-        )
+        label = overlay or (str(trace_path.relative_to(resolved)) if resolved.is_dir() else trace_path.stem)
         if output_json:
             payload = {k: v for k, v in results_dict.items() if not k.startswith("__")}
             if resolved.is_dir():

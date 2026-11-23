@@ -2,8 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,11 +10,13 @@ from mas.lab.controller.ui_stream.auth import assert_ui_bind
 
 
 @pytest.fixture
-def authed_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("MAS_DEMO_UI_TOKEN", "secret")
-    app = FastAPI()
-    mount_ui_stream(app)
-    return TestClient(app)
+def authed_client() -> TestClient:
+    from secret_fakes import bound_secrets
+
+    with bound_secrets({"ui-ingest": "secret"}):
+        app = FastAPI()
+        mount_ui_stream(app)
+        yield TestClient(app)
 
 
 def test_loopback_bind_ok_without_tls() -> None:
@@ -25,17 +25,18 @@ def test_loopback_bind_ok_without_tls() -> None:
 
 
 def test_non_loopback_bind_requires_tls_and_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.runtime import hostenv
+    from secret_fakes import bound_secrets
+
     monkeypatch.delenv("MAS_DEMO_UI_SSL_CERTFILE", raising=False)
     monkeypatch.delenv("MAS_DEMO_UI_SSL_KEYFILE", raising=False)
-    monkeypatch.delenv("MAS_DEMO_UI_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="TLS"):
         assert_ui_bind("0.0.0.0")
-    monkeypatch.setenv("MAS_DEMO_UI_SSL_CERTFILE", "/tmp/cert.pem")
-    monkeypatch.setenv("MAS_DEMO_UI_SSL_KEYFILE", "/tmp/key.pem")
-    with pytest.raises(RuntimeError, match="MAS_DEMO_UI_TOKEN"):
-        assert_ui_bind("10.0.0.8")
-    monkeypatch.setenv("MAS_DEMO_UI_TOKEN", "secret")
-    assert assert_ui_bind("10.0.0.8") is None
+    with hostenv.overlay({"MAS_DEMO_UI_SSL_CERTFILE": "/tmp/cert.pem", "MAS_DEMO_UI_SSL_KEYFILE": "/tmp/key.pem"}):
+        with pytest.raises(RuntimeError, match="ui-ingest"):
+            assert_ui_bind("10.0.0.8")
+        with bound_secrets({"ui-ingest": "secret"}):
+            assert assert_ui_bind("10.0.0.8") is None
 
 
 def test_ingest_and_commands_require_bearer(authed_client: TestClient) -> None:

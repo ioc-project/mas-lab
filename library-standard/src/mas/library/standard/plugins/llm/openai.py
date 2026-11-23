@@ -29,6 +29,9 @@ from mas.runtime.engine.llm_request import (
     merge_extra_body,
     sampling_settings_from_entry,
 )
+from mas.runtime.reliability.classes import ClassifiedFailure
+from mas.runtime.reliability.classify import provider_failure
+from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +60,7 @@ class OpenAILLMProvider(HttpLlmProtocol):
     provider_id = "openai"
     kind = "openai"
     default_api_base = "https://api.openai.com/v1"
-    default_api_key_env = "OPENAI_API_KEY"
+    default_secret = SecretRef(name="openai")
     # Hosts that reject unknown body fields turn this off; see ``OpenAICompatibleLLMProvider``.
     forwards_prompt_cache_fields = True
 
@@ -75,7 +78,6 @@ class OpenAILLMProvider(HttpLlmProtocol):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
-        api_key: str,
         reasoning: ReasoningSettings,
         max_completion_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
@@ -131,7 +133,7 @@ class OpenAILLMProvider(HttpLlmProtocol):
         elif tool_choice is not None:
             payload["tool_choice"] = tool_choice
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            **self._key_headers(),
             "Content-Type": "application/json",
         }
         if extra_headers:
@@ -148,6 +150,8 @@ class OpenAILLMProvider(HttpLlmProtocol):
     ) -> dict[str, Any]:
         reasoning_stream = reasoning_stream or ReasoningStream(None)
         choices = data.get("choices") or []
+        if not choices and isinstance(data.get("error"), dict):
+            raise provider_failure("LLM", error=data["error"])
         if not choices:
             return {}
         message = dict(choices[0].get("message") or {})
@@ -196,6 +200,8 @@ class OpenAILLMProvider(HttpLlmProtocol):
                         chunk = json.loads(data_str)
                     except (TypeError, ValueError):
                         continue
+                    if isinstance(chunk, dict) and isinstance(chunk.get("error"), dict):
+                        raise provider_failure("LLM stream", error=chunk["error"])
                     if isinstance(chunk.get("usage"), dict):
                         usage = normalize_usage(chunk["usage"])
                     choices = chunk.get("choices") or []
@@ -229,6 +235,8 @@ class OpenAILLMProvider(HttpLlmProtocol):
                             slot["function"]["name"] += fn["name"]
                         if fn.get("arguments"):
                             slot["function"]["arguments"] += fn["arguments"]
+        except ClassifiedFailure:
+            raise
         except Exception as exc:
             await self._areraise_stream_failure(exc, emitted_any=emitted_any)
         reasoning_stream.close()

@@ -26,7 +26,7 @@ From the repository root:
 
 ```bash
 cd docker
-cp .env.example .env    # set OPENAI_API_KEY for live LLM runs
+# echo KEY | mas-ctl secrets set openai
 docker compose up --build
 ```
 
@@ -65,7 +65,7 @@ Configure in `docker/.env`:
 ```bash
 MAS_WORKSPACE_MOUNT=/path/to/your/project
 MAS_DATA_MOUNT=/path/to/persistent/data
-OPENAI_API_KEY=sk-...
+# Mount the file store; do not put API keys in this file.
 ```
 
 Project `config.yaml` on the workspace mount (copy from
@@ -145,8 +145,8 @@ Labs published outside this repository are loaded the same way. See
 `env-config.js` keys: `__MAS_LAB_API_BASE_URL__`, `__MAS_LAB_DEFAULT_SCOPE__`
 (alias `__MAS_LAB_DEFAULT_LIBRARY__` for one release), `__MAS_LAB_TOKEN__`.
 
-Controller flags: `--cors-origin`, `--token-file`, `--state-dir`, `--workspace`, `--host`
-(see [serve](../cli/serve.md)).
+Controller flags: `--cors-origin`, `--token-file`, `--state-dir`, `--workspace`, `--host`,
+`--secrets-dir`, `--secret-store` (see [serve](../cli/serve.md)).
 
 ## Controller API
 

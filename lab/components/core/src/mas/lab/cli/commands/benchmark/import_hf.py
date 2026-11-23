@@ -49,7 +49,7 @@ import click
 @click.option(
     "--token",
     default=None,
-    help="Hugging Face access token. Overrides --token-file and HF_TOKEN.",
+    help="Hugging Face access token. Overrides --token-file and the stored secret hf.",
 )
 @click.option(
     "--token-file",
@@ -70,8 +70,8 @@ def import_hf_cmd(
 ) -> None:
     """Download a benchmark archive from a Hugging Face dataset repo and import it.
 
-    ctl resolves the token from ``--token``, ``--token-file``, or ``HF_TOKEN``.
-    ``--dry-run`` still uses ``HF_TOKEN`` when it is set; it does not require
+    ctl resolves the token from ``--token``, ``--token-file``, or the secret ``hf``.
+    ``--dry-run`` uses the secret ``hf`` when it is stored; it does not require
     a token when none is available.
     """
     from mas.ctl.env import huggingface_token

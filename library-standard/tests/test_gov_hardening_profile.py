@@ -30,7 +30,7 @@ def _plugin(**kw) -> HardeningProfilePlugin:
 def test_first_egress_records_the_report_once() -> None:
     # kills: no record at session start, or a record on every call
     report = [
-        {"check": "secret-literal", "outcome": "passed"},
+        {"check": "secret-store-env", "outcome": "passed"},
         {"check": "plain-http-remote", "outcome": "waived", "waiver_reason": "cluster"},
         {"check": "hitl-auto-approve", "outcome": "failed"},
     ]
@@ -40,7 +40,7 @@ def test_first_egress_records_the_report_once() -> None:
     assert (
         "failed hitl-auto-approve" in reason
         and "waived plain-http-remote" in reason
-        and "passed secret-literal" in reason
+        and "passed secret-store-env" in reason
     )
     assert plugin.evaluate_egress(_tool(None), config=CONFIG)[0] == GovDecision.ALLOW
 

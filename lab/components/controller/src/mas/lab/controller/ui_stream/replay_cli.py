@@ -33,6 +33,7 @@ from mas.lab.controller.ui_stream.ui_trace import (
     write_ui_trace,
 )
 from mas.runtime import hostenv
+from mas.runtime.reliability.classify import shown_urls
 
 DEFAULT_REPLAY_TIME = 15.0
 
@@ -114,6 +115,7 @@ def discover_traces(target: Path) -> list[tuple[str, Path]]:
 
 def post_json(url: str, payload: dict[str, Any], *, timeout: float = 120.0) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
+    from mas.lab.benchmark.pipeline.ui_bridge import open_ingest
     from mas.lab.controller.ui_stream.auth import ingest_headers
 
     req = urllib.request.Request(
@@ -122,11 +124,14 @@ def post_json(url: str, payload: dict[str, Any], *, timeout: float = 120.0) -> d
         headers=ingest_headers(),
         method="POST",
     )
+    shown = shown_urls(url)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with open_ingest(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"ingest failed at {shown}: HTTP {exc.code}") from None
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"ingest failed at {url}: {exc}") from exc
+        raise RuntimeError(f"ingest failed at {shown}: {type(exc.reason).__name__}") from None
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:

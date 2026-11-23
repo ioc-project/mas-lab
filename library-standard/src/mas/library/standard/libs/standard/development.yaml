@@ -5,7 +5,7 @@ kind: InfraBundle
 
 metadata:
   name: development
-    description: >
+  description: >
     Development bundle with local Ollama for offline work.
 
 spec:

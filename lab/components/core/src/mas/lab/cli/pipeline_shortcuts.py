@@ -49,7 +49,7 @@ CLI_PIPELINE_SHORTCUTS: tuple[CliPipelineShortcut, ...] = (
         pipeline_ref="telemetry:export-otel-collector",
         source_path="library-telemetry/pipelines/export-otel-collector.yaml",
         step_types=("export_otel",),
-        notes="Serialize spans (or native events) to an OTLP collector. Alias: mas-lab otel push",
+        notes="Serialize spans (or native events) to an OTLP collector.",
         cli_group="telemetry",
         cli_name="push",
     ),
@@ -158,7 +158,6 @@ CLI_PIPELINE_SHORTCUTS: tuple[CliPipelineShortcut, ...] = (
 CLI_INSPECTION_COMMANDS: tuple[str, ...] = (
     "mas-lab telemetry inspect",
     "mas-lab telemetry kinds",
-    "mas-lab telemetry list-apps",
     "mas-lab telemetry show",
     "mas-lab telemetry apps",
     "mas-lab telemetry sessions",

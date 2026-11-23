@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
 from mas.runtime.package_refs import resolve_path_ref
+from mas.runtime.spec.yaml_errors import safe_yaml_load
 
 # Re-export: canonical path resolution (file may not exist yet).
 resolve_path = resolve_path_ref
@@ -75,7 +75,7 @@ def cached_yaml_document(path: Path) -> Any:
     digest = _content_digest(text)
     if rec is not None and rec.digest == digest:
         return rec.data
-    data = yaml.safe_load(text) or {}
+    data = safe_yaml_load(text, source=str(resolved)) or {}
     _YAML_CACHE[resolved] = _YamlRecord(digest, data)
     return data
 

@@ -17,7 +17,6 @@ import logging
 
 import click
 import mas.third_party_otel  # noqa: F401
-from dotenv import find_dotenv, load_dotenv
 from mas.lab.cli.commands import check
 from mas.lab.cli.commands import config as _config_mod
 from mas.lab.cli.commands import init as _init_mod
@@ -27,8 +26,16 @@ from mas.lab.cli.extensions import register_extension_components
 
 @click.group()
 @click.option("-v", "--verbose", count=True, default=0, help="Verbosity: -v exchange log, -vv debug, -vvv full")
+@click.option(
+    "--secrets-dir",
+    "secrets_dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="File secret store directory (default: workspace secrets.dir, else <workspace>/.mas/secrets)",
+)
+@click.option("--secret-store", "secret_store", default=None, help="file (default) or env")
 @click.pass_context
-def app(ctx: click.Context, verbose: int) -> None:
+def app(ctx: click.Context, verbose: int, secrets_dir: str | None, secret_store: str | None) -> None:
     """MAS Lab — evaluation, experimentation, and benchmarking tools.
 
     \b
@@ -62,6 +69,13 @@ def app(ctx: click.Context, verbose: int) -> None:
     """
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
+    from mas.ctl.session.llm_scheduler_env import install_env_overrides
+    from mas.runtime.entrypoint import install_host_environment
+
+    # First: the host snapshot enters hostenv and the process environment is reduced to the
+    # child allowlist, before anything reads the host or spawns.
+    host = install_host_environment()
+    install_env_overrides()
 
     try:
         from mas.ctl.logging_setup import setup_logging
@@ -79,18 +93,20 @@ def app(ctx: click.Context, verbose: int) -> None:
     except ImportError:
         ctx.obj["workspace"] = None
 
-    load_dotenv(find_dotenv(usecwd=True))
-    from mas.ctl.session.llm_scheduler_env import install_env_overrides
+    from mas.ctl.workspace.user_connections import load_user_connections
+    from mas.lab.connections import bind_user_connections
+    from mas.lab.secret_host import SecretHostSettings
 
-    install_env_overrides()
-    import os
+    workspace = ctx.obj.get("workspace")
+    SecretHostSettings.from_workspace(workspace, directory=secrets_dir, store=secret_store).install_process()
+    bind_user_connections(load_user_connections())
 
     try:
         from mas.lab.benchmark.pipeline.ui_bridge import demo_ui_binding_from_env, install_cli_defaults
     except ImportError:
         pass
     else:
-        install_cli_defaults(demo_ui_binding_from_env(os.environ))
+        install_cli_defaults(demo_ui_binding_from_env(host))
 
 
 def _add_if_importable(name: str, module: str, attr: str) -> None:

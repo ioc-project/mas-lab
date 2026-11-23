@@ -51,7 +51,7 @@ the agent at that row's url.
 
 ```yaml
 # infra rows
-desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret_env: SLIM_SECRET}
+desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim}}
 desk-a2a: {protocol: a2a-framing}
 # Flavour
 bind:

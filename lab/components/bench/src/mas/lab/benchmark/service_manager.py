@@ -48,8 +48,10 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 from urllib.error import URLError
 
-import yaml
+from mas.lab.benchmark.environment.declared_env import compile_env, plain_env
 from mas.runtime import hostenv
+from mas.runtime.secrets import SecretRef, child_env, load_checked_document
+from mas.runtime.secrets.resolver import reveal_mapping
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ _COMPOSE_PROJECT_PREFIX = "mas-lab-svc"
 
 # name -> (value, holders, value before the first export); one process may run
 # several benchmarks (controller daemon), so exports are shared and refcounted.
-_EXPORTED: dict[str, tuple[str, int, Optional[str]]] = {}
+_EXPORTED: dict[str, tuple[str, int]] = {}
 _EXPORTED_LOCK = threading.Lock()
 _MANAGERS: dict[str, "ServiceManager"] = {}
 _MANAGERS_LOCK = threading.Lock()
@@ -111,11 +113,6 @@ def stop_all_shared(*, include_keep_running: bool = False) -> None:
             mgr.stop(name)
 
 
-def _child_env(resolved: dict[str, str]) -> dict[str, str]:
-    """The host environment (with values other services exported), then this service's own."""
-    return {**hostenv.snapshot(), **resolved}
-
-
 # ---------------------------------------------------------------------------
 # Data model
 # ---------------------------------------------------------------------------
@@ -140,7 +137,7 @@ class ServiceDef:
     compose_file: str = ""  # relative to services.yaml
     command: list[str] = field(default_factory=list)  # backend=process only
     auto_start: bool = True
-    env: dict[str, str] = field(default_factory=dict)
+    env: dict[str, str | SecretRef] = field(default_factory=dict)  # a SecretRef reaches this service's child only
     health_check: HealthCheckSpec = field(default_factory=HealthCheckSpec)
     triggers: TriggersSpec = field(default_factory=TriggersSpec)
 
@@ -337,8 +334,7 @@ class ServiceManager:
     # ------------------------------------------------------------------
 
     def _load(self, path: Path) -> None:
-        with open(path) as f:
-            data = yaml.safe_load(f) or {}
+        data = load_checked_document(path)  # SecretRefs stay mappings: compile_env hydrates the env
         spec = data.get("spec") if isinstance(data.get("spec"), dict) else {}
         services_raw = spec.get("services") or data.get("services") or {}
         base_dir = path.parent
@@ -347,7 +343,7 @@ class ServiceManager:
             spec = spec or {}
             hc_raw = spec.get("health_check", {}) or {}
             tr_raw = spec.get("triggers", {}) or {}
-            env_raw = {k: str(v) for k, v in (spec.get("env") or {}).items()}
+            env_raw = compile_env(spec.get("env"), where=f"services.{name}")
 
             backend = spec.get("backend", "docker-compose")
             compose_file = spec.get("compose_file", "")
@@ -403,7 +399,7 @@ class ServiceManager:
         if not svc.compose_file_abs.exists():
             logger.warning("Compose file not found for service %r: %s", svc.name, svc.compose_file_abs)
             return False
-        result = subprocess.run(["docker", "info"], capture_output=True)
+        result = subprocess.run(["docker", "info"], capture_output=True, env=child_env())
         if result.returncode != 0:
             logger.warning(
                 "Docker not available (exit %d) — service %r will not start",
@@ -413,10 +409,13 @@ class ServiceManager:
             return False
         return True
 
-    def _resolve_env(self, svc: ServiceDef) -> dict[str, str]:
-        """Substitute {template_vars} in env values."""
-        resolved = {}
+    def _resolve_env(self, svc: ServiceDef) -> dict[str, str | SecretRef]:
+        """Substitute {template_vars} in plain env values. SecretRefs stay refs."""
+        resolved: dict[str, str | SecretRef] = {}
         for k, v in svc.env.items():
+            if isinstance(v, SecretRef):
+                resolved[k] = v
+                continue
             try:
                 resolved[k] = v.format(**self._template_vars)
             except KeyError as exc:
@@ -426,49 +425,59 @@ class ServiceManager:
                 ) from exc
         return resolved
 
+    def _compose_env(self, svc: ServiceDef) -> dict[str, str]:
+        """The env of one ``docker compose`` child of this service: the allowlist, its plain env, its secrets.
+
+        ``up``, ``down`` and ``ps`` all get it: a compose file that interpolates ``${VAR:?}`` fails to
+        parse without the value, and a ``down`` that fails leaves the containers running. The revealed
+        values live in that child's environment only, never in a log line or the command's arguments.
+        """
+        return child_env(reveal_mapping(self._resolve_env(svc)))
+
     def _apply_env(self, svc: ServiceDef) -> None:
-        """Export resolved env vars to this process (shared by concurrent benchmarks)."""
+        """Export the plain env values to this process (shared by concurrent benchmarks).
+
+        A SecretRef value is never exported: only the service's own child receives it. The whole
+        map is checked before anything is exported, so a refused map changes nothing.
+        """
         if svc._prev_env:
             return
-        resolved = self._resolve_env(svc)
+        resolved = plain_env(self._resolve_env(svc))  # compile_env refused credential names and URLs
         with _EXPORTED_LOCK:
             for k, v in resolved.items():
                 current = _EXPORTED.get(k)
                 if current is not None and current[0] != v:
                     raise RuntimeError(
-                        f"service {svc.name!r}: env {k}={v!r} conflicts with {current[0]!r} "
+                        f"service {svc.name!r}: env {k} conflicts with the value "
                         "exported by a service of another running benchmark"
                     )
+            hostenv.set_overlay({k: v for k, v in resolved.items() if k not in _EXPORTED})
             for k, v in resolved.items():
                 if k in _EXPORTED:
-                    value, count, prev = _EXPORTED[k]
-                    _EXPORTED[k] = (value, count + 1, prev)
+                    value, count = _EXPORTED[k]
+                    _EXPORTED[k] = (value, count + 1)
                 else:
-                    _EXPORTED[k] = (v, 1, hostenv.get(k))
-                    hostenv.set_overlay({k: v})
+                    _EXPORTED[k] = (v, 1)
                 svc._prev_env[k] = None
-                logger.debug("Set %s=%s", k, v)
+                logger.debug("service %r exports %s", svc.name, k)
 
     def _restore_env(self, svc: ServiceDef) -> None:
         """Release this service's exports; the last holder restores the previous value."""
         with _EXPORTED_LOCK:
             for k in svc._prev_env:
-                value, count, prev = _EXPORTED[k]
+                value, count = _EXPORTED[k]
                 if count > 1:
-                    _EXPORTED[k] = (value, count - 1, prev)
+                    _EXPORTED[k] = (value, count - 1)
                     continue
                 del _EXPORTED[k]
-                if prev is None:
-                    hostenv.clear_overlay([k])
-                else:
-                    hostenv.set_overlay({k: prev})
+                hostenv.clear_overlay([k])
         svc._prev_env.clear()
 
     def _compose_up(self, svc: ServiceDef) -> bool:
         if not self._preflight(svc):
             return False
 
-        resolved_env = self._resolve_env(svc)
+        resolved_env = plain_env(self._resolve_env(svc))
         # Create any host directories referenced by ``_DIR``-suffixed env vars
         # (used as bind-mount sources in docker compose volume declarations).
         for _k, _v in resolved_env.items():
@@ -477,7 +486,7 @@ class ServiceManager:
                     Path(_v).mkdir(parents=True, exist_ok=True)
                 except Exception:
                     logger.debug("suppressed", exc_info=True)
-        compose_env = _child_env(resolved_env)
+        compose_env = self._compose_env(svc)
         logger.info("Starting service %r …", svc.name)
         result = subprocess.run(
             [
@@ -522,6 +531,7 @@ class ServiceManager:
                 str(svc.compose_file_abs),
                 "down",
             ],
+            env=self._compose_env(svc),
             capture_output=True,
         )
         self._restore_env(svc)
@@ -556,6 +566,7 @@ class ServiceManager:
                 "--filter",
                 "status=running",
             ],
+            env=self._compose_env(svc),
             capture_output=True,
             text=True,
         )
@@ -570,9 +581,9 @@ class ServiceManager:
         if not url:
             return True
         try:
-            from mas.lab.benchmark.environment.fixtures import open_url
+            from mas.runtime.secrets.transport import opener_for
 
-            resp = open_url(url, 2)
+            resp = opener_for(url).open(url, timeout=2)
             return 200 <= resp.status < 300
         except (URLError, OSError):
             return False
@@ -599,13 +610,9 @@ class ServiceManager:
             self._started.add(svc.name)
             return True
 
-        resolved_env = self._resolve_env(svc)
-        from mas.lab.benchmark.environment.fixtures import scrubbed_environ
-
-        inherited = self.base_env if self.base_env is not None else hostenv.snapshot()
         with _EXPORTED_LOCK:
-            exported = {k: v[0] for k, v in _EXPORTED.items()}  # what other services of this run export
-        proc_env = {**scrubbed_environ(inherited), **exported, **resolved_env}
+            exported = {k: v[0] for k, v in _EXPORTED.items()}
+        proc_env = child_env({**exported, **reveal_mapping(self._resolve_env(svc))})
 
         logger.info("Starting process service %r: %s", svc.name, " ".join(svc.command))
         try:

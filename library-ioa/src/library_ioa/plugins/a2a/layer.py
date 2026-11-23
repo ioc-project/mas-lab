@@ -22,7 +22,6 @@ from a2a.helpers import new_text_message
 from a2a.types import Role, SendMessageRequest, SendMessageResponse, TaskState
 from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
 from mas.library.standard.lib.comm.payload import normalize_send_intent
-from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack import Envelope, Handler, Layer
 from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
@@ -74,10 +73,10 @@ def decode_response(raw: Any) -> str:
         raise AgentCommError("A2A response is not a JSON-RPC object")
     error = body.get("error")
     if error is not None:
-        message = error.get("message") if isinstance(error, dict) else error
+        # the peer's message is its own text: only an integer code is shown
         code = error.get("code") if isinstance(error, dict) else None
-        shown = safe_text(message)
-        raise AgentCommError(f"A2A error {safe_text(code)}: {shown}" if code is not None else f"A2A error: {shown}")
+        valid = isinstance(code, int) and not isinstance(code, bool)
+        raise AgentCommError(f"A2A error {code}" if valid else "A2A error")
     result = body.get("result")
     if not isinstance(result, dict):
         raise AgentCommError("A2A response has no result")
@@ -93,8 +92,7 @@ def decode_response(raw: Any) -> str:
     task = response.task
     status_text = _parts_text(task.status.message.parts)
     if task.status.state in FAILED_STATES:
-        shown = safe_text(status_text)
-        raise AgentCommError(f"remote A2A task failed: {shown}" if shown else "remote A2A task failed")
+        raise AgentCommError("remote A2A task failed")
     artifacts = "".join(_parts_text(artifact.parts) for artifact in task.artifacts)
     if artifacts:
         return artifacts

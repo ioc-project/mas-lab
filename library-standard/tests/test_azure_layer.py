@@ -38,7 +38,7 @@ def test_classic_deployment_path_posts_api_key() -> None:
         transport,
         {
             "api_base": "https://demo.openai.azure.com",
-            "api_key": "secret",
+            "api_key": {"secret": "azure"},
             "deployment": "gpt-4o",
             "api_version": "2024-10-21",
         },
@@ -57,7 +57,7 @@ def test_v1_host_keeps_chat_completions() -> None:
     transport = _Transport()
     provider = AzureLLMProvider.wrap(
         transport,
-        {"api_base": "https://demo.services.ai.azure.com/openai/v1", "api_key": "secret"},
+        {"api_base": "https://demo.services.ai.azure.com/openai/v1", "api_key": {"secret": "azure"}},
     )
     _chat(provider, model="gpt-4o", messages=[{"role": "user", "content": "q"}])
     req = transport.requests[0]
@@ -69,7 +69,9 @@ def test_v1_host_keeps_chat_completions() -> None:
 
 def test_deployment_defaults_to_the_model_name() -> None:
     transport = _Transport()
-    provider = AzureLLMProvider.wrap(transport, {"api_base": "https://demo.openai.azure.com", "api_key": "secret"})
+    provider = AzureLLMProvider.wrap(
+        transport, {"api_base": "https://demo.openai.azure.com", "api_key": {"secret": "azure"}}
+    )
     _chat(provider, model="gpt-4o-mini", messages=[{"role": "user", "content": "q"}])
     assert transport.requests[0].url.path.endswith("/openai/deployments/gpt-4o-mini/chat/completions")
 
@@ -88,7 +90,7 @@ def test_nested_proxy_auth_bearer_sends_authorization() -> None:
         {
             "proxy": {
                 "api_base": "https://demo.openai.azure.com",
-                "api_key": "entra-tok",
+                "api_key": {"secret": "azure"},
                 "deployment": "gpt-4o",
                 "auth": "bearer",
             }
@@ -97,7 +99,7 @@ def test_nested_proxy_auth_bearer_sends_authorization() -> None:
     _chat(provider, model="ignored", messages=[{"role": "user", "content": "q"}])
     req = transport.requests[0]
     assert req.url.path.endswith("/openai/deployments/gpt-4o/chat/completions")
-    assert req.headers["Authorization"] == "Bearer entra-tok"
+    assert req.headers["Authorization"] == "Bearer secret"
     assert "api-key" not in req.headers
 
 
@@ -107,19 +109,22 @@ def test_auth_bearer_sends_authorization() -> None:
         transport,
         {
             "api_base": "https://demo.openai.azure.com",
-            "api_key": "entra-tok",
+            "api_key": {"secret": "azure"},
             "deployment": "gpt-4o",
             "auth": "bearer",
         },
     )
     _chat(provider, model="ignored", messages=[{"role": "user", "content": "q"}])
     req = transport.requests[0]
-    assert req.headers["Authorization"] == "Bearer entra-tok"
+    assert req.headers["Authorization"] == "Bearer secret"
     assert "api-key" not in req.headers
 
 
+@pytest.mark.no_secrets
 def test_missing_key_is_runtime_error() -> None:
-    provider = AzureLLMProvider.wrap(_Transport(), {"api_base": "https://demo.openai.azure.com"})
+    provider = AzureLLMProvider.wrap(
+        _Transport(), {"api_base": "https://demo.openai.azure.com", "api_key": {"secret": "azure"}}
+    )
     with pytest.raises(RuntimeError, match="Missing API key"):
         _chat(provider, model="m", messages=[{"role": "user", "content": "q"}])
 

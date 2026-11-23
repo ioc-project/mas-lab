@@ -88,9 +88,11 @@ class LLMProvider(Protocol):
     implements the sync ``chat_completion`` still works; it runs on the worker threads
     (``engine.sync_threads``) and the runtime warns once.
 
-    Optional leaf identity: ``kind``, ``api_base``, ``api_key_env``. A
+    Optional leaf identity: ``kind``, ``api_base``, ``api_key``. A
     provider that omits them still runs; the leaf pipeline treats missing
-    values as empty.
+    values as empty. ``api_key`` is a SecretRef (an optional one sends no
+    auth header while it is not set); a class's ``default_secret`` applies only
+    to its own ``default_api_base`` host.
     """
 
     async def achat_completion(

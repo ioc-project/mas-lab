@@ -54,9 +54,15 @@ def test_non_loopback_cors_requires_explicit_origin():
     assert resp.headers.get("access-control-allow-origin") == "http://ui.test"
 
 
-def test_non_loopback_without_token_is_refused():
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "localhost.evil.com", "app.localhost", ""])
+def test_non_loopback_without_token_is_refused(host: str):
     with pytest.raises(RuntimeError, match="token-file"):
-        create_app(ControllerSettings(host="0.0.0.0"))
+        create_app(ControllerSettings(host=host))
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.2", "localhost", "::1", "[::1]"])
+def test_loopback_bind_without_token_starts(host: str):
+    assert create_app(ControllerSettings(host=host)) is not None
 
 
 def test_loopback_cors_rejects_foreign_origin():

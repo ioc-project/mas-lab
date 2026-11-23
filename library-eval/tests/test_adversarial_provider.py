@@ -64,12 +64,16 @@ def test_compute_reads_the_kg_and_dispatches_by_metric(provider, tmp_path: Path,
 
 
 def test_the_client_needs_the_openai_package(monkeypatch) -> None:
+    from secret_fakes import bound_secrets
+
     monkeypatch.setitem(sys.modules, "openai", None)
-    with pytest.raises(ImportError, match="pip install openai"):
+    with bound_secrets({"openai": "k"}), pytest.raises(ImportError, match="pip install openai"):
         AdversarialProvider()._get_llm_client()
 
 
-def test_the_client_needs_the_api_key(monkeypatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+@pytest.mark.no_secrets
+def test_the_client_needs_the_api_key() -> None:
+    from mas.runtime.secrets.errors import SecretMissing
+
+    with pytest.raises(SecretMissing, match="openai"):
         AdversarialProvider()._get_llm_client()

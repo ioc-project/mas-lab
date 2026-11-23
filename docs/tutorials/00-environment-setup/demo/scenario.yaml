@@ -75,7 +75,7 @@ sections:
         expected_exit_code: 0
 
   - id: developer-online
-    title: "Developer — live LLM (requires OPENAI_API_KEY)"
+    title: "Developer — live LLM (requires secret openai)"
     description: Tutorial 0 §4 live path; skipped unless TUTORIAL_ONLINE=1.
     steps:
       - type: command
@@ -102,7 +102,7 @@ sections:
         expected_exit_code: 0
 
   - id: docker-online
-    title: "Docker — live LLM (requires OPENAI_API_KEY in docker/.env)"
+    title: "Docker — live LLM (requires secret openai in the file store)"
     description: Tutorial 0 §4 live path; skipped unless TUTORIAL_ONLINE=1.
     steps:
       - type: command

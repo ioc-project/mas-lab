@@ -12,6 +12,7 @@ import yaml
 from mas.ctl.cli.bind_flags import control_option, middleware_option
 from mas.ctl.libraries.bundles import TYPE_HELP, catalog_kinds, list_bundles, list_manifest_libraries
 from mas.ctl.session.flavour import SUPPORTED_FLAVOURS
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load, yaml_error_text
 
 INFRA_SHOW_EPILOG = """
 Examples:
@@ -79,8 +80,8 @@ def _emit_payload(payload: dict, *, as_json: bool) -> None:
 
 def _document_kind(path: Path) -> str:
     try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
+        loaded = safe_yaml_load(path.read_text(encoding="utf-8"))
+    except (OSError, YamlLoadError):
         return ""
     if not isinstance(loaded, dict):
         return ""
@@ -136,7 +137,10 @@ def _run_infra_resolved(
     user = UserConfig.load()
     document: dict | None = None
     if manifest:
-        loaded = yaml.safe_load(Path(manifest).expanduser().read_text(encoding="utf-8"))
+        try:
+            loaded = safe_yaml_load(Path(manifest).expanduser().read_text(encoding="utf-8"), source=manifest)
+        except YamlLoadError as exc:
+            raise click.ClickException(str(exc)) from None
         document = loaded if isinstance(loaded, dict) else None
     connections, pipeline = _view_flags(connections, pipeline)
     try:
@@ -175,6 +179,8 @@ def _run_infra_resolved(
         )
     except (ValueError, InfraResolveError, StackError) as exc:
         raise click.ClickException(str(exc)) from exc
+    except yaml.YAMLError as exc:
+        raise click.ClickException(yaml_error_text(exc)) from None
     _emit_payload(payload, as_json=as_json)
 
 

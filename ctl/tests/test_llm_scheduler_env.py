@@ -89,8 +89,9 @@ def _forget(*names: str) -> None:
 
 
 def test_a_dotenv_loaded_after_startup_still_sets_the_scheduler(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """A manifest's .env is read per command, after the entry point installed the overrides."""
+    """A manifest's .env overlays non-secret MAS_LLM_* keys into hostenv, never os.environ."""
     from mas.ctl.env import load_dotenv
+    from mas.runtime import hostenv
 
     monkeypatch.delenv("MAS_LLM_MAX_IN_FLIGHT", raising=False)
     install_env_overrides()
@@ -101,6 +102,7 @@ def test_a_dotenv_loaded_after_startup_still_sets_the_scheduler(monkeypatch: pyt
         assert load_dotenv(explicit=env_file) is not None
         assert explicit_overrides()["max_in_flight"] == 5
     finally:
+        hostenv.clear_overlay(("MAS_LLM_MAX_IN_FLIGHT",))
         _forget("MAS_LLM_MAX_IN_FLIGHT", "MAS_DOTENV_LOADED")
 
 
@@ -108,6 +110,7 @@ def test_a_dotenv_read_mid_run_keeps_the_overrides_a_host_handed_over(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:
     from mas.ctl.env import load_dotenv
+    from mas.runtime import hostenv
 
     monkeypatch.delenv("MAS_LLM_RPM", raising=False)
     install_overrides({"max_in_flight": 9})  # what a spawned run worker was given
@@ -117,4 +120,5 @@ def test_a_dotenv_read_mid_run_keeps_the_overrides_a_host_handed_over(
         load_dotenv(explicit=env_file)
         assert explicit_overrides() == {"max_in_flight": 9, "requests_per_minute": 30.0}
     finally:
+        hostenv.clear_overlay(("MAS_LLM_RPM",))
         _forget("MAS_LLM_RPM", "MAS_DOTENV_LOADED")

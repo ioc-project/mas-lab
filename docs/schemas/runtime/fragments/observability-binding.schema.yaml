@@ -71,8 +71,19 @@ items:
               type: string
             converter_profile:
               type: string
-            otlp_endpoint_env:
+            otlp_endpoint:
               type: string
+            headers:
+              type: object
+              description: >
+                Headers sent with every OTLP export request (traces and logs). A value
+                is a plain string or a SecretRef, revealed when the exporter is built.
+                Credential headers (Authorization, X-Api-Key, Cookie, ...) must be a
+                SecretRef. The entry points drop OTEL_EXPORTER_OTLP_HEADERS from the process.
+              additionalProperties:
+                oneOf:
+                  - type: string
+                  - $ref: "./secret-ref.schema.yaml"
             service_name:
               type: string
               description: >

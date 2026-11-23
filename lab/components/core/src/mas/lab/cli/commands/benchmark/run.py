@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 from mas.ctl.cli.bind_flags import control_option
-from mas.runtime import hostenv
+from mas.runtime.secrets.process import child_env
 
 
 @click.command("run")
@@ -248,9 +248,12 @@ def run_cmd(
         "pipeline_attachments": list(pipeline_attachments),
         "experiment_overlays": list(experiment_overlays),
         "clean_stale": clean_stale,
-        # The CLI is where the environment is read; fixture processes inherit it (minus secret-looking names).
-        "fixture_env": hostenv.snapshot(),
+        # Allowlist only. Fixture processes do not inherit the host snapshot.
+        "fixture_env": child_env(lab=True),
     }
+    from mas.lab.secret_host import process_settings
+
+    spec["secrets"] = (settings := process_settings()) and settings.to_payload()  # the daemon refuses another store
 
     client = ControllerClient()
     client.ensure_running(restart_stale=True)

@@ -18,12 +18,7 @@ description: >
   ``url``: a framing row and an in-process channel have no address. ctl
   requires ``url`` on an agent-keyed row when it applies the Flavour (it
   knows the agent ids then), and each plugin on the endpoint rows that need
-  one. No secret belongs on a row: a key named secret, password, passwd,
-  passphrase, token, api_key, authorization, cookie, credential(s) or
-  private_key, in any case, alone or after ``_`` or ``-`` (``access_token``,
-  ``X-Api-Key``), or capitalized after a lower-case letter (``accessToken``),
-  is refused, here for the row's own keys and its ``headers``, and at any
-  depth when ctl applies the Flavour; name the env var with ``secret_env``.
+  one. Secrets are SecretRef objects (``{secret: NAME}``). URL userinfo is refused.
 
 type: object
 # protocol is always required. url is not, explicitly: an endpoint row with no address (A2A framing above a
@@ -31,10 +26,6 @@ type: object
 required: [protocol]
 # Other keys stay allowed: a layer row passes them to its plugin, which rejects what it does not know.
 additionalProperties: true
-# The same pattern as ctl's SECRET_KEY (mas.ctl.infra.bind); a test keeps the two equal.
-propertyNames: &no_secret_key
-  not:
-    pattern: "^((.*[_-])?([Ss][Ee][Cc][Rr][Ee][Tt]|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]|[Pp][Aa][Ss][Ss][Ww][Dd]|[Pp][Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|[Tt][Oo][Kk][Ee][Nn]|[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]|[Aa][Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|[Cc][Oo][Oo][Kk][Ii][Ee]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|[Cc][Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|[Pp][Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy])|.*[a-z0-9](S[Ee][Cc][Rr][Ee][Tt]|P[Aa][Ss][Ss][Ww][Oo][Rr][Dd]|P[Aa][Ss][Ss][Ww][Dd]|P[Aa][Ss][Ss][Pp][Hh][Rr][Aa][Ss][Ee]|T[Oo][Kk][Ee][Nn]|A[Pp][Ii][_-]?[Kk][Ee][Yy]|A[Uu][Tt][Hh][Oo][Rr][Ii][Zz][Aa][Tt][Ii][Oo][Nn]|C[Oo][Oo][Kk][Ii][Ee]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll]|C[Rr][Ee][Dd][Ee][Nn][Tt][Ii][Aa][Ll][Ss]|P[Rr][Ii][Vv][Aa][Tt][Ee][_-]?[Kk][Ee][Yy]))$"
 properties:
   protocol:
     type: string
@@ -48,9 +39,8 @@ properties:
     description: >-
       Three-part org/ns/service a naming layer (slim, local-group) puts each
       agent under: an agent's name is <identity>/<agent_id>.
-  secret_env:
-    type: string
-    description: Env-var name of the layer's secret; ctl reads it and passes the value to the layer as secret.
+  secret:
+    $ref: "./secret-ref.schema.yaml"
   usage:
     default: connect
     description: >-
@@ -76,12 +66,35 @@ properties:
     description: Legacy; true reads as usage [connect, listen].
   headers:
     type: object
-    propertyNames: *no_secret_key
     additionalProperties:
-      type: string
+      oneOf:
+        - type: string
+        - $ref: "./secret-ref.schema.yaml"
+    properties:
+      Authorization:
+        $ref: "./secret-ref.schema.yaml"
+      Proxy-Authorization:
+        $ref: "./secret-ref.schema.yaml"
+      Cookie:
+        $ref: "./secret-ref.schema.yaml"
+      Set-Cookie:
+        $ref: "./secret-ref.schema.yaml"
+      Api-Key:
+        $ref: "./secret-ref.schema.yaml"
+      X-Api-Key:
+        $ref: "./secret-ref.schema.yaml"
   timeout:
     type: number
     exclusiveMinimum: 0
+  allowed_origins:
+    type: array
+    items:
+      type: string
+      format: uri
+    description: >-
+      A2A client rows. Origins (scheme, host, port) besides ``url`` that a
+      SecretRef header may be sent to; the agent card may name interface urls
+      on another origin. A request to any other origin is refused.
   a2a:
     type: object
     additionalProperties: true

@@ -19,24 +19,24 @@ Manifest shape (``kind: Infra``)::
           uri: bolt://localhost:7687
           database: neo4j
           username: neo4j
-          password_env: NEO4J_PASSWORD          # env var holding the password
+          password: {secret: neo4j}             # SecretRef — never a value
 
 Resolution precedence for connection fields: explicit call arg → manifest →
-environment (``NEO4J_URI`` / ``NEO4J_USER`` / ``NEO4J_DB_AGENT`` /
-``NEO4J_PASSWORD``). ``$NEO4J_URI`` is a shortcut for shipping
-``infra/local-neo4j.yaml`` — you do not need a manifest file when the env is
-set. The password is never stored in the manifest — only the name of the env
-var that holds it.
+host (``NEO4J_URI`` / ``NEO4J_USER`` / ``NEO4J_DB_AGENT``). ``$NEO4J_URI`` is a
+shortcut for shipping ``infra/local-neo4j.yaml`` — you do not need a manifest
+file when the host is set. The password is a SecretRef; the value lives in the
+secret store (``mas-ctl secrets set neo4j``).
 """
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mas.runtime import hostenv
+from mas.runtime.secrets import current_resolver, load_checked_document
+from mas.runtime.secrets.ref import parse_secret_ref_optional
 
 NEO4J_KIND = "Neo4j"
 
@@ -48,7 +48,7 @@ class Neo4jTarget:
     uri: str = "bolt://localhost:7687"
     database: str = "neo4j"
     username: str = "neo4j"
-    password_env: str = "NEO4J_PASSWORD"
+    password: object = None
 
     def resolved_uri(self, override: Optional[str] = None) -> str:
         return override or self.uri or hostenv.get("NEO4J_URI", "bolt://localhost:7687")
@@ -59,21 +59,17 @@ class Neo4jTarget:
     def resolved_database(self, override: Optional[str] = None) -> str:
         return override or self.database or hostenv.get("NEO4J_DB_AGENT", "neo4j")
 
-    def password(self) -> str:
-        """Read the password from the configured env var (never from the manifest)."""
-        return hostenv.get(self.password_env, "")
+    def password_value(self) -> str:
+        """The declared password (a SecretRef, required unless optional), or ``""``."""
+        ref = parse_secret_ref_optional(self.password, field="password")
+        return (current_resolver().reveal_or_none(ref) or "") if ref else ""
 
 
-def _load_manifest(manifest: str | Path | Dict[str, Any]) -> Dict[str, Any]:
-    if isinstance(manifest, dict):
-        return manifest
-    path = Path(manifest)
-    text = path.read_text(encoding="utf-8")
-    if path.suffix in {".yaml", ".yml"}:
-        import yaml
+def _check_uri(uri: Optional[str]) -> None:
+    from mas.runtime.secrets.url import check_url_has_no_credentials
 
-        return yaml.safe_load(text) or {}
-    return json.loads(text)
+    if uri:
+        check_url_has_no_credentials(uri, field="uri")
 
 
 def _targets(manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -96,13 +92,14 @@ def resolve_neo4j(
     ``$NEO4J_URI`` is a shortcut for ``infra/local-neo4j.yaml``. Precedence:
     *uri* → *infra* → env.
     """
+    _check_uri(uri)
     if infra is not None:
         target = neo4j_target(infra)
         return Neo4jTarget(
             uri=target.resolved_uri(uri),
             database=target.resolved_database(),
             username=target.resolved_username(),
-            password_env=target.password_env,
+            password=target.password,
         )
     resolved = (uri or hostenv.get("NEO4J_URI", "")).strip()
     if not resolved:
@@ -114,7 +111,7 @@ def resolve_neo4j(
         uri=resolved,
         database=hostenv.get("NEO4J_DB_AGENT", "neo4j"),
         username=hostenv.get("NEO4J_USER", "neo4j"),
-        password_env="NEO4J_PASSWORD",
+        password=None,
     )
 
 
@@ -128,7 +125,7 @@ def neo4j_target(
     Raises:
         ValueError: when no ``Neo4j`` target is present.
     """
-    doc = _load_manifest(manifest)
+    doc = load_checked_document(manifest)
     candidates = [
         t
         for t in _targets(doc)
@@ -143,7 +140,7 @@ def neo4j_target(
         uri=str(t.get("uri") or "bolt://localhost:7687"),
         database=str(t.get("database") or "neo4j"),
         username=str(t.get("username") or "neo4j"),
-        password_env=str(t.get("password_env") or "NEO4J_PASSWORD"),
+        password=t.get("password") or None,
     )
 
 
@@ -152,9 +149,9 @@ def resolve_neo4j_conn(
     infra: str | Path | Dict[str, Any] | None = None,
     uri: Optional[str] = None,
     username: Optional[str] = None,
-    password_env: Optional[str] = None,
+    password: object = None,
     database: Optional[str] = None,
-) -> Dict[str, Optional[str]]:
+) -> Dict[str, Any]:
     """Merge explicit connection overrides with an ``--infra`` manifest, field by field.
 
     Shared by ``lab_cli.py``'s ``neo4j-push``/``neo4j-dump`` commands and
@@ -163,18 +160,20 @@ def resolve_neo4j_conn(
     previously duplicated this exact merge. Each field: the explicit value
     if given, else the infra manifest's value (when *infra* is given), else
     ``None`` (the caller's own default, e.g. ``run_neo4j_push``'s, applies).
+    ``password`` is a SecretRef object, never a literal.
     """
-    conn: Dict[str, Optional[str]] = {
+    _check_uri(uri)
+    conn: Dict[str, Any] = {
         "uri": uri,
         "username": username,
-        "password_env": password_env,
+        "password": password,
         "database": database,
     }
     if infra:
         target = neo4j_target(infra)
         conn["uri"] = conn["uri"] or target.uri
         conn["username"] = conn["username"] or target.username
-        conn["password_env"] = conn["password_env"] or target.password_env
+        conn["password"] = conn["password"] or target.password
         conn["database"] = conn["database"] or target.database
     return conn
 

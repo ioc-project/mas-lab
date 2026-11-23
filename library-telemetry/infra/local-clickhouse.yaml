@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 # Infra manifest — where a span set reads back from ClickHouse.
 # Shortcut: set $CLICKHOUSE_HOST (and optional $CLICKHOUSE_PORT / _USER /
-# _DATABASE / $CLICKHOUSE_PASSWORD) instead of passing this file.
+# _DATABASE) instead of passing this file. Password is `{secret: clickhouse}`.
 apiVersion: mas/v1
 kind: Infra
 metadata:
@@ -14,5 +14,5 @@ spec:
       port: 8123
       database: otel
       user: default
-      password_env: CLICKHOUSE_PASSWORD
+      password: {secret: clickhouse}
       table: otel_traces

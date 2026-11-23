@@ -25,72 +25,40 @@ import dataclasses
 import json
 import re
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
 
 from mas.ctl.compose.models import ResolvedInfra
-
-# Words a key that names a secret ends in; ``[_-]?`` is an optional separator inside the word.
-SECRET_WORDS = (
-    "secret",
-    "password",
-    "passwd",
-    "passphrase",
-    "token",
-    "api[_-]?key",
-    "authorization",
-    "cookie",
-    "credential",
-    "credentials",
-    "private[_-]?key",
-)
-
-
-def _any_case(word: str) -> str:
-    return "".join(f"[{ch.upper()}{ch.lower()}]" if ch.isalpha() else ch for ch in word)
-
-
-def _capitalized(word: str) -> str:
-    return word[0].upper() + _any_case(word[1:])
-
-
-# A key that names a secret: one of the words in any case, alone or after ``_`` / ``-`` (``access_token``,
-# ``X-Api-Key``, ``Set-Cookie``), or capitalized after a lower-case letter or a digit (``accessToken``,
-# ``clientSecret``). Letter classes instead of a case flag, so the JSON Schema
-# (docs/schemas/runtime/fragments/application-endpoint.schema.yaml) holds this very pattern.
-SECRET_KEY = re.compile(
-    "^((.*[_-])?(" + "|".join(_any_case(w) for w in SECRET_WORDS) + ")"
-    "|.*[a-z0-9](" + "|".join(_capitalized(w) for w in SECRET_WORDS) + "))$"
-)
+from mas.runtime.secrets import SecretRefError, prepare_manifest
+from mas.runtime.secrets.ref import iter_secret_refs
 
 
 class BindError(ValueError):
     """A Flavour ``bind`` that names a row it cannot use."""
 
 
-def _url_secrets(key: str, value: str) -> list[str]:
-    """What in a url string would carry a secret: credentials, or a query key that names one."""
-    if "://" not in value:
-        return []
-    parsed = urlsplit(value)
-    found = [f"{key} (url credentials)"] if "@" in parsed.netloc else []
-    found += [f"{key} (url query {name!r})" for name, _ in parse_qsl(parsed.query) if SECRET_KEY.match(name)]
-    return found
+# The fields of a row that say where its requests go or which program receives them.
+_ENDPOINT_FIELDS = (
+    *("url", "api_base", "endpoint", "uri", "host", "port", "identity", "command", "args", "cwd", "env"),
+    *("verify_ssl", "ca_bundle", "follow_redirects", "transport", "proxy"),
+)
 
 
-def secret_keys(value: Any, key: str = "") -> list[str]:
-    """Keys that name a secret, and url params that carry one (credentials, a secret query key), at any depth."""
-    found: list[str] = []
-    if isinstance(value, dict):
-        for name, item in value.items():
-            if SECRET_KEY.match(str(name)):
-                found.append(str(name))
-            found.extend(secret_keys(item, str(name)))
-    elif isinstance(value, list):
-        for item in value:
-            found.extend(secret_keys(item, key))
-    elif isinstance(value, str):
-        found.extend(_url_secrets(key, value))
-    return found
+def refuse_retarget(before: Any, after: Any, override: Any, *, where: str, error: type[Exception] = ValueError) -> None:
+    """Refuse *override* moving a row (*before* → *after*) that holds SecretRefs unless it restates them.
+
+    A Flavour ``bind`` override, a later infra row of the same id and a CLI ``--override`` all use it.
+    """
+    if not before or not any(iter_secret_refs(after)) or any(iter_secret_refs(override)):
+        return
+    for nest in ("", "proxy", "server"):
+        old, new = (before, after) if not nest else (before.get(nest), after.get(nest))
+        old, new = (old if isinstance(old, dict) else {}), (new if isinstance(new, dict) else {})
+        for field in _ENDPOINT_FIELDS:
+            if old.get(field) != new.get(field):
+                name = f"{nest}.{field}" if nest else field
+                raise error(
+                    f"{where}: changes {name} of a row that holds SecretRef credentials; "
+                    "restate the credentials in the same override"
+                )
 
 
 def _row_names(raw: Any, where: str) -> list[str]:
@@ -278,9 +246,6 @@ def _layer(name: str, rows: dict[str, Any], where: str) -> dict[str, Any]:
     except ValueError as exc:
         raise BindError(f"Application {name!r}: {exc}") from None
     params = {key: value for key, value in row.items() if key not in {"protocol", "usage", "expose"}}
-    secrets = sorted(set(secret_keys(params)))
-    if secrets:
-        raise BindError(f"Application {name!r}: {secrets} would hold a secret; name its env var with secret_env")
     return {"row": name, "type": protocol, "params": params, "usage": capability}
 
 
@@ -298,10 +263,10 @@ def _for_agent(chain: list[dict[str, Any]], agent_id: str, overrides: dict[str, 
         raise BindError(f"Flavour {where}.params names {unknown[0]!r}, which is not a row of the agent's chain")
     out: list[dict[str, Any]] = []
     for layer in chain:
-        params = {**layer["params"], **overrides.get(layer["row"], {})}
-        secrets = sorted(set(secret_keys(params)))
-        if secrets:
-            raise BindError(f"Flavour {where}.params: {secrets} would hold a secret; name its env var with secret_env")
+        override = overrides.get(layer["row"], {})
+        params = {**layer["params"], **override}
+        label = f"Flavour {where}.params.{layer['row']}"
+        refuse_retarget(layer["params"], params, override, where=label, error=BindError)
         resolved: dict[str, Any] = {}
         for key, value in params.items():
             if isinstance(value, str):
@@ -440,6 +405,10 @@ def bind_flavour(
     (``is_direct_link``: the A2A SDK client at a url) becomes that agent's
     released agent-keyed row.
     """
+    try:  # a Flavour is read without the manifest checks: its params overrides are checked (and hydrated) here
+        flavour_spec = prepare_manifest(flavour_spec or {}, source="Flavour")
+    except SecretRefError as exc:
+        raise BindError(str(exc)) from None
     default_names, default_usage, entries = bound_chains(flavour_spec)
     rows = dict(resolved.applications or {})
     bind = flavour_spec.get("bind") if isinstance(flavour_spec, dict) else None

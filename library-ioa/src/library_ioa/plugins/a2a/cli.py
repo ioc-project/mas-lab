@@ -7,6 +7,7 @@ import sys
 from typing import Sequence
 
 from a2a.utils.constants import TransportProtocol
+from mas.runtime.entrypoint import install_host_environment
 
 from library_ioa.plugins.a2a.client import A2AClient
 
@@ -28,6 +29,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    install_host_environment()
     parser = _build_parser()
     args = parser.parse_args(argv)
     try:

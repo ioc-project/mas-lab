@@ -250,4 +250,6 @@ async def aexecute_engine_tool(
     except ClassifiedFailure:
         raise
     except Exception as exc:
-        raise classify_tool_exception(exc) from exc
+        failure = classify_tool_exception(exc)
+    # Raised outside the handler: the tool's exception (an SDK body, a URL query) is neither cause nor context.
+    raise failure

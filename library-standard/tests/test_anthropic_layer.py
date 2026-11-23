@@ -54,7 +54,7 @@ def _provider(transport: _Transport, monkeypatch: pytest.MonkeyPatch, **params: 
     del monkeypatch
     return AnthropicLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1", "api_key": "secret", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1", "api_key": {"secret": "anthropic"}, **params},
         call_kinds=("llm",),
     )
 
@@ -119,9 +119,10 @@ def test_protocol_layers_is_http_then_anthropic() -> None:
     assert steps[0]["params"] == {"url": "http://127.0.0.1:9/v1", "timeout": 7.0}
 
 
+@pytest.mark.no_secrets
 def test_missing_key_is_runtime_error(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("K", "from-env")
-    provider = AnthropicLLMProvider.wrap(_Transport(), {"api_base": "http://127.0.0.1:9/v1", "api_key_env": "K"})
+    provider = AnthropicLLMProvider.wrap(_Transport(), {"api_base": "http://127.0.0.1:9/v1"})
     with pytest.raises(RuntimeError, match="Missing API key"):
         _chat(provider, model="m", messages=[{"role": "user", "content": "q"}])
 
@@ -381,8 +382,7 @@ def test_stream_error_event_is_a_classified_failure(monkeypatch: pytest.MonkeyPa
     provider = _provider(_Transport(lines=lines), monkeypatch, stream=True)
     with pytest.raises(ClassifiedFailure) as exc:
         _chat(provider, model="m", messages=[{"role": "user", "content": "q"}])
-    assert exc.value.failure_class is FailureClass.TRANSIENT
-    assert exc.value.code == "overloaded_error"
+    assert exc.value.failure_class is FailureClass.APPLICATION and "busy" not in str(exc.value)
 
 
 def test_stream_usage_total_is_input_plus_output(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -218,7 +218,7 @@ mas-lab plot multilevel-trajectory logs/events.jsonl --format html -o output/tra
 `telemetry show` prints the event count, the agents, and a breakdown by event kind.
 `plot` writes an HTML trajectory with delegation arrows.
 Without an API key, run both on `fixtures/events.jsonl`, a pre-recorded single-agent trace (15 events, no delegation).
-Steps 5 and 6 need `OPENAI_API_KEY` (or a cache replay from Tutorial 0). Without it, `run-mas` stops with a "Live LLM configured but API key unset" error.
+Steps 5 and 6 need `echo KEY | mas-ctl secrets set openai` (or a cache replay from Tutorial 0). Without the secret, `run-mas` stops with a missing-secret error that names `openai`.
 
 ## Going further
 

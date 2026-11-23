@@ -4,11 +4,11 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
 from mas.library.eval.mce.runner import (
-    _llm_call_with_retry,
     _pipeline_for_routed_model,
     _resolve_infra,
     _resolve_infra_generation,
@@ -21,19 +21,19 @@ def test_resolve_infra_routes_judge_model(monkeypatch) -> None:
     leaves = {
         "arm": {
             "api_base": "https://arm.example/v1",
-            "api_key_env": "ARM_KEY",
+            "api_key": {"secret": "arm"},
             "allowed": ["provider-a/model-a"],
         },
         "judge": {
             "api_base": "https://judge.example/v1",
-            "api_key_env": "JUDGE_KEY",
+            "api_key": {"secret": "judge"},
             "allowed": ["judge-model"],
             "default_model": "judge-model",
         },
     }
     proxy = {
         "api_base": "https://arm.example/v1",
-        "api_key_env": "ARM_KEY",
+        "api_key": {"secret": "arm"},
         "default_model": "provider-a/model-a",
     }
     monkeypatch.setattr(
@@ -41,22 +41,22 @@ def test_resolve_infra_routes_judge_model(monkeypatch) -> None:
         lambda: (proxy, SimpleNamespace(), leaves),
     )
     monkeypatch.setattr("mas.runtime.agent_defaults.resolve_default_model", lambda _ws: None)
-    api_base, api_key_env, _model = _resolve_infra(model="judge-model")
+    api_base, api_key, _model = _resolve_infra(model="judge-model")
     assert api_base == "https://judge.example/v1"
-    assert api_key_env == "JUDGE_KEY"
+    assert api_key == {"secret": "judge"}
 
 
 def test_judge_scheduler_steps_come_from_that_leaf() -> None:
     leaves = {
         "arm": {
             "api_base": "https://arm.example/v1",
-            "api_key_env": "ARM_KEY",
+            "api_key": {"secret": "arm"},
             "allowed": ["provider-a/model-a"],
             "pipeline": [{"middleware": "llm_scheduler", "params": {"max_in_flight": 1}}],
         },
         "judge": {
             "api_base": "https://judge.example/v1",
-            "api_key_env": "JUDGE_KEY",
+            "api_key": {"secret": "judge"},
             "allowed": ["judge-model"],
             "pipeline": [{"middleware": "llm_scheduler", "params": {"max_in_flight": 7}}],
         },
@@ -73,20 +73,21 @@ def test_resolve_infra_fallback_when_proxy_missing(monkeypatch) -> None:
         "mas.library.eval.mce.runner._resolve_infra_proxy",
         lambda: (None, None, {}),
     )
-    assert _resolve_infra() == ("", "OPENAI_API_KEY", "gpt-4o")
-    assert _resolve_infra(model="judge-x") == ("", "OPENAI_API_KEY", "judge-x")
+    # No key here: the judge key rule picks the default secret for the default endpoint only.
+    assert _resolve_infra() == ("", None, "gpt-4o")
+    assert _resolve_infra(model="judge-x") == ("", None, "judge-x")
 
 
 def test_resolve_infra_canonicalizes_judge_alias(monkeypatch) -> None:
     leaves = {
         "arm": {
             "api_base": "https://arm.example/v1",
-            "api_key_env": "ARM_KEY",
+            "api_key": {"secret": "arm"},
             "allowed": ["provider-a/model-a"],
         },
         "judge": {
             "api_base": "https://judge.example/v1",
-            "api_key_env": "JUDGE_KEY",
+            "api_key": {"secret": "judge"},
             "allowed": ["judge-model"],
             "mappings": {"judge-alias": "judge-model"},
             "default_model": "judge-model",
@@ -94,7 +95,7 @@ def test_resolve_infra_canonicalizes_judge_alias(monkeypatch) -> None:
     }
     proxy = {
         "api_base": "https://arm.example/v1",
-        "api_key_env": "ARM_KEY",
+        "api_key": {"secret": "arm"},
         "default_model": "provider-a/model-a",
     }
     monkeypatch.setattr(
@@ -102,9 +103,9 @@ def test_resolve_infra_canonicalizes_judge_alias(monkeypatch) -> None:
         lambda: (proxy, SimpleNamespace(), leaves),
     )
     monkeypatch.setattr("mas.runtime.agent_defaults.resolve_default_model", lambda _ws: None)
-    api_base, api_key_env, resolved = _resolve_infra(model="judge-alias")
+    api_base, api_key, resolved = _resolve_infra(model="judge-alias")
     assert api_base == "https://judge.example/v1"
-    assert api_key_env == "JUDGE_KEY"
+    assert api_key == {"secret": "judge"}
     assert resolved == "judge-model"
 
 
@@ -112,18 +113,18 @@ def test_resolve_infra_unclaimed_judge_is_error(monkeypatch) -> None:
     leaves = {
         "arm": {
             "api_base": "https://arm.example/v1",
-            "api_key_env": "ARM_KEY",
+            "api_key": {"secret": "arm"},
             "allowed": ["provider-a/model-a"],
         },
         "judge": {
             "api_base": "https://judge.example/v1",
-            "api_key_env": "JUDGE_KEY",
+            "api_key": {"secret": "judge"},
             "allowed": ["judge-model"],
         },
     }
     proxy = {
         "api_base": "https://arm.example/v1",
-        "api_key_env": "ARM_KEY",
+        "api_key": {"secret": "arm"},
         "default_model": "provider-a/model-a",
     }
     monkeypatch.setattr(
@@ -139,7 +140,7 @@ def test_resolve_infra_unclaimed_judge_is_error(monkeypatch) -> None:
 def test_resolve_infra_uses_leaf_default_when_model_omitted(monkeypatch) -> None:
     proxy = {
         "api_base": "https://arm.example/v1",
-        "api_key_env": "ARM_KEY",
+        "api_key": {"secret": "arm"},
         "default_model": "provider-a/model-a",
     }
     monkeypatch.setattr(
@@ -147,9 +148,9 @@ def test_resolve_infra_uses_leaf_default_when_model_omitted(monkeypatch) -> None
         lambda: (proxy, SimpleNamespace(), {}),
     )
     monkeypatch.setattr("mas.runtime.agent_defaults.resolve_default_model", lambda _ws: None)
-    api_base, api_key_env, resolved = _resolve_infra()
+    api_base, api_key, resolved = _resolve_infra()
     assert api_base == "https://arm.example/v1"
-    assert api_key_env == "ARM_KEY"
+    assert api_key == {"secret": "arm"}
     assert resolved == "provider-a/model-a"
 
 
@@ -207,7 +208,7 @@ def test_resolve_infra_proxy_no_refs(monkeypatch) -> None:
     assert leaves == {}
 
 
-def test_resolve_infra_proxy_resolve_failure(monkeypatch) -> None:
+def test_resolve_infra_proxy_resolve_failure_raises(monkeypatch) -> None:
     class _WS:
         found = True
         effective_infra_refs = ["infra:proxy"]
@@ -221,10 +222,8 @@ def test_resolve_infra_proxy_resolve_failure(monkeypatch) -> None:
 
     monkeypatch.setattr("mas.lab.workspace.WorkspaceConfig", _WS)
     monkeypatch.setattr("mas.ctl.infra.resolve.resolve_infra_refs", _boom)
-    proxy, ws, leaves = _resolve_infra_proxy()
-    assert proxy is None
-    assert ws.found is True
-    assert leaves == {}
+    with pytest.raises(RuntimeError, match="no infra"):
+        _resolve_infra_proxy()
 
 
 def test_resolve_infra_proxy_returns_leaves(monkeypatch) -> None:
@@ -250,11 +249,8 @@ def test_resolve_infra_proxy_returns_leaves(monkeypatch) -> None:
 def test_install_openai_llm_service_routes_and_is_idempotent(monkeypatch) -> None:
     import mas.library.eval.mce.runner as runner
 
-    runner._jury_patched = False
-    runner._effective_model = ""
-    runner._openai_client = None
-    runner._openai_base_url = ""
-    runner._openai_api_key = ""
+    monkeypatch.setattr(runner, "_service", None)
+    monkeypatch.setattr(runner, "_jury", None)
 
     proxy = {
         "api_base": "https://judge.example/v1",
@@ -266,12 +262,11 @@ def test_install_openai_llm_service_routes_and_is_idempotent(monkeypatch) -> Non
     monkeypatch.setattr(
         runner,
         "_resolve_infra",
-        lambda model=None: ("https://judge.example/v1", "JUDGE_KEY", model or "judge-model"),
+        lambda model=None: ("https://judge.example/v1", {"secret": "judge"}, model or "judge-model"),
     )
     monkeypatch.setattr(runner, "_resolve_infra_proxy", lambda: (proxy, SimpleNamespace(), leaves))
     monkeypatch.setattr(runner, "_resolve_infra_generation", lambda: {})
     monkeypatch.setattr(runner, "_make_deepeval_model", lambda **_k: None)
-    monkeypatch.setenv("JUDGE_KEY", "test-key")
 
     class _Client:
         def __init__(self, **kwargs):
@@ -293,35 +288,35 @@ def test_install_openai_llm_service_routes_and_is_idempotent(monkeypatch) -> Non
     monkeypatch.setattr("metrics_computation_engine.llm_judge.jury.Jury", _Jury)
     monkeypatch.setattr("metrics_computation_engine.llm_judge.llm.LLMClient", _LLMClient)
 
-    first = install_openai_llm_service(model_override="judge-model")
-    assert first == "judge-model"
-    assert installed
-    assert installed[0][0]["params"]["max_in_flight"] == 7
+    from secret_fakes import bound_secrets
 
-    second = install_openai_llm_service(model_override="judge-model")
-    assert second == "judge-model"
-    assert len(installed) == 1
+    with bound_secrets({"judge": "test-key"}):
+        first = install_openai_llm_service(model_override="judge-model")
+        assert first == "judge-model"
+        assert installed
+        assert installed[0][0]["params"]["max_in_flight"] == 7
+
+        second = install_openai_llm_service(model_override="judge-model")
+        assert second == "judge-model"
+        assert len(installed) == 1
+        cfg = runner.llm_service_config()
+        assert "api_key" not in cfg
+        assert cfg["model"] == "judge-model"
+        assert "test-key" not in json.dumps(cfg)
 
 
-def test_llm_call_with_retry_reads_choice_content() -> None:
-    class _Message:
-        content = "ok"
+@pytest.mark.no_secrets
+def test_install_openai_llm_service_missing_secret_raises(monkeypatch) -> None:
+    import mas.library.eval.mce.runner as runner
+    from mas.runtime.secrets.errors import SecretMissing
 
-    class _Choice:
-        message = _Message()
-
-    class _Resp:
-        choices = [_Choice()]
-
-    class _Completions:
-        @staticmethod
-        def create(**_kwargs):
-            return _Resp()
-
-    class _Chat:
-        completions = _Completions()
-
-    class _Client:
-        chat = _Chat()
-
-    assert _llm_call_with_retry(_Client(), "judge-model", [{"role": "user", "content": "hi"}]) == "ok"
+    monkeypatch.setattr(runner, "_service", None)
+    monkeypatch.setattr(runner, "_jury", None)
+    monkeypatch.setattr(
+        runner,
+        "_resolve_infra",
+        lambda model=None: ("https://judge.example/v1", {"secret": "judge"}, "judge-model"),
+    )
+    monkeypatch.setattr(runner, "_resolve_infra_proxy", lambda: (None, None, {}))
+    with pytest.raises(SecretMissing, match="judge"):
+        install_openai_llm_service(model_override="judge-model")

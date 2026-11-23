@@ -9,6 +9,9 @@ build/
 .demo-ui-mock/
 .env
 .env.local
+# Local secret stores (mas-ctl secrets init)
+.mas/
+**/.mas/
 .env.*.local
 config.yaml
 !lab/src/mas/lab/templates/**/config.yaml

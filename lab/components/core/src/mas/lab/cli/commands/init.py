@@ -16,60 +16,7 @@ from mas.runtime.constants import WORKSPACE_CONFIG_FILENAME
 from mas.runtime.xdg import mas_config_dir, mas_infra_dir, mas_user_config_file
 
 _DEFAULT_INFRA_NAME = "llmprovider"
-_DEFAULT_ENV_KEY = "OPENAI_API_KEY"
 _DEFAULT_API_BASE = "https://api.openai.com/v1"
-_DEFAULT_API_BASE_ENV = "OPENAI_BASE_URL"
-
-
-def _api_base_env_name(raw: str, infra_name: str, taken: frozenset[str] = frozenset()) -> str:
-    """Env var named in the file. OpenAI's default URL uses OPENAI_BASE_URL.
-
-    A custom URL uses ``<INFRA>_API_BASE`` so a leftover OPENAI_BASE_URL in the
-    shell does not steal the call.
-    """
-    text = (raw or "").strip() or _DEFAULT_API_BASE
-    if text.rstrip("/") == _DEFAULT_API_BASE.rstrip("/"):
-        return _DEFAULT_API_BASE_ENV
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", infra_name or "").strip("_").upper() or "LLM"
-    if slug[0].isdigit():
-        slug = f"LLM_{slug}"  # a shell cannot export a name that starts with a digit
-    name = f"{slug}_API_BASE"
-    # OPENAI_API_BASE is the older name of OPENAI_BASE_URL: an infra called "openai" must not read it.
-    if name == "OPENAI_API_BASE":
-        name = "OPENAI_PROXY_API_BASE"
-    # ``my-provider`` and ``my_provider`` give the same slug: another infra file must not share the variable.
-    base, n = name, 1
-    while name in taken:
-        n += 1
-        name = f"{base}_{n}"
-    return name
-
-
-def _taken_api_base_names(infra_dir: Path, infra_name: str) -> frozenset[str]:
-    """Env var names the other infra files in ``infra_dir`` already read for their ``api_base``."""
-    taken: set[str] = set()
-    if not infra_dir.is_dir():
-        return frozenset()
-    for path in infra_dir.glob("*.yaml"):
-        if path.stem == infra_name:
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        taken.update(re.findall(r"api_base:\s*env:([A-Za-z_][A-Za-z0-9_]*)", text))
-    return frozenset(taken)
-
-
-def _api_base_for_file(raw: str, *, infra_name: str = _DEFAULT_INFRA_NAME, taken: frozenset[str] = frozenset()) -> str:
-    """Write the env var name in the file so several providers can coexist.
-
-    A value that is already ``env:NAME|fallback`` is left as written.
-    """
-    text = (raw or "").strip() or _DEFAULT_API_BASE
-    if text.startswith("env:"):
-        return text
-    return f"env:{_api_base_env_name(text, infra_name, taken)}|{text}"
 
 
 _DEFAULT_MODEL_ALIAS = "generic-model"
@@ -141,13 +88,12 @@ def _existing_infra_name(cfg: dict[str, Any]) -> str | None:
 
 
 def _existing_infra_defaults(infra: dict[str, Any]) -> dict[str, str]:
-    """Extract api_base, api_key_env, and first model mapping from a parsed infra yaml."""
+    """Extract api_base and first model mapping from a parsed infra yaml."""
     proxy = (infra.get("spec") or {}).get("proxy") or {}
     mappings = ((infra.get("spec") or {}).get("models") or {}).get("mappings") or {}
     alias, model = (list(mappings.items()) + [("", "")])[0]
     return {
         "api_base": str(proxy.get("api_base") or ""),
-        "api_key_env": str(proxy.get("api_key_env") or ""),
         "model_alias": str(alias),
         "target_model": str(model),
     }
@@ -175,7 +121,6 @@ def _render_infra_yaml(
     *,
     name: str,
     api_base: str,
-    api_key_env: str,
     model_alias: str,
     target_model: str,
 ) -> str:
@@ -183,7 +128,6 @@ def _render_infra_yaml(
         _load_infra_template("llmprovider.yaml")
         .replace("__INFRA_NAME__", name)
         .replace("__API_BASE_URL__", api_base)
-        .replace("__API_KEY_ENV__", api_key_env)
         .replace("__MODEL_ALIAS__", model_alias)
         .replace("__TARGET_MODEL__", target_model)
     )
@@ -242,7 +186,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
             click.echo(
                 f"Current configuration: {existing_infra_name}"
                 f"\n  URL    : {existing_infra_vals['api_base']}"
-                f"\n  API key: ${existing_infra_vals.get('api_key_env') or _DEFAULT_ENV_KEY}"
+                f"\n  API key: secret openai"
             )
             create_infra = click.confirm(
                 "Update LLM infra configuration?",
@@ -259,7 +203,6 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
 
     infra_name = existing_infra_name
     api_base = existing_infra_vals.get("api_base") or _DEFAULT_API_BASE
-    api_key_env = existing_infra_vals.get("api_key_env") or _DEFAULT_ENV_KEY
     model_alias = existing_infra_vals.get("model_alias") or _DEFAULT_MODEL_ALIAS
     target_model = existing_infra_vals.get("target_model") or _DEFAULT_TARGET_MODEL
 
@@ -277,7 +220,6 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
             existing_infra = _read_existing_infra(infra_name, infra_dir)
             existing_infra_vals = _existing_infra_defaults(existing_infra)
             api_base = existing_infra_vals.get("api_base") or _DEFAULT_API_BASE
-            api_key_env = existing_infra_vals.get("api_key_env") or _DEFAULT_ENV_KEY
             model_alias = existing_infra_vals.get("model_alias") or _DEFAULT_MODEL_ALIAS
             target_model = existing_infra_vals.get("target_model") or _DEFAULT_TARGET_MODEL
 
@@ -286,14 +228,6 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
             default=api_base,
             show_default=True,
         ).strip()
-        api_key_env = (
-            click.prompt(
-                "Environment variable for API key",
-                default=api_key_env,
-                show_default=True,
-            ).strip()
-            or api_key_env
-        )
         model_alias = (
             click.prompt(
                 "Generic model alias used in agent manifests",
@@ -335,10 +269,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
         infra_path.write_text(
             _render_infra_yaml(
                 name=infra_name,
-                api_base=_api_base_for_file(
-                    api_base, infra_name=infra_name, taken=_taken_api_base_names(infra_dir, infra_name)
-                ),
-                api_key_env=api_key_env,
+                api_base=(api_base or "").strip() or _DEFAULT_API_BASE,
                 model_alias=model_alias,
                 target_model=target_model,
             ),
@@ -365,7 +296,7 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
     step = 1
     if infra_path is not None:
         click.echo(f"  {step}. Set your API key:")
-        click.echo(f"       export {api_key_env}=<your-key>")
+        click.echo("       echo '<your-key>' | mas-ctl secrets set openai")
         click.echo()
         step += 1
     click.echo(f"  {step}. Run a first multi-agent system:")

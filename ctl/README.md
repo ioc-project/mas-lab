@@ -103,7 +103,7 @@ Workspace YAML: [docs/references/config.yaml.md](../docs/references/config.yaml.
 ## Design philosophy
 
 1. **Declarative over imperative** — topology and policies in YAML.
-2. **Secrets separated from config** — only `*_env` names in manifests.
+2. **Secrets separated from config** — only SecretRef objects in manifests.
 3. **Thin CLI** — click handlers call library code in `mas.ctl.*`.
 4. **Library-first bench** — `mas-lab` imports ctl session/bootstrap, not subprocesses.
 

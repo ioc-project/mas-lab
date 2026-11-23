@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from mas.ctl.overlay.canvas import overlay_is_layout_only
 from mas.lab.controller.path_safety import (
     UnsafeNameError,
     ensure_inside,
@@ -22,8 +23,8 @@ from mas.lab.controller.path_safety import (
     validate_name,
 )
 from mas.lab.controller.scope_catalog import Scope
-from mas.ctl.overlay.canvas import overlay_is_layout_only
 from mas.runtime.spec.source import load_yaml_file
+from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load
 
 _VERSION_DIR = re.compile(r"^v\d+")
 
@@ -33,7 +34,6 @@ class FileWrite:
     path: Path
     content: str = ""
     delete: bool = False
-    source: Path | None = None
 
 
 @dataclass
@@ -110,18 +110,8 @@ def _read_text(path: Path) -> str:
 def _title_summary(doc: dict[str, Any], fallback: str) -> tuple[str, str]:
     meta = doc.get("metadata") or {}
     block = doc.get("experiment") if isinstance(doc.get("experiment"), dict) else None
-    name = (
-        meta.get("name")
-        or (block or {}).get("name")
-        or doc.get("name")
-        or fallback
-    )
-    summary = str(
-        meta.get("description")
-        or (block or {}).get("description")
-        or doc.get("description")
-        or ""
-    ).strip()
+    name = meta.get("name") or (block or {}).get("name") or doc.get("name") or fallback
+    summary = str(meta.get("description") or (block or {}).get("description") or doc.get("description") or "").strip()
     return str(name), summary.splitlines()[0][:200] if summary else ""
 
 
@@ -247,9 +237,7 @@ def apply_writes(scope: Scope, writes: list[FileWrite]) -> None:
     checked: list[FileWrite] = []
     for write in writes:
         target = ensure_inside(scope.root, write.path)
-        checked.append(
-            FileWrite(target, write.content, delete=write.delete, source=write.source)
-        )
+        checked.append(FileWrite(target, write.content, delete=write.delete))
 
     created: list[Path] = []
     replaced: list[tuple[Path, Path | None]] = []
@@ -264,10 +252,7 @@ def apply_writes(scope: Scope, writes: list[FileWrite]) -> None:
             rel = write.path.relative_to(scope.root.resolve())
             staged_path = staging / rel
             staged_path.parent.mkdir(parents=True, exist_ok=True)
-            if write.source is not None:
-                shutil.copyfile(write.source, staged_path)
-            else:
-                staged_path.write_text(write.content.rstrip() + "\n", encoding="utf-8")
+            staged_path.write_text(write.content.rstrip() + "\n", encoding="utf-8")
             staged.append((staged_path, write.path))
         for staged_path, final_path in staged:
             final_path.parent.mkdir(parents=True, exist_ok=True)
@@ -391,9 +376,7 @@ class ApplicationLayout(KindLayout):
         if copy_from is not None:
             writes = [FileWrite(mas_path, _rewrite_name(copy_from.manifest, name))]
             for child_name, content in copy_from.children.items():
-                writes.append(
-                    FileWrite(root / "agents" / f"{child_name}.yaml", content)
-                )
+                writes.append(FileWrite(root / "agents" / f"{child_name}.yaml", content))
             return writes
         mas_yaml = _new_mas_yaml(name)
         agent_yaml = _new_agent_yaml(name, default_model=default_model)
@@ -606,12 +589,7 @@ class PipelineLayout(YamlDirLayout):
     declared_kind = "pipeline"
 
     def _blank(self, name: str) -> str:
-        return (
-            "apiVersion: lab/v1\n"
-            "kind: Pipeline\n"
-            f"metadata:\n  name: {name}\n  description: ''\n"
-            "spec:\n  steps: []\n"
-        )
+        return f"apiVersion: lab/v1\nkind: Pipeline\nmetadata:\n  name: {name}\n  description: ''\nspec:\n  steps: []\n"
 
 
 class ExperimentLayout(YamlDirLayout):
@@ -782,11 +760,7 @@ def _new_mas_yaml(name: str) -> str:
 def _new_agent_yaml(name: str, *, default_model: str | None) -> str:
     model_block = ""
     if default_model:
-        model_block = (
-            "  models:\n"
-            f"    - model: {default_model}\n"
-            "      temperature: 0.3\n"
-        )
+        model_block = f"  models:\n    - model: {default_model}\n      temperature: 0.3\n"
     return (
         "apiVersion: mas/v1\n"
         "kind: Agent\n"
@@ -804,8 +778,8 @@ def _new_agent_yaml(name: str, *, default_model: str | None) -> str:
 
 def _rewrite_name(manifest: str, name: str) -> str:
     try:
-        doc = yaml.safe_load(manifest) or {}
-    except yaml.YAMLError:
+        doc = safe_yaml_load(manifest) or {}
+    except YamlLoadError:
         return manifest
     if not isinstance(doc, dict):
         return manifest
@@ -819,7 +793,14 @@ def _rewrite_name(manifest: str, name: str) -> str:
 
 
 def _add_agent_to_mas(mas_text: str, agent_id: str) -> str:
-    doc = yaml.safe_load(mas_text) or {}
+    from fastapi import HTTPException
+
+    try:
+        doc = safe_yaml_load(mas_text) or {}
+    except YamlLoadError as exc:
+        raise HTTPException(status_code=422, detail=f"the application manifest does not load: {exc}") from None
+    if not isinstance(doc, dict) or not isinstance(doc.get("spec") or {}, dict):
+        raise HTTPException(status_code=422, detail="the application manifest is not a mapping with a spec mapping")
     spec = doc.setdefault("spec", {})
     agency = spec.setdefault("agency", {})
     agents = agency.setdefault("agents", [])

@@ -14,7 +14,7 @@ Usage::
 
     from mas.library.eval import get_provider
 
-    provider = get_provider("adversarial", llm_model="gpt-4o", api_key_env="OPENAI_API_KEY")
+    provider = get_provider("adversarial", llm_model="gpt-4o")
     scores = provider.compute(
         kg_path=Path("output/mn10/r1/kg.json"),
         metric_names=["budget_respected"],
@@ -35,8 +35,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from mas.library.eval.evaluator import EvalProvider, MetricScore
-from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
+from mas.runtime.reliability.classify import error_summary
 from mas.runtime.spec.source import load_dataset_items_file as _load_dataset_file
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,9 @@ class AdversarialProvider(EvalProvider):
         Path to the Dataset YAML containing ground truth and item IDs.
     llm_model : str
         LLM model for judge (e.g., "gpt-4o", "gpt-4o-mini")
-    api_key_env : str
-        Environment variable containing API key
+    api_key : SecretRef or mapping
+        SecretRef for the judge API key. Without one, the ``openai`` secret is used for the OpenAI
+        endpoint only; any other ``api_base`` needs its own.
     """
 
     name = "adversarial"
@@ -63,7 +64,7 @@ class AdversarialProvider(EvalProvider):
         self,
         dataset_path: Optional[Path] = None,
         llm_model: str = "gpt-4o",
-        api_key_env: str = "OPENAI_API_KEY",
+        api_key: object = None,
         api_base: Optional[str] = None,
     ) -> None:
         """Initialize provider with dataset path and LLM config.
@@ -71,15 +72,14 @@ class AdversarialProvider(EvalProvider):
         Args:
             dataset_path: Path to Dataset YAML. If None, will be auto-detected.
             llm_model: LLM model for judge evaluation
-            api_key_env: Environment variable name for API key
-            api_base: API base URL (if None, uses OpenAI default, OPENAI_BASE_URL, then OPENAI_API_BASE)
+            api_key: SecretRef for the judge key (required for an ``api_base`` that is not OpenAI's)
+            api_base: API base URL from the overlay or infra leaf
         """
         self._dataset_path = dataset_path
         self._dataset_cache: Optional[Dict] = None
         self._llm_model = llm_model
-        self._api_key_env = api_key_env
+        self._api_key = api_key
         self._api_base = api_base
-        self._client = None  # Lazy init on first use
 
     def compute(
         self,
@@ -204,26 +204,10 @@ class AdversarialProvider(EvalProvider):
     # -------------------------------------------------------------------------
 
     def _get_llm_client(self):
-        """Get or create OpenAI client (lazy init)."""
-        if self._client is None:
-            try:
-                from openai import OpenAI
-            except ImportError as exc:
-                raise ImportError("OpenAI client not available. Install with: pip install openai") from exc
+        """An OpenAI client for one judge call: the key is revealed now (a rotation is picked up), none is kept."""
+        from mas.library.standard.lib.openai_client import openai_client_for_key
 
-            api_key = hostenv.get(self._api_key_env)
-            if not api_key:
-                raise ValueError(f"API key not found in environment variable {self._api_key_env}")
-
-            # Use provided api_base or fall back to OPENAI_BASE_URL, then the older OPENAI_API_BASE
-            api_base = self._api_base or hostenv.get("OPENAI_BASE_URL") or hostenv.get("OPENAI_API_BASE")
-
-            if api_base:
-                self._client = OpenAI(api_key=api_key, base_url=api_base)
-            else:
-                self._client = OpenAI(api_key=api_key)
-
-        return self._client
+        return openai_client_for_key(self._api_key, self._api_base)
 
     def _llm_judge(self, prompt: str, *, temperature: float = 0.0) -> Dict:
         """Call LLM judge and parse JSON response.
@@ -272,18 +256,20 @@ class AdversarialProvider(EvalProvider):
             return result
 
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}")
+            logger.error("Failed to parse LLM response as JSON: %s", type(e).__name__)
             return {
                 "score": None,
-                "reasoning": f"JSON parse error: {e}",
-                "error": str(e),
+                "reasoning": "JSON parse error",
+                "error": type(e).__name__,
             }
         except Exception as e:
-            logger.error(f"LLM judge call failed: {e}")
+            # Only the type, status and error code: the SDK's text holds the provider body, which may echo the key.
+            summary = error_summary(e)
+            logger.error("LLM judge call failed: %s", summary)
             return {
                 "score": None,
-                "reasoning": f"LLM error: {e}",
-                "error": str(e),
+                "reasoning": f"LLM error: {summary}",
+                "error": summary,
             }
 
     # -------------------------------------------------------------------------

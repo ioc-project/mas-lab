@@ -1,11 +1,12 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""SLIM url and secret checks. The plugin takes the secret value; ctl reads secret_env."""
+"""SLIM url and secret checks. The plugin reveals a SecretRef at the call that needs it."""
 
 from __future__ import annotations
 
-from mas.library.standard.lib.comm.endpoint import LOOPBACK, split_url
+from mas.library.standard.lib.comm.endpoint import split_url
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+from mas.runtime.secrets import is_loopback_host
 
 _MIN_SECRET = 32
 
@@ -30,7 +31,7 @@ def use_insecure_client_config(url: str, *, dev: bool = False) -> bool:
     scheme, host = _split(url)
     if scheme == "http":
         return True
-    return bool(dev) and host in LOOPBACK
+    return bool(dev) and is_loopback_host(host)
 
 
 def assert_endpoint_allowed(url: str, *, dev: bool = False) -> None:

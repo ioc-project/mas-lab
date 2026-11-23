@@ -347,15 +347,14 @@ uv pip install "mas-lab-library-telemetry[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra        | Packages / features                                                                                                                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `convert`    | `opentelemetry-sdk>=1.20`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `ioa-observe-sdk>=1.1.2`                                                                                                                  |
-| `observe`    | `ioa-observe-sdk>=1.1.2`                                                                                                                                                                                             |
-| `verify`     | `pyyaml>=6.0.0`, `jsonschema>=4.0.0`                                                                                                                                                                                 |
-| `clickhouse` | `clickhouse-connect>=0.7`                                                                                                                                                                                            |
-| `bench`      | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                              |
-| `dev`        | `pytest>=7.0`, `pytest-cov>=4.0`, `opentelemetry-sdk>=1.20`, `ioa-observe-sdk>=1.1.2`, `pyyaml>=6.0.0`, `jsonschema>=4.0.0`, `click>=8.0`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `mas-lab-component-bench` |
-| `all`        | `mas-lab-library-telemetry[dev,bench,clickhouse]`                                                                                                                                                                    |
+| Extra     | Packages / features                                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `convert` | `opentelemetry-sdk>=1.20`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `ioa-observe-sdk>=1.1.2`                                                                                                                  |
+| `observe` | `ioa-observe-sdk>=1.1.2`                                                                                                                                                                                             |
+| `verify`  | `pyyaml>=6.0.0`, `jsonschema>=4.0.0`                                                                                                                                                                                 |
+| `bench`   | `mas-lab-component-bench`, `click>=8.0`                                                                                                                                                                              |
+| `dev`     | `pytest>=7.0`, `pytest-cov>=4.0`, `opentelemetry-sdk>=1.20`, `ioa-observe-sdk>=1.1.2`, `pyyaml>=6.0.0`, `jsonschema>=4.0.0`, `click>=8.0`, `opentelemetry-exporter-otlp-proto-http>=1.20`, `mas-lab-component-bench` |
+| `all`     | `mas-lab-library-telemetry[dev,bench]`                                                                                                                                                                               |
 
 **Python entry point `mas.runtime.manifest_libraries`:** this package advertises 1 discoverable item(s) so the runtime can load `runtime.manifest_libraries` without a hard-coded path.
 

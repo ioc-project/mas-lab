@@ -9,6 +9,8 @@
 **/.ruff_cache
 **/.mypy_cache
 **/.env
+.mas
+**/.mas
 .coverage
 coverage.xml
 docker/data/*

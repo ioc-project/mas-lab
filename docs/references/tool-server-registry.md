@@ -42,7 +42,7 @@ spec:
       follow_pagination: true          # default
       cache_scope: private
       # headers:
-      #   Authorization: "env:MCP_AUTH_HEADER"
+      #   Authorization: {secret: {name: mcp-upstream, key: bearer, prefix: "Bearer "}}
 ```
 
 Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
@@ -68,12 +68,12 @@ Attach it with `--infra-ref` (or workspace `infra_refs`). For the tutorial agent
 | Field | Default | Notes |
 |-------|---------|--------|
 | `transport` | `streamable-http` | `stdio` \| `streamable-http` \| `sse` \| `http` |
-| `url` | none | HTTP/SSE endpoint, such as `http://127.0.0.1:9001/mcp`. Put the URL in the manifest. Optional override: `env:VAR\|http://127.0.0.1:9001/mcp`. |
+| `url` | none | HTTP/SSE endpoint, such as `http://127.0.0.1:9001/mcp`. Put the URL in the manifest. Overlay a different host; do not write `env:`. |
 | `host` / `port` | `127.0.0.1` / `9001` | Bind address when deploying the server. |
 | `tools_dir` | implicit local `tools/` | Directory of Tool manifests (`protocol: local`, or served on deployment). |
 | `skills_dir` | implicit local `skills/` | Skill directory (`protocol: local`). |
 | `endpoint` | none | Alias for `url`. |
-| `headers` | `{}` | HTTP headers. Omit when the server needs no auth. Secrets use `env:VAR` (an unset variable omits the header). Never hardcode tokens. |
+| `headers` | `{}` | HTTP headers. Omit when the server needs no auth. Secret values are SecretRef objects (`{secret: NAME}`). A listed auth header cannot be a literal string. |
 | `timeout` | `30` | Per-call timeout in seconds (`read_timeout_seconds` on MCP). |
 
 ### stdio process
@@ -84,7 +84,7 @@ These fields apply when `transport` is `stdio`, or when `command` is set and `ur
 |-------|---------|--------|
 | `command` | none | Executable. |
 | `args` | `[]` | Argument list. |
-| `env` | `{}` | Extra environment for the child. Secrets may use `env:VAR`. Other values belong in the manifest. |
+| `env` | `{}` | Extra environment for the child. Secret values are SecretRef objects; they are revealed into the child's declared keys only. |
 | `cwd` | none | Working directory. |
 
 ```yaml
@@ -120,8 +120,8 @@ The registry requires `id` and `protocol`. URL and other connection fields depen
 | Remote connection policy (`protocol`, URL, headers, timeout, pagination) | `infra/v1` `ToolServerRegistry` |
 | Local tool and skill paths | implicit `ToolServerRegistry` with `protocol: local` (`tools/`, `skills/`) |
 | Per-tool wall-clock cap advertised to the LLM | `kind: Tool` `timeout_seconds` (optional) |
-| Secrets | `headers: { Authorization: env:VAR }` (omit the block when unused) or `PersonalSecrets` |
-| API / URL override | `url: env:VAR\|http://127.0.0.1:9001/mcp`. The manifest value is the default. The env var wins when set. |
+| Secrets | `headers: { Authorization: {secret: NAME} }` (omit the block when unused) |
+| API / URL override | a plain `url` in the manifest or an overlay |
 
 ## See also
 

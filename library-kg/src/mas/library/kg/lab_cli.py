@@ -381,7 +381,6 @@ def _otel_to_kg(spans_path: str, run_id: str, output_dir: str, dry_run: bool) ->
 @click.argument("kg_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("--uri", default=None)
 @click.option("--username", default=None)
-@click.option("--password-env", default=None)
 @click.option("--database", default=None)
 @click.option("--app-name", default="")
 @click.option("--infra", default=None)
@@ -399,7 +398,6 @@ def _push(
     kg_path: str,
     uri: str | None,
     username: str | None,
-    password_env: str | None,
     database: str | None,
     app_name: str,
     infra: str | None,
@@ -414,14 +412,13 @@ def _push(
         infra=infra,
         uri=uri,
         username=username,
-        password_env=password_env,
         database=database,
     )
     result = run_neo4j_push(
         kg_path,
         uri=conn["uri"],
         username=conn["username"],
-        password_env=conn["password_env"],
+        password=conn["password"],
         database=conn["database"],
         batch_size=batch_size,
         app_name=app_name,
@@ -442,7 +439,6 @@ kg_group.add_command(_push, name="neo4j-push")
 @click.option("--infra", default=None)
 @click.option("--uri", default=None)
 @click.option("--username", default=None)
-@click.option("--password-env", default=None)
 @click.option("--database", default=None)
 def _dump(
     session_id: str | None,
@@ -451,7 +447,6 @@ def _dump(
     infra: str | None,
     uri: str | None,
     username: str | None,
-    password_env: str | None,
     database: str | None,
 ) -> None:
     from mas.library.kg.steps.neo4j_dump import run_neo4j_dump
@@ -463,7 +458,6 @@ def _dump(
         infra=infra,
         uri=uri,
         username=username,
-        password_env=password_env,
         database=database,
     )
     artifact = run_neo4j_dump(
@@ -472,7 +466,7 @@ def _dump(
         output_path=output_path,
         uri=conn["uri"],
         username=conn["username"],
-        password_env=conn["password_env"],
+        password=conn["password"],
         database=conn["database"],
     )
 

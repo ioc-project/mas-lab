@@ -254,7 +254,7 @@ $defs:
             items:
               type: string
       env_mode:
-        description: inherit (default) drops secret-looking variables; minimal passes only what a process needs plus passthrough and env.
+        description: inherit (default) gives the process the child allowlist plus env and passthrough; minimal narrows it to PATH, HOME, LANG, LC_*, TMPDIR, TERM, USER, TZ and SYSTEMROOT plus passthrough and env.
         enum: [inherit, minimal]
       stop_grace_s:
         type: number
@@ -262,12 +262,18 @@ $defs:
       keep_running:
         type: boolean
       env:
-        description: Explicit variables for the fixture process, added after the filtered inherited environment.
+        description: >-
+          Explicit variables for the fixture process, added to the child allowlist. A value is a string or a
+          SecretRef (``{secret: NAME}``), revealed into this process only when it starts.
         type: object
         additionalProperties:
-          type: string
+          oneOf:
+            - type: string
+            - type: object
+              required: [secret]
+              description: SecretRef, same shape as infra/v1/fragments/secret-ref.
       passthrough:
-        description: Inherited variable names to keep even though they look like secrets (KEY, TOKEN, SECRET, PASSWORD, ...).
+        description: Names of allowlisted host variables to copy into the process (a name outside the allowlist is not copied).
         oneOf:
           - type: string
           - type: array

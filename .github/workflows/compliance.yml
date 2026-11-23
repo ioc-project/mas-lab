@@ -67,8 +67,6 @@ jobs:
           task --dir library-ioa/compliance/a2a unit-tests
           task --dir library-ioa/compliance/a2a compliance-tests
       - name: Start deterministic A2A fixture
-        env:
-          OPENAI_API_KEY: ci-test-unused
         run: |
           MAS_LIBRARY_PATHS="${{ github.workspace }}/library-ioa/compliance/a2a" \
             .venv/bin/mas-ctl serve \

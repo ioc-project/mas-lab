@@ -29,13 +29,12 @@ manifest file when the env is set. ClickHouse read-back is the same idea with
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from mas.library.telemetry._dist import extra_hint
 from mas.runtime import hostenv
+from mas.runtime.secrets import load_checked_document
 
 OTEL_COLLECTOR_KIND = "OtelCollector"
 CLICKHOUSE_KIND = "ClickHouse"
@@ -64,8 +63,9 @@ class ClickHouseTarget:
     port: int = 8123
     database: str = "default"
     user: str = "default"
-    password_env: str = "CLICKHOUSE_PASSWORD"
+    password: object = None
     table: str = "otel_traces"
+    uri: str = ""
 
     def resolved_host(self) -> str:
         return self.host or hostenv.get("CLICKHOUSE_HOST", "localhost")
@@ -90,6 +90,10 @@ def resolve_otel_collector(
     ``$OTEL_EXPORTER_OTLP_ENDPOINT`` is a shortcut for a one-target
     ``OtelCollector`` infra manifest. Precedence: *endpoint* → *infra* → env.
     """
+    from mas.runtime.secrets.url import check_url_has_no_credentials
+
+    if endpoint:
+        check_url_has_no_credentials(endpoint, field="endpoint")
     if infra is not None:
         target = otel_collector_target(infra)
         resolved = target.resolved_endpoint(endpoint)
@@ -129,22 +133,8 @@ def resolve_clickhouse(
         port=int(hostenv.get("CLICKHOUSE_PORT", "8123")),
         database=hostenv.get("CLICKHOUSE_DATABASE", "default"),
         user=hostenv.get("CLICKHOUSE_USER", "default"),
-        password_env="CLICKHOUSE_PASSWORD",
+        password=None,
     )
-
-
-def _load_manifest(manifest: str | Path | Dict[str, Any]) -> Dict[str, Any]:
-    if isinstance(manifest, dict):
-        return manifest
-    path = Path(manifest)
-    text = path.read_text(encoding="utf-8")
-    if path.suffix in {".yaml", ".yml"}:
-        try:
-            import yaml
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError(f"pyyaml is required to read YAML infra manifests: {extra_hint('verify')}") from exc
-        return yaml.safe_load(text) or {}
-    return json.loads(text)
 
 
 def _targets(manifest: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -173,7 +163,7 @@ def otel_collector_target(
     Raises:
         ValueError: when no ``OtelCollector`` target is present.
     """
-    doc = _load_manifest(manifest)
+    doc = load_checked_document(manifest)
     candidates = [
         t
         for t in _targets(doc)
@@ -196,7 +186,7 @@ def clickhouse_target(
     name: Optional[str] = None,
 ) -> ClickHouseTarget:
     """Resolve the ``ClickHouse`` target from an infra manifest."""
-    doc = _load_manifest(manifest)
+    doc = load_checked_document(manifest)
     candidates = [
         t for t in _targets(doc) if str(t.get("kind")) == CLICKHOUSE_KIND and (name is None or t.get("name") == name)
     ]
@@ -208,8 +198,9 @@ def clickhouse_target(
         port=int(t.get("port") or 8123),
         database=str(t.get("database") or "default"),
         user=str(t.get("user") or "default"),
-        password_env=str(t.get("password_env") or "CLICKHOUSE_PASSWORD"),
+        password=t.get("password") or None,
         table=str(t.get("table") or "otel_traces"),
+        uri=str(t.get("uri") or ""),
     )
 
 

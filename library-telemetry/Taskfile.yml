@@ -20,19 +20,14 @@ tasks:
   install-dev:
     desc: "Install the library, editable, with [all] extras by default -- pass NO_OPTIONAL=true for [dev] only."
     summary: |
-      CI must be complete: by default this installs [all] (dev + bench +
-      clickhouse, defined in pyproject.toml), so test_bench.py /
+      CI must be complete: by default this installs [all] (dev + bench,
+      defined in pyproject.toml), so test_bench.py /
       list_clickhouse_sessions.py run for real instead of skipping.
       `task ci NO_OPTIONAL=true` (or `task install-dev NO_OPTIONAL=true`)
       installs just [dev] instead, for a faster, dependency-light local
       loop -- those same tests still skip cleanly and visibly
       (pytest.mark.skipif(not _has_bench(), ...)) rather than failing,
-      same reasoning as library-kg's [neo4j] extra. clickhouse_connect
-      itself is never actually needed even when installed --
-      collector/clickhouse.py lazy-imports it per-call (like neo4j/
-      push.py), and its tests inject a fake module into sys.modules
-      instead of using the real package; it's in [all] purely so a full
-      CI run doesn't have an untested import path. lab/components/bench resolves
+      same reasoning as library-kg's [neo4j] extra. lab/components/bench resolves
       via this repo's own [tool.uv.sources] workspace mapping to
       thirdparty/mas-lab/ (not needed at all when NO_OPTIONAL=true).
     cmds:

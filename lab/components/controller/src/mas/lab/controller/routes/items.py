@@ -156,9 +156,7 @@ async def delete_item(scope_id: str, kind: str, item_id: str, request: Request):
 
 @router.post("/api/scopes/{scope_id}/items/check", tags=["Items"])
 async def check_item(scope_id: str, req: CheckItemRequest, request: Request):
-    return item_service.check_name(
-        scope_id, req.kind, req.name, req.version, store=store_from_request(request)
-    )
+    return item_service.check_name(scope_id, req.kind, req.name, req.version, store=store_from_request(request))
 
 
 @router.get("/api/resolve", tags=["Items"])
@@ -170,7 +168,7 @@ async def resolve(ref: str, request: Request):
 
 
 @router.post("/api/scopes/{scope_id}/validate", tags=["Items"])
-async def validate_in_scope(scope_id: str, req: ValidateScopeRequest, request: Request):
+def validate_in_scope(scope_id: str, req: ValidateScopeRequest, request: Request):
     from mas.lab.controller.manifest_validation import validate_manifest_yaml_content
     from mas.lab.controller.scope_catalog import get_scope_catalog as catalog_of
 

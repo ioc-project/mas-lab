@@ -16,7 +16,6 @@ from mas.library.eval.mce import (
     build_session_from_trace,
     compute_session_metrics,
 )
-from mas.runtime import hostenv
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class EvalMceStep(PipelineStep):
             - response_completeness
           model: azure/gpt-4o
           api_base: https://api.openai.com/v1
-          api_key_env: OPENAI_API_KEY
+          api_key: {secret: openai}
           output_file: metrics.json  # optional, default: metrics.json
 
     Input:
@@ -51,7 +50,7 @@ class EvalMceStep(PipelineStep):
         self.metrics: List[str] = config.get("metrics", ["goal_success_rate"])
         self.model: str = config.get("model", "azure/gpt-4o")
         self.api_base: str = config.get("api_base", "https://api.openai.com/v1")
-        self.api_key_env: str = config.get("api_key_env", "OPENAI_API_KEY")
+        self.api_key = config.get("api_key")
         self.output_file: str = config.get("output_file", "metrics.json")
 
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -79,16 +78,9 @@ class EvalMceStep(PipelineStep):
             logger.warning(f"Trace file not found: {trace_path}")
             return context
 
-        # Build LLM config
-        llm_config = {
-            "LLM_MODEL_NAME": self.model,
-            "LLM_BASE_MODEL_URL": self.api_base,
-            "LLM_API_KEY": hostenv.get(self.api_key_env, ""),
-        }
+        from mas.library.standard.lib.openai_client import openai_key_ref
 
-        if not llm_config["LLM_API_KEY"]:
-            logger.error(f"Environment variable {self.api_key_env} not set")
-            return context
+        key_ref = openai_key_ref(self.api_key, self.api_base)
 
         # Load session
         try:
@@ -102,7 +94,7 @@ class EvalMceStep(PipelineStep):
             from mas.library.eval.mce.catalog import resolve_metric
 
             class_names = [resolve_metric(n).camel for n in self.metrics]
-            results = await compute_session_metrics(session, class_names, llm_config)
+            results = await _compute_with_key(session, class_names, self.model, self.api_base, key_ref)
         except Exception as exc:
             logger.error(f"Metric computation failed: {exc}", exc_info=True)
             return context
@@ -156,3 +148,23 @@ def _build_metrics_document(
         "agents": {},  # Reserved for future per-agent metrics
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+async def _compute_with_key(session: Any, class_names: List[str], model: str, api_base: str, key_ref: Any) -> Any:
+    """Run the metrics with the key revealed for this run only.
+
+    The public MCE takes the key as a plain string in its config, so the config lives for
+    this call and its key is cleared when the call ends.
+    """
+    from mas.library.standard.lib.openai_client import reveal_openai_key
+    from metrics_computation_engine.models.requests import LLMJudgeConfig
+
+    llm_config = LLMJudgeConfig(
+        LLM_MODEL_NAME=model,
+        LLM_BASE_MODEL_URL=api_base,
+        LLM_API_KEY=reveal_openai_key(key_ref, api_base),
+    )
+    try:
+        return await compute_session_metrics(session, class_names, llm_config)
+    finally:
+        llm_config.LLM_API_KEY = ""

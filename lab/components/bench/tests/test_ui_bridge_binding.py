@@ -8,7 +8,6 @@ import json
 import urllib.request
 
 from mas.lab.benchmark.pipeline import ui_bridge as ub
-from mas.runtime import hostenv
 
 
 def test_cli_variables_parse_into_a_binding() -> None:
@@ -30,22 +29,26 @@ class _Resp:
 
 
 def test_a_run_binding_wins_over_the_cli_default_and_carries_the_token(monkeypatch) -> None:
+    from secret_fakes import bound_secrets
+
     sent: list[urllib.request.Request] = []
-    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=0: sent.append(req) or _Resp())
+    monkeypatch.setattr(
+        urllib.request.OpenerDirector, "open", lambda _self, req, timeout=0: sent.append(req) or _Resp()
+    )
     ub.install_cli_defaults(ub.DemoUiBinding("http://cli/ingest", {"from": "cli"}))
     try:
         with ub.bind_demo_ui(None):
             pass
         with (
-            ub.bind_demo_ui(ub.DemoUiBinding("http://run/ingest", {"from": "run"})),
-            hostenv.overlay({"MAS_DEMO_UI_TOKEN": "tok"}),
+            ub.bind_demo_ui(ub.DemoUiBinding("https://run/ingest", {"from": "run"})),
+            bound_secrets({"ui-ingest": "tok"}),
         ):
             ub.post_ingest({"name": "a"})
         ub.post_ingest({"name": "b"})
     finally:
         ub.install_cli_defaults(None)
     first, second = sent
-    assert first.full_url == "http://run/ingest"
+    assert first.full_url == "https://run/ingest"
     assert first.get_header("Authorization") == "Bearer tok"
     assert json.loads(first.data)["ref"] == {"from": "run"}
     assert second.full_url == "http://cli/ingest"
@@ -53,5 +56,7 @@ def test_a_run_binding_wins_over_the_cli_default_and_carries_the_token(monkeypat
 
 
 def test_no_target_posts_nothing(monkeypatch) -> None:
-    monkeypatch.setattr(urllib.request, "urlopen", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("posted")))
+    monkeypatch.setattr(
+        urllib.request.OpenerDirector, "open", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("posted"))
+    )
     ub.post_ingest({"name": "a"})

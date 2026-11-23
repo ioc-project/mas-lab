@@ -69,6 +69,37 @@ def test_serve_socket_once(temp_mas_home, monkeypatch):
     client.join(timeout=2)
 
 
+def test_serve_socket_is_owner_only(temp_mas_home, monkeypatch):
+    """Any process that can connect can submit jobs: the socket is 0600."""
+    import os
+    import socket
+    import stat
+
+    daemon_mod._api = ControllerAPI()
+    daemon_mod._shutdown.clear()
+    path = cfg.socket_path()
+    seen: list[int] = []
+
+    def probe():
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                sock.connect(str(path))  # listening: the mode is already set
+            except OSError:
+                time.sleep(0.02)
+                continue
+            finally:
+                sock.close()
+            seen.append(stat.S_IMODE(os.stat(path).st_mode))
+            break
+        daemon_mod._shutdown.set()
+
+    threading.Thread(target=probe, daemon=True).start()
+    _serve_socket(path)
+    assert seen == [0o600]
+
+
 def test_main_no_http(temp_mas_home, monkeypatch):
     monkeypatch.setattr(daemon_mod, "_serve_socket", lambda _p: daemon_mod._shutdown.set())
     monkeypatch.setattr(daemon_mod, "_serve_http", lambda **kw: None)

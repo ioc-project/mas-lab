@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: mistral
   description: >
-    Mistral chat-completions host. Same wire as openai. Requires MISTRAL_API_KEY.
+    Mistral chat-completions host. Same wire as openai. The key is `{secret: mistral}`.
 
 spec:
   protocol: mistral
   proxy:
-    api_base: env:MISTRAL_API_BASE|https://api.mistral.ai/v1
-    api_key_env: MISTRAL_API_KEY
+    api_base: https://api.mistral.ai/v1
+    api_key: {secret: mistral}

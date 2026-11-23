@@ -86,6 +86,12 @@ def run_cli(
     env = {**os.environ, "MAS_MANIFEST_VALIDATE": "1"}
     if extra_env:
         env.update(extra_env)
+        if cwd is not None and "MAS_INFRA_REFS" in extra_env and "XDG_CONFIG_HOME" not in extra_env:
+            # the host's own user config must not add infra rows or secrets to the run
+            workspace = Path(cwd)
+            env["XDG_CONFIG_HOME"] = str(workspace / ".xdg-config")
+            env["HOME"] = extra_env.get("HOME", str(workspace / ".home"))
+            _write_user_config(Path(env["XDG_CONFIG_HOME"]), workspace, extra_env["MAS_INFRA_REFS"])
 
     return subprocess.run(
         resolved_args,
@@ -95,6 +101,26 @@ def run_cli(
         timeout=timeout,
         env=env,
     )
+
+
+def _write_user_config(config_home: Path, workspace: Path, infra_refs: str) -> None:
+    """A user config for a run in ``workspace``: the test's infra file and a throwaway key.
+
+    In a directory with no workspace ``config.yaml`` the user default infra is merged after
+    ``MAS_INFRA_REFS``; with no user config that default is ``standard:production``, whose
+    OpenAI leaf (real endpoint) would replace the loopback one. The user config then also
+    stands in for the workspace, so it names the workspace's secret store.
+    The model server is a loopback fake that ignores the key; the store only has to be satisfied.
+    """
+    from mas.ctl.secrets import init_secrets_dir, write_file_secret
+
+    directory = (workspace / ".mas" / "secrets").resolve()
+    init_secrets_dir(directory)
+    write_file_secret(directory, "openai", "test-key-not-real")
+    config = {"default_infra": infra_refs.replace(",", " ").split()[0], "secrets": {"dir": str(directory)}}
+    path = config_home / "mas" / "config.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
 
 
 def tutorial_copy(src: Path, tmp_path: Path) -> Path:

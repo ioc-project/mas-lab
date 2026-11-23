@@ -23,8 +23,8 @@ class ObservabilityBinding:
     plugin_configs: dict[str, dict] = field(default_factory=dict)
     # Events file path (relative or absolute string; runtime resolves against base_dir)
     events_file: str | None = None
-    # Optional env-var name for a plugin-specific collector URL
-    otlp_endpoint_env: str | None = None
+    # Optional OTLP collector URL from the overlay (not an env-var name)
+    otlp_endpoint: str | None = None
     # Whether to include message content in traces
     trace_content: bool = True
     # Emit events to stdout as well as file

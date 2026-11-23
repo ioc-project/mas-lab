@@ -219,9 +219,9 @@ def test_import_hf_pins_revision_and_verifies_sha256(monkeypatch, tmp_path: Path
 
 def test_hf_token_comes_from_the_caller_not_the_environment(monkeypatch) -> None:
     monkeypatch.setenv("HF_TOKEN", "from-env")
-    with pytest.raises(ValueError, match="HF_TOKEN"):
+    with pytest.raises(ValueError, match="secret hf"):
         _require_hf_token(None)
-    with pytest.raises(ValueError, match="HF_TOKEN"):
+    with pytest.raises(ValueError, match="secret hf"):
         _require_hf_token("  ")
     assert _require_hf_token("cli-token") == "cli-token"
 

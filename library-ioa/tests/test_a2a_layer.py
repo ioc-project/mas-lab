@@ -80,7 +80,7 @@ def test_the_request_is_the_one_the_sdk_client_sends() -> None:
 @pytest.mark.parametrize(
     ("result", "message"),
     [
-        ({"error": {"code": -32601, "message": "Method not found"}}, "A2A error -32601: Method not found"),
+        ({"error": {"code": -32601, "message": "Method not found"}}, "^A2A error -32601$"),
         ({"result": {"task": {"id": "t", "status": {"state": "TASK_STATE_FAILED"}}}}, "remote A2A task failed"),
         ({"result": {"task": {"id": "t", "status": {"state": "TASK_STATE_REJECTED"}}}}, "remote A2A task failed"),
         ({"result": {}}, "neither a message nor a task"),
@@ -265,7 +265,7 @@ async def test_a_failing_handler_is_a_failed_task_and_the_caller_gets_an_agent_c
 
     handle = _a2a_over_slim(run_turn)
     handle.link("b")
-    with pytest.raises(AgentCommError, match="remote A2A task failed: Agent execution failed") as raised:
+    with pytest.raises(AgentCommError, match="^remote A2A task failed$") as raised:
         await handle.link("a").asend("b", "x")
     assert "hunter2" not in str(raised.value)  # the error text stays with the server
     response = json.loads(_frames()[1]["task"])
@@ -534,6 +534,20 @@ async def test_the_http_transport_refuses_a_framing_header_from_a_row_or_a_send(
     layer.stop()
 
 
+def test_the_http_transport_refuses_a_framing_secret_header_without_revealing() -> None:
+    from secret_fakes import bound_secrets
+
+    with bound_secrets({"openai": "must-not-be-read"}):
+        with pytest.raises(AgentCommError, match="sets .* itself"):
+            HttpLayer(url="http://127.0.0.1:9", headers={"Host": {"secret": "openai"}})
+        layer = HttpLayer(url="http://127.0.0.1:9", headers={"Authorization": {"secret": "openai"}})
+        try:
+            assert "must-not-be-read" not in repr(layer)
+            assert layer._header_refs["Authorization"] == {"secret": "openai"}
+        finally:
+            layer.stop()
+
+
 def test_a_stack_declares_the_flags_of_a_generic_layer_id() -> None:
     from mas.library.standard.plugins.agentcomm.stack import StackAgentComm
 
@@ -546,7 +560,7 @@ def test_a_stack_declares_the_flags_of_a_generic_layer_id() -> None:
     ("url", "message"),
     [
         ("", "requires url"),
-        ("http://10.0.0.1:9000", "only allowed on 127.0.0.1"),
+        ("http://10.0.0.1:9000", "only allowed on a loopback host"),
         ("ftp://127.0.0.1", "scheme 'ftp'"),
         ("http://user:pw@127.0.0.1", "credentials"),
         ("http://127.0.0.1\\@evil", "backslash"),

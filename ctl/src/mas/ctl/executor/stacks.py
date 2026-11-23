@@ -10,7 +10,6 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
-from mas.ctl.env import env_named_secret
 from mas.ctl.infra.identities import (
     agent_chains,
     chain_attachments,
@@ -91,17 +90,11 @@ class ChainHandles(Mapping[str, StackHandle]):
                 logger.exception("failed to close stack %s", name)
 
 
-def _with_secrets(chain: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each row's ``secret_env`` read here, passed to the layer as ``secret``. No layer reads env."""
+def _copy_chain(chain: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Copy layer rows so a start cannot mutate the Flavour chain. SecretRef objects stay refs."""
     out: list[dict[str, Any]] = []
     for layer in chain:
         params = dict(layer.get("params") or {})
-        secret_env = str(params.pop("secret_env", "") or "").strip()
-        if secret_env:
-            try:
-                params["secret"] = env_named_secret(secret_env)
-            except ValueError as exc:
-                raise ChainStartError(f"Application {layer.get('row')!r}: {exc}") from exc
         out.append({"type": layer.get("type"), "params": params})
     return out
 
@@ -118,7 +111,7 @@ def chain_handle(registry: Any, chain: list[dict[str, Any]], *, handles: ChainHa
     if name in handles:
         return handles[name]
     try:
-        handle = StackHandle(name, _with_secrets(list(chain)), registry=registry)
+        handle = StackHandle(name, _copy_chain(list(chain)), registry=registry)
         handle.start()
     except ChainStartError:
         handles.close()

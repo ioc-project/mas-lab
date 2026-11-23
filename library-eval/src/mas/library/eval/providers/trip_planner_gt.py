@@ -26,7 +26,7 @@ Usage::
     provider = get_provider("trip_planner_gt",
                             dataset_path=Path("datasets/mas-necessity.yaml"),
                             llm_model="azure/gpt-4o-mini",
-                            api_key_env="OPENAI_API_KEY",
+                            api_key={"secret": "openai"},
                             api_base="https://api.openai.com/v1")
     scores = provider.compute(
         kg_path=Path("output/mn1/r1/kg.json"),
@@ -43,8 +43,8 @@ from typing import Dict, List, Optional
 
 import yaml
 from mas.library.eval.evaluator import EvalProvider, MetricScore
-from mas.runtime import hostenv
 from mas.runtime.engine.llm_output_limits import output_token_kwargs
+from mas.runtime.reliability.classify import error_summary
 from mas.runtime.spec.source import load_dataset_items_file as _load_dataset_file
 
 logger = logging.getLogger(__name__)
@@ -67,10 +67,11 @@ class TripPlannerGTProvider(EvalProvider):
         Path to mas-necessity.yaml (must contain ground_truth for mn1–mn4).
     llm_model : str
         Judge model, e.g. "azure/gpt-4o-mini".
-    api_key_env : str
-        Environment variable name for the API key.
+    api_key : SecretRef
+        Secret for the API key. Without one, the ``openai`` secret is used for the OpenAI endpoint
+        only; any other ``api_base`` needs its own.
     api_base : str | None
-        OpenAI-compatible endpoint.  Falls back to OPENAI_BASE_URL, then OPENAI_API_BASE.
+        OpenAI-compatible endpoint (plain overlay value).
     """
 
     name = "trip_planner_gt"
@@ -79,15 +80,14 @@ class TripPlannerGTProvider(EvalProvider):
         self,
         dataset_path: Optional[Path] = None,
         llm_model: str = "gpt-4o-mini",
-        api_key_env: str = "OPENAI_API_KEY",
+        api_key: object = None,
         api_base: Optional[str] = None,
     ) -> None:
         self._dataset_path = dataset_path
         self._dataset_cache: Optional[Dict] = None
         self._llm_model = llm_model
-        self._api_key_env = api_key_env
+        self._api_key = api_key
         self._api_base = api_base
-        self._client = None
 
     # ------------------------------------------------------------------
     # EvalProvider interface
@@ -295,15 +295,10 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
     # ------------------------------------------------------------------
 
     def _get_llm_client(self):
-        if self._client is None:
-            from openai import OpenAI
+        """An OpenAI client for one judge call: the key is revealed now (a rotation is picked up), none is kept."""
+        from mas.library.standard.lib.openai_client import openai_client_for_key
 
-            api_key = hostenv.get(self._api_key_env)
-            if not api_key:
-                raise ValueError(f"API key not found in {self._api_key_env}")
-            api_base = self._api_base or hostenv.get("OPENAI_BASE_URL") or hostenv.get("OPENAI_API_BASE")
-            self._client = OpenAI(api_key=api_key, base_url=api_base) if api_base else OpenAI(api_key=api_key)
-        return self._client
+        return openai_client_for_key(self._api_key, self._api_base)
 
     def _llm_judge(self, prompt: str, *, temperature: float = 0.0) -> Dict:
         client = self._get_llm_client()
@@ -334,10 +329,12 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
             result["score"] = max(0.0, min(1.0, score))
             return result
         except json.JSONDecodeError as e:
-            return {"score": None, "reasoning": f"JSON parse error: {e}", "error": str(e)}
+            return {"score": None, "reasoning": "JSON parse error", "error": type(e).__name__}
         except Exception as e:
-            logger.error("LLM judge call failed: %s", e)
-            return {"score": None, "reasoning": f"LLM error: {e}", "error": str(e)}
+            # Only the type, status and error code: the SDK's text holds the provider body, which may echo the key.
+            summary = error_summary(e)
+            logger.error("LLM judge call failed: %s", summary)
+            return {"score": None, "reasoning": f"LLM error: {summary}", "error": summary}
 
     # ------------------------------------------------------------------
     # Helpers

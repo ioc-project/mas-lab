@@ -120,10 +120,7 @@ def _maybe_resolve_path(raw: str, base_dir: Path) -> Path | None:
         return None
     if not (
         text.startswith((".", "~", "/"))
-        or any(
-            text.endswith(suffix)
-            for suffix in (".yaml", ".yml", ".json", ".csv", ".md")
-        )
+        or any(text.endswith(suffix) for suffix in (".yaml", ".yml", ".json", ".csv", ".md"))
         or "/" in text
         or "\\" in text
     ):
@@ -188,9 +185,7 @@ def _is_collectable_source_path(path: Path, *, workspace_root: Path | None) -> b
     return True
 
 
-def _iter_allowed_source_files(
-    root: Path, *, workspace_root: Path | None
-) -> list[Path]:
+def _iter_allowed_source_files(root: Path, *, workspace_root: Path | None) -> list[Path]:
     resolved_root = root.resolve(strict=False)
     if not resolved_root.exists():
         return []
@@ -229,10 +224,7 @@ def _iter_allowed_source_files(
 def _manifest_source_entries(
     source_entries: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    return [
-        {"archive_path": entry["archive_path"], "kind": entry["kind"]}
-        for entry in source_entries
-    ]
+    return [{"archive_path": entry["archive_path"], "kind": entry["kind"]} for entry in source_entries]
 
 
 def _scan_source_entries_for_secrets(source_entries: list[dict[str, Any]]) -> list[str]:
@@ -295,16 +287,14 @@ def _safe_link_target(root: Path, dest: Path, linkname: str) -> Path:
     rel_path = PurePosixPath(text)
     if rel_path.is_absolute() or ".." in rel_path.parts:
         raise ValueError(f"Refusing to extract link target outside root: {linkname!r}")
-    candidate = (
-        dest.parent / Path(*[part for part in rel_path.parts if part not in ("", ".")])
-    ).resolve(strict=False)
+    candidate = (dest.parent / Path(*[part for part in rel_path.parts if part not in ("", ".")])).resolve(strict=False)
     if not candidate.is_relative_to(root.resolve()):
         raise ValueError(f"Refusing to extract link target outside root: {linkname!r}")
     return candidate
 
 
 def _collect_source_bundle(experiment_yaml: Path) -> dict[str, Any]:
-    import yaml as _yaml
+    from mas.runtime.spec.yaml_errors import safe_yaml_load
 
     workspace_root = _find_workspace_root(experiment_yaml)
     source_entries: dict[str, dict[str, Any]] = {}
@@ -327,9 +317,7 @@ def _collect_source_bundle(experiment_yaml: Path) -> dict[str, Any]:
                     }
             return
 
-        for candidate in _iter_allowed_source_files(
-            resolved, workspace_root=workspace_root
-        ):
+        for candidate in _iter_allowed_source_files(resolved, workspace_root=workspace_root):
             arcname = _archive_source_path(candidate, workspace_root).as_posix()
             source_entries[arcname] = {
                 "original_path": str(candidate),
@@ -345,7 +333,7 @@ def _collect_source_bundle(experiment_yaml: Path) -> dict[str, Any]:
             continue
         seen_yaml.add(yaml_path)
         try:
-            doc = _yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            doc = safe_yaml_load(yaml_path.read_text(encoding="utf-8")) or {}
         except Exception:
             logger.debug("suppressed", exc_info=True)
             continue
@@ -363,22 +351,16 @@ def _collect_source_bundle(experiment_yaml: Path) -> dict[str, Any]:
             if resolved.is_file() and resolved.suffix.lower() in _YAML_SUFFIXES:
                 pending_yaml.append(resolved)
 
-    experiment_arc = _archive_source_path(
-        experiment_yaml.resolve(), workspace_root
-    ).as_posix()
+    experiment_arc = _archive_source_path(experiment_yaml.resolve(), workspace_root).as_posix()
     return {
         "workspace_root": str(workspace_root) if workspace_root is not None else None,
         "experiment_yaml_path": str(experiment_yaml.resolve()),
         "experiment_yaml_archive_path": experiment_arc,
-        "entries": sorted(
-            source_entries.values(), key=lambda item: item["archive_path"]
-        ),
+        "entries": sorted(source_entries.values(), key=lambda item: item["archive_path"]),
     }
 
 
-def _default_import_dirname(
-    run_dir_basename: str, short_id: str, experiment_name: str
-) -> str:
+def _default_import_dirname(run_dir_basename: str, short_id: str, experiment_name: str) -> str:
     if run_dir_basename.lower() not in _GENERIC_RUN_DIR_NAMES:
         return run_dir_basename
     return f"{short_id}-{_slugify(experiment_name)}"
@@ -392,9 +374,7 @@ def _load_manifest_from_tarball(tarball: Path) -> dict[str, Any]:
         try:
             mf_member = tar.getmember("MANIFEST.json")
         except KeyError as exc:
-            raise ValueError(
-                "Archive is missing MANIFEST.json — was it created by 'benchmark export'?"
-            ) from exc
+            raise ValueError("Archive is missing MANIFEST.json — was it created by 'benchmark export'?") from exc
         extracted = tar.extractfile(mf_member)
         if extracted is None:
             raise ValueError("Archive MANIFEST.json could not be read.")
@@ -410,7 +390,7 @@ def _default_hf_path_from_manifest(manifest: dict[str, Any]) -> str:
 def _require_hf_token(token: str | None = None) -> str:
     value = (token or "").strip()
     if not value:
-        raise ValueError("Hugging Face token is required (--token, --token-file, or HF_TOKEN)")
+        raise ValueError("Hugging Face token is required (--token, --token-file, or secret hf)")
     return value
 
 
@@ -445,9 +425,7 @@ def _verify_sha256(path: Path, expected: str | None) -> None:
         raise ValueError("Expected SHA-256 must be a 64-character hex value.")
     actual = hashlib.sha256(path.read_bytes()).hexdigest()
     if actual != normalized:
-        raise ValueError(
-            f"SHA-256 mismatch for {path}: expected {normalized}, got {actual}"
-        )
+        raise ValueError(f"SHA-256 mismatch for {path}: expected {normalized}, got {actual}")
 
 
 def publish_hf_command(args) -> int:
@@ -479,9 +457,7 @@ def publish_hf_command(args) -> int:
         logger.error("%s", exc)
         return 1
 
-    path_in_repo = str(
-        getattr(args, "path_in_repo", "") or ""
-    ).strip() or _default_hf_path_from_manifest(manifest)
+    path_in_repo = str(getattr(args, "path_in_repo", "") or "").strip() or _default_hf_path_from_manifest(manifest)
 
     print(f"\nPublishing benchmark archive {tarball.name}")
     print(f"  Repo:   {repo_id}")
@@ -510,9 +486,7 @@ def publish_hf_command(args) -> int:
     commit_sha = _extract_commit_sha(result)
     if commit_sha:
         print(f"  Commit SHA: {commit_sha}")
-        print(
-            f"\n✓ Uploaded to https://huggingface.co/datasets/{repo_id}/commit/{commit_sha}"
-        )
+        print(f"\n✓ Uploaded to https://huggingface.co/datasets/{repo_id}/commit/{commit_sha}")
     else:
         print(
             "\n✓ Uploaded to "
@@ -626,9 +600,7 @@ def export_command(args) -> int:
     include_trace_cache = getattr(args, "include_trace_cache", True)
     dry_run = getattr(args, "dry_run", False)
 
-    run_manager = BenchmarkRunManager(
-        benchmarks_root=_resolve_run_manager_dir(getattr(args, "output_dir", None))
-    )
+    run_manager = BenchmarkRunManager(benchmarks_root=_resolve_run_manager_dir(getattr(args, "output_dir", None)))
 
     # Handle "last" / "latest" as alias for most-recent run
     result = None
@@ -691,17 +663,11 @@ def export_command(args) -> int:
                         # tc_entry = the direct child of tc_root that holds this trace
                         # e.g. tc_root/<hash>/traces/events.jsonl → tc_root/<hash>
                         try:
-                            tc_entry = (
-                                tc_root
-                                / Path(trace_path_str).relative_to(tc_root).parts[0]
-                            )
+                            tc_entry = tc_root / Path(trace_path_str).relative_to(tc_root).parts[0]
                         except (ValueError, IndexError):
                             # Fallback: walk up until a direct child of tc_root
                             tc_entry = tp.parent
-                            while (
-                                tc_entry.parent != tc_root
-                                and tc_entry.parent != tc_entry
-                            ):
+                            while tc_entry.parent != tc_root and tc_entry.parent != tc_entry:
                                 tc_entry = tc_entry.parent
                         if tc_entry.exists() and tc_entry.parent == tc_root:
                             trace_dirs.append(tc_entry.resolve())
@@ -760,9 +726,7 @@ def export_command(args) -> int:
     size_mb = out_path.stat().st_size / 1_048_576
     print(f"\n✓ Exported {size_mb:.1f} MB → {out_path}")
     print(f"\nTo restore:\n  mas-lab benchmark import {out_path}")
-    print(
-        f"\nTo restore to a temp directory:\n  mas-lab benchmark import {out_path} \\"
-    )
+    print(f"\nTo restore to a temp directory:\n  mas-lab benchmark import {out_path} \\")
     print("      --output-dir /tmp/test-bench --trace-cache /tmp/test-trace-cache")
     return 0
 
@@ -799,9 +763,7 @@ def import_command(args) -> int:
     short_id = manifest["short_id"]
     run_dir_basename = manifest["run_dir_basename"]
     has_trace_cache = manifest.get("has_trace_cache", False)
-    total_runs = manifest.get(
-        "total_runs", len(manifest.get("trace_cache_entry_names", []))
-    )
+    total_runs = manifest.get("total_runs", len(manifest.get("trace_cache_entry_names", [])))
     tc_entry_names: list[str] = manifest.get("trace_cache_entry_names", [])
     experiment_name = manifest.get("experiment_name", short_id)
     source_entries: list[dict[str, Any]] = manifest.get("source_entries", [])
@@ -816,8 +778,7 @@ def import_command(args) -> int:
         from mas.lab import paths as _paths
 
         bench_target = (
-            _paths.benchmark_root()
-            / _default_import_dirname(run_dir_basename, short_id, experiment_name)
+            _paths.benchmark_root() / _default_import_dirname(run_dir_basename, short_id, experiment_name)
         ).resolve()
 
     trace_cache_target = _get_trace_cache_dir(explicit=trace_cache_arg)
@@ -840,9 +801,7 @@ def import_command(args) -> int:
     data_root = _paths.data_root()
 
     # Count cached entries BEFORE import
-    cached_before = sum(
-        1 for name in tc_entry_names if (trace_cache_target / name).exists()
-    )
+    cached_before = sum(1 for name in tc_entry_names if (trace_cache_target / name).exists())
 
     print(f"\nImporting benchmark {short_id} from {tarball.name}")
     print(f"  Benchmark dir:  {bench_target}")
@@ -851,9 +810,7 @@ def import_command(args) -> int:
     if has_trace_cache:
         print(f"  Trace-cache:    {trace_cache_target}")
     print()
-    print(
-        f"  Before import — cache coverage: {cached_before}/{total_runs} runs available"
-    )
+    print(f"  Before import — cache coverage: {cached_before}/{total_runs} runs available")
     if cached_before == 0 and total_runs > 0:
         print("  (to verify from a fresh environment, run first:)")
         print(f"    export {_paths.MAS_DATA_ROOT_ENV}={data_root}")
@@ -862,11 +819,7 @@ def import_command(args) -> int:
 
     if dry_run:
         with tarfile.open(tarball, "r:gz") as tar:
-            members = [
-                m.name
-                for m in tar.getmembers()
-                if not m.name.endswith(".json") or m.name == "MANIFEST.json"
-            ]
+            members = [m.name for m in tar.getmembers() if not m.name.endswith(".json") or m.name == "MANIFEST.json"]
             print("  [dry-run — nothing written]")
             print(f"  Archive contains {len(members)} entries")
         return 0
@@ -884,9 +837,7 @@ def import_command(args) -> int:
     # Extract archive, routing entries to correct destinations
     with tarfile.open(tarball, "r:gz") as tar:
         # Build a quick lookup for trace-cache member names (for hardlink resolution)
-        tc_members_in_archive: set[str] = {
-            m.name for m in tar.getmembers() if m.name.startswith("trace-cache/")
-        }
+        tc_members_in_archive: set[str] = {m.name for m in tar.getmembers() if m.name.startswith("trace-cache/")}
         for member in tar.getmembers():
             name = member.name
             if name == "MANIFEST.json":
@@ -898,9 +849,7 @@ def import_command(args) -> int:
                 elif name.startswith("source/"):
                     rel = name[len("source/") :]
                     dest = _safe_destination(safe_roots["source"], rel)
-                elif (
-                    name.startswith(run_dir_basename + "/") or name == run_dir_basename
-                ):
+                elif name.startswith(run_dir_basename + "/") or name == run_dir_basename:
                     rel = name[len(run_dir_basename) :].lstrip("/")
                     dest = _safe_destination(safe_roots["run_dir"], rel if rel else ".")
                 else:
@@ -929,11 +878,7 @@ def import_command(args) -> int:
                     tc_rel = abs_part[idx + len(tc_marker) :]
                     new_target = str(trace_cache_target / tc_rel)
                     try:
-                        if (
-                            not Path(new_target)
-                            .resolve(strict=False)
-                            .is_relative_to(trace_cache_target.resolve())
-                        ):
+                        if not Path(new_target).resolve(strict=False).is_relative_to(trace_cache_target.resolve()):
                             raise ValueError("trace-cache target escapes cache root")
                     except ValueError as exc:
                         logger.error(
@@ -1007,14 +952,10 @@ def import_command(args) -> int:
             logger.debug("Patched metadata.yaml: %s → %s", old_prefix, new_prefix)
 
     # Count cached entries AFTER import
-    cached_after = sum(
-        1 for name in tc_entry_names if (trace_cache_target / name).exists()
-    )
+    cached_after = sum(1 for name in tc_entry_names if (trace_cache_target / name).exists())
 
     print(f"✓ Imported benchmark {short_id} → {bench_target}")
-    print(
-        f"  After import  — cache coverage: {cached_after}/{total_runs} runs available"
-    )
+    print(f"  After import  — cache coverage: {cached_after}/{total_runs} runs available")
     print()
     print(f"  mas-lab benchmark show {short_id}")
     return 0

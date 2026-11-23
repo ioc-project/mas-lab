@@ -53,7 +53,7 @@ def _hosted_agent(tmp_path: Path):
     options = InstantiationOptions(
         agent_manifest=json.loads(json.dumps(AGENT)),
         manifest_dir=tmp_path,
-        resolved_infra=ResolvedInfra(refs=[], llm_proxy={}),
+        resolved_infra=ResolvedInfra(refs=[], llm_proxy={"api_key": {"secret": "openai"}}),
         workspace=WorkspaceConfig({}),
         validate_manifests=False,
     )

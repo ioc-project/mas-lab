@@ -43,14 +43,20 @@ def _agent(**stanza) -> dict:
     }
 
 
-def test_responder_gets_its_config_and_ctl_resolves_env_refs(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Kills: passing the raw mapping (the responder would see "env:..."), or not passing it at all.
+def test_responder_gets_its_config_as_secret_refs_not_revealed_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mas.runtime.secrets import SecretRef
+    from secret_fakes import bound_secrets
+
     _fake_registry(monkeypatch)
-    monkeypatch.setenv("HITL_TEST_TOKEN", "tok-from-env")
-    agent = _agent(hitl_on_tool=True, hitl_mode="custom", hitl_responder={"token": "env:HITL_TEST_TOKEN"})
-    responder, _ = resolve_hitl_from_manifest(agent, session_interactive=True)
+    agent = _agent(hitl_on_tool=True, hitl_mode="custom", hitl_responder={"token": {"secret": "hitl-token"}})
+    with bound_secrets({"hitl-token": "tok-from-store"}):
+        responder, _ = resolve_hitl_from_manifest(agent, session_interactive=True)
     assert isinstance(responder, _Configured)
-    assert _Configured.built == [{"token": "tok-from-env", "operator_id": "x"}]
+    built = _Configured.built[0]
+    assert isinstance(built["token"], SecretRef)
+    assert built["token"].name == "hitl-token"
+    assert built["operator_id"] == "x"
+    assert "tok-from-store" not in str(built)
 
 
 def test_absent_config_builds_the_responder_with_no_arguments(monkeypatch: pytest.MonkeyPatch) -> None:

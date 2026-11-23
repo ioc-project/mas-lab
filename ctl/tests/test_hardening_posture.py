@@ -28,7 +28,7 @@ from mas.ctl.session.exposure import expose_agent
 
 PROD = {"hardening": {"profile": "production"}}
 OPEN_LISTENER = {"protocol": "a2a", "usage": "listen", "url": "http://0.0.0.0:8123"}
-ADMITTED_LISTENER = {**OPEN_LISTENER, "a2a": {"admission": {"callers": {"alice": "a" * 40}}}}
+ADMITTED_LISTENER = {**OPEN_LISTENER, "a2a": {"admission": {"callers": {"alice": {"secret": "alice"}}}}}
 AGENT = {
     "apiVersion": "mas/v1",
     "kind": "Agent",
@@ -60,11 +60,11 @@ def test_selection_lives_in_the_flavour_and_the_default_is_no_posture() -> None:
     [
         {"profile": "strict"},
         {"profile": "production", "extra": 1},
-        {"waive": [{"check": "secret-literal"}]},
-        {"waive": [{"check": "secret-literal", "reason": "  "}]},
+        {"waive": [{"check": "secret-store-env"}]},
+        {"waive": [{"check": "secret-store-env", "reason": "  "}]},
         {"waive": [{"check": "no-such-check", "reason": "x"}]},
-        {"waive": [{"check": "secret-literal", "reason": "x", "until": "never"}]},
-        {"waive": "secret-literal"},
+        {"waive": [{"check": "secret-store-env", "reason": "x", "until": "never"}]},
+        {"waive": "secret-store-env"},
         "production",
     ],
 )
@@ -162,7 +162,7 @@ def test_the_report_reaches_a_declared_plugin_and_only_a_declared_one() -> None:
     spec = {"governance": ["budget", "gov_hardening_profile"]}
     out = with_report(spec, report)
     params = out["governance"][1]["gov_hardening_profile"]
-    assert params["profile"] == "production" and {r["check"] for r in params["report"]} >= {"secret-literal"}
+    assert params["profile"] == "production" and {r["check"] for r in params["report"]} >= {"secret-store-env"}
     spec2 = {"governance": [{"hardening_profile": {"allowed_hosts": ["a.example.com"]}}]}
     params2 = with_report(spec2, report)["governance"][0]["hardening_profile"]
     assert params2["allowed_hosts"] == ["a.example.com"] and params2["report"]

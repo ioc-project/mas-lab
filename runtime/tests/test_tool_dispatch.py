@@ -509,3 +509,35 @@ async def test_a_sync_tool_is_flagged_once_and_louder_when_it_blocks_the_loop(wo
     flagged = [r for r in caplog.records if "FlaggedSyncTool" in r.getMessage()]
     assert len(flagged) == 1
     assert flagged[0].levelname == level
+
+
+@pytest.mark.parametrize("status", [400, 500])
+async def test_a_tool_failure_does_not_chain_the_sdk_exception(status):
+    import traceback
+
+    import httpx
+
+    openai = pytest.importorskip("openai")
+    from mas.runtime.reliability.classes import ClassifiedFailure
+
+    canary = "sk-CHAIN-CANARY-31"
+    request = httpx.Request("POST", f"https://api.example/v1/chat/completions?token={canary}-q")
+    body = {"error": {"message": f"echo {canary}", "type": "invalid_request_error"}}
+    response = httpx.Response(status, json=body, request=request)
+    error = openai.APIStatusError(f"Error code: {status} - {body}", response=response, body=body)
+
+    class Provider:
+        async def acall_tool(self, tool, arguments, **kwargs):
+            raise error
+
+    with pytest.raises(ClassifiedFailure) as raised:
+        await aexecute_engine_tool("t", tool_provider=Provider())
+    failure = raised.value
+    assert f"HTTP {status}" in str(failure)
+    chain, node = [], failure
+    while node is not None and len(chain) < 20:
+        chain.append(node)
+        node = node.__cause__ or node.__context__
+    assert chain == [failure]
+    assert all(canary not in f"{item!s} {item!r}" for item in chain)
+    assert canary not in "".join(traceback.format_exception(failure))

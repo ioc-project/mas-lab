@@ -125,3 +125,15 @@ def test_doctor_against_manifest_checks_only_referenced_plugins(fake_registry, t
     assert result.exit_code == 0, result.output
     assert "mas.dp.fake_ok" in result.output
     assert "fake_missing" not in result.output
+
+
+def test_plugin_installer_env_is_the_allowlist_plus_installer_keys(monkeypatch):
+    from mas.ctl.cli.commands.plugin import _index_urls
+    from mas.runtime.secrets import child_env
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-CANARY-uv")
+    monkeypatch.setenv("UV_INDEX_URL", "https://index.example/simple")
+    env = child_env(_index_urls(), lab=True)
+    assert "OPENAI_API_KEY" not in env
+    assert env["UV_INDEX_URL"] == "https://index.example/simple"
+    assert "PATH" in env

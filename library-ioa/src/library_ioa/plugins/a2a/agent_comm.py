@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
-from library_ioa.plugins.a2a.client import A2AClient
+from library_ioa.plugins.a2a.client import A2AClient, peer_error
 
 
 class A2AAgentComm(LinkIdentity, AgentCommContract):
@@ -23,11 +22,12 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
         self,
         url: str,
         *,
-        headers: dict[str, str] | None = None,
+        headers: dict[str, Any] | None = None,
         timeout: float | None = None,
+        allowed_origins: list[str] | None = None,
     ) -> None:
         self.endpoint = url
-        self._client = A2AClient(url=url, headers=headers, timeout=timeout)
+        self._client = A2AClient(url=url, headers=headers, timeout=timeout, allowed_origins=allowed_origins)
         self._client.peer_id = url
 
     async def aprobe(self, target_agent_id: str) -> bool:
@@ -37,7 +37,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             await self._client.aget_agent_card(fresh=True)
         except Exception as exc:
             self._client.reset()
-            raise AgentCommError(safe_text(exc)) from exc
+            raise peer_error(exc) from None
         return True
 
     def stop(self) -> None:
@@ -76,11 +76,11 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
                     },
                 )
         except Exception as exc:
-            raise AgentCommError(safe_text(exc)) from exc
+            raise peer_error(exc) from None
 
         status = str(response.get("status") or "").lower()
         if status in {"failed", "error"}:
-            raise AgentCommError(safe_text(response.get("error") or "remote A2A task failed"))
+            raise AgentCommError(f"remote A2A task {status}")
         result: Any = response.get("result", response)
         if isinstance(result, str):
             return result

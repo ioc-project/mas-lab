@@ -8,6 +8,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from mas.library.eval.errors import judge_error_text
 from mas.library.eval.evaluator import MetricScore
 from mas.library.eval.metrics import EvalMetric, MetricContext, RunInputs
 from mas.library.eval.metrics.llm_json import complete_json
@@ -169,7 +170,7 @@ def _score_one(metric: PromptJudgeMetric, events_path: Any) -> MetricScore:
         return {
             "value": None,
             "reasoning": "",
-            "error": str(exc),
+            "error": judge_error_text(exc),
             "details": details,
         }
     details["judge"] = payload

@@ -252,9 +252,9 @@ async def test_anycast_seed_picks_a_stable_instance() -> None:
 
 
 def test_insecure_endpoint_rejected_off_loopback() -> None:
-    with pytest.raises(AgentCommError, match="127.0.0.1"):
+    with pytest.raises(AgentCommError, match="loopback"):
         assert_endpoint_allowed("http://10.0.0.1:46357")
-    with pytest.raises(AgentCommError, match="127.0.0.1"):
+    with pytest.raises(AgentCommError, match="loopback"):
         assert_endpoint_allowed("http://10.0.0.1:46357", dev=True)
     assert_endpoint_allowed("http://127.0.0.1:46357")
     assert_endpoint_allowed("http://localhost:46357")
@@ -309,8 +309,9 @@ def test_wrong_secret_and_short_secret() -> None:
         require_secret("")
     FakeWorld.reset()
     FakeWorld.default().require_secret = "other" + ("x" * 32)
-    with pytest.raises(AgentCommError, match="credentials"):
+    with pytest.raises(AgentCommError, match="slim binding error") as raised:
         _desk(url="http://127.0.0.1:1").link("a")
+    assert FakeWorld.default().require_secret not in str(raised.value)
 
 
 async def test_forged_sender_is_ignored() -> None:
@@ -329,7 +330,7 @@ async def test_oversize_missing_peer_and_stop() -> None:
     a.max_message_size = 4
     with pytest.raises(AgentCommError, match="max size"):
         await a.asend("b", "too-big")
-    with pytest.raises(AgentCommError, match="no peer"):
+    with pytest.raises(AgentCommError, match="slim binding error"):  # the binding's own text is not quoted
         await a.asend("missing-peer", "x")
     service = a._service
     a.stop()
@@ -572,8 +573,9 @@ def test_https_without_secure_factory_fails(monkeypatch: pytest.MonkeyPatch) -> 
         lambda: _NoSecure,
     )
     FakeWorld.reset()
-    with pytest.raises(AttributeError, match="new_secure_client_config"):
+    with pytest.raises(AgentCommError, match="slim link start failed") as raised:
         _desk(url="https://example.test:46357").link("a")
+    assert raised.value.__cause__ is None and raised.value.__context__ is None
 
 
 def test_inbound_loop_adopts_invited_session() -> None:
@@ -622,7 +624,8 @@ async def test_inbound_loop_logs_and_keeps_running(caplog: pytest.LogCaptureFixt
             await asyncio.wait_for(a._inbound_loop(), timeout=1)
 
     await _go()
-    assert "listen boom" in caplog.text
+    assert "slim listen failed" in caplog.text and "slim binding error" in caplog.text
+    assert "listen boom" not in caplog.text  # the binding's text is never logged
 
 
 def test_listen_thread_adopts_invited_session() -> None:
@@ -685,8 +688,6 @@ def test_plugin_source_does_not_read_env_or_world() -> None:
     inbound = (_SLIM_DIR / "inbound.py").read_text(encoding="utf-8")
     service = (_SLIM_DIR / "service.py").read_text(encoding="utf-8")
     plugin = agent + actor + inbound + service
-    assert "os.environ" not in plugin
-    assert "os.environ" not in endpoint
     assert "import os" not in endpoint
     assert "self._app.world" not in plugin
     assert 'getattr(self._app, "world"' not in plugin
@@ -749,10 +750,10 @@ def test_https_loopback_uses_tls_unless_dev(monkeypatch: pytest.MonkeyPatch) -> 
 def test_node_down_and_tls() -> None:
     FakeWorld.reset()
     FakeWorld.default().down = True
-    with pytest.raises(AgentCommError, match="node down"):
+    with pytest.raises(AgentCommError, match="slim binding error"):
         _desk(url="http://127.0.0.1:1").link("a")
     FakeWorld.reset()
-    with pytest.raises(AgentCommError, match="TLS"):
+    with pytest.raises(AgentCommError, match="slim binding error"):
         _desk(url="http://127.0.0.1/reject-tls").link("a")
     a, b, _c = _triple()
     seen: list[str] = []
@@ -1169,7 +1170,7 @@ async def test_send_to_unstarted_peer_is_no_peer() -> None:
     FakeWorld.reset()
     desk = _desk()
     a = desk.link("a")
-    with pytest.raises(AgentCommError, match="no peer"):
+    with pytest.raises(AgentCommError, match="slim binding error"):  # the binding's own text is not quoted
         await a.asend("b", "hello")
     desk.link("b")
     assert (await a.asend("b", "hello")) == "ack:hello"
@@ -1768,6 +1769,6 @@ def test_real_node_idle_listen_is_an_idle_read(slim_url: str) -> None:
         link = desk.link("a")
         with pytest.raises(AgentCommError) as err:
             link._run(link._call(link._app.listen_for_session_async(timeout=datetime.timedelta(seconds=0.2))))
-        assert _is_idle_timeout(err.value, link._sb)
+        assert _is_idle_timeout(err.value)
     finally:
         desk.close()

@@ -102,13 +102,35 @@ mas-ctl control steer SESSION --text "be brief" --after
 These flags go before the subcommand:
 
 ```bash
-mas-ctl [-v] [--env FILE] COMMAND …
+mas-ctl [-v] [--env FILE] [--secrets-dir DIR] [--secret-store file|env] COMMAND …
 ```
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `-v` / `--verbose` | off | Repeatable. `-v` adds session hints and internal logs (cache hits, summarization). `-vv` also enables `--trace-engine` when tracing (`chat`, `run-mas`). |
-| `--env FILE` | `.env` in the current directory and next to the manifest | Load this dotenv file. The file must exist. |
+| `--env FILE` | `.env` in the current directory and next to the manifest | Load this dotenv file. The file must exist. It holds non-secret settings only (such as `MAS_LLM_*`); it is not exported into child processes and is never a place for API keys. |
+| `--secrets-dir DIR` | workspace `secrets.dir`, else `<workspace>/.mas/secrets` | Directory of the file secret store. |
+| `--secret-store file\|env` | workspace `secrets.store`, else `file` | Secret store. `env` is for development only (`MAS_SECRET_<NAME>` and `MAS_SECRET_<NAME>__<KEY>` variables). |
+
+## secrets
+
+Manage the secret store that `{secret: NAME}` references in manifests resolve against. See [secrets](../references/secrets.md). No subcommand prints a value.
+
+```bash
+mas-ctl [--secrets-dir DIR] secrets COMMAND …
+```
+
+| Command | What it does |
+| --- | --- |
+| `secrets init` | Create the secrets directory with mode `0700` and a `.gitignore` that ignores its contents. |
+| `secrets set NAME [--key K]` | Write a secret. On a terminal the value is prompted for and hidden; otherwise it is read from stdin. It is never an argument. `--key` names one entry of a keyed secret (default `value`). |
+| `secrets list` | List file-store names with key and whether each one reads (`present`, `missing` or the refusal reason). The env store cannot be listed. |
+| `secrets import-env FILE` | Import the known provider variables of a dotenv file (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `HF_TOKEN`, ...) and `MAS_SECRET_*` names into the file store; other variables are skipped and listed by name. It writes one secret per known variable. It does not export to the process. |
+
+```bash
+echo KEY | mas-ctl secrets set openai
+mas-ctl secrets list
+```
 
 ## Outputs
 

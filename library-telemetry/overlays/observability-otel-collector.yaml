@@ -1,8 +1,8 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# Live OTel plugin: JSONL plus OTLP. An infra OtelCollector manifest is
-# optional — set $OTEL_EXPORTER_OTLP_ENDPOINT and add the otel plugin
-# (this Control, or a Control observability list that includes otel).
+# Live OTel plugin: JSONL plus OTLP. otlp_endpoint is the collector's OTLP
+# HTTP base URL (the local collector of docker/compose.yaml); override it in an
+# overlay for another collector. An infra OtelCollector manifest is optional.
 apiVersion: control/v1
 kind: Control
 metadata:
@@ -12,4 +12,4 @@ spec:
   - otel:
       output_path: traces/otel_sdk_spans.jsonl
       converter_profile: observe_sdk
-      otlp_endpoint_env: OTEL_EXPORTER_OTLP_ENDPOINT
+      otlp_endpoint: http://localhost:4318

@@ -19,6 +19,7 @@ from mas.ctl.cli.commands.hardening import hardening_group
 from mas.ctl.cli.commands.plugin import plugin_group
 from mas.ctl.cli.commands.registry import registry_group
 from mas.ctl.cli.commands.run_mas import run_mas_cmd
+from mas.ctl.cli.commands.secrets import secrets_group
 from mas.ctl.cli.commands.serve import serve_agent_cmd
 from mas.ctl.cli.commands.tui import tui_cmd
 from mas.ctl.cli.commands.validate import schemas_cmd, validate_cmd
@@ -26,20 +27,46 @@ from mas.ctl.cli.commands.workspace import flavour_group, infra_group
 from mas.ctl.env import load_dotenv
 from mas.ctl.logging_setup import setup_logging
 from mas.ctl.run_progress import set_run_progress
+from mas.ctl.secrets import install_process_resolver
 
 
 @click.group()
 @click.option("-v", "--verbose", count=True, default=0)
-@click.option("--env", "env_file", default=None, type=click.Path(exists=True), help=".env file")
+@click.option(
+    "--env",
+    "env_file",
+    default=None,
+    type=click.Path(exists=True),
+    help=".env file (import with secrets import-env; not exported)",
+)
+@click.option(
+    "--secrets-dir",
+    "secrets_dir",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="File-store directory (default <workspace>/.mas/secrets)",
+)
+@click.option("--secret-store", "secret_store", default=None, help="file (default) or env")
 @click.pass_context
-def app(ctx: click.Context, verbose: int, env_file: str | None) -> None:
+def app(
+    ctx: click.Context,
+    verbose: int,
+    env_file: str | None,
+    secrets_dir: str | None,
+    secret_store: str | None,
+) -> None:
     """MAS ctl — compose, placement, and conversation UI for the Mealy runtime."""
     ctx.ensure_object(dict)
     ctx.obj["verbose"] = verbose
-    load_dotenv(explicit=Path(env_file) if env_file else None)
+    ctx.obj["secrets_dir"] = secrets_dir
+    ctx.obj["secret_store"] = secret_store
     from mas.ctl.session.llm_scheduler_env import install_env_overrides
 
+    # The host first (hostenv, then the scrub), then the .env file on top of it: its MAS_LLM_*
+    # values reach the overrides instead of being replaced by a later read of the bare host.
     install_env_overrides()
+    load_dotenv(explicit=Path(env_file) if env_file else None)
+    install_process_resolver(directory=secrets_dir, store=secret_store)
     setup_logging(verbosity=verbose)
     set_run_progress(verbose)
 
@@ -61,6 +88,7 @@ app.add_command(serve_agent_cmd, name="serve")
 app.add_command(plugin_group, name="plugin")
 app.add_command(infra_group, name="infra")
 app.add_command(flavour_group, name="flavour")
+app.add_command(secrets_group, name="secrets")
 
 
 def main() -> None:

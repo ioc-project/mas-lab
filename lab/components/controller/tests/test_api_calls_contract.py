@@ -43,7 +43,7 @@ def client(demo_lab, monkeypatch):
         classmethod(lambda cls, _ws: {}),
     )
     jobs._jobs.clear()
-    return TestClient(fastapi_app.app)
+    return TestClient(fastapi_app.create_app())
 
 
 @pytest.fixture

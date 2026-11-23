@@ -22,7 +22,6 @@ plugins:
       - mas.library.telemetry.conversion.semconv
       - mas.library.telemetry.conversion.converter
       - mas.library.telemetry.conversion.session
-      - mas.library.telemetry.collector.clickhouse
   - type: step
     name: events_to_otel
     module: mas.library.telemetry.bench

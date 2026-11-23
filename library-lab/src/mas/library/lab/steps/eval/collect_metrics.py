@@ -1,6 +1,5 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """CollectMetricsStep — gather per-run metrics into a tidy CSV.
 
 Walks ``<output_dir>/<scenario>/<item_id>/r<n>/`` and reads two canonical
@@ -79,11 +78,13 @@ Example YAML::
         groupby: [scenario, group, complexity, metric]
 """
 
+from __future__ import annotations
+
 import csv
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from mas.lab.benchmark.pipeline import PipelineStep, StepOutput
 from mas.lab.benchmark.pipeline.artifact_paths import (
@@ -103,6 +104,9 @@ from mas.library.lab.steps.data.to_dataframe import (
 # ideally belongs in a shared low-level package rather than mas.runtime.)
 from mas.runtime.spec.source import resolve_path_ref
 
+if TYPE_CHECKING:
+    from mas.lab.benchmark.pipeline.executor import ExecutionContext
+
 logger = logging.getLogger(__name__)
 
 # Default identity: derives identity from the benchmark's directory convention.
@@ -112,8 +116,8 @@ logger = logging.getLogger(__name__)
 # property of the benchmark layout, not a heuristic.
 _DEFAULT_IDENTITY: Dict[str, str] = {
     "scenario": "_parent.2",
-    "item_id":  r"_parent.1|re:item(.+)",  # "itemmn1" → "mn1", "item3" → "3"
-    "run_idx":  r"_parent.0|re:r(\d+)",    # "r1" → "1"
+    "item_id": r"_parent.1|re:item(.+)",  # "itemmn1" → "mn1", "item3" → "3"
+    "run_idx": r"_parent.0|re:r(\d+)",  # "r1" → "1"
 }
 
 
@@ -134,9 +138,7 @@ class CollectMetricsStep(PipelineStep):
         config = self.config
 
         output_dir = resolve_step_root(ctx, config, step=self.name)
-        output_path = resolve_step_artifact_path(
-            ctx, None, self.name, "results.csv", config, name_keys=(), mkdir=True
-        )
+        output_path = resolve_step_artifact_path(ctx, None, self.name, "results.csv", config, name_keys=(), mkdir=True)
 
         run_glob = config.get("run_glob", "*/*/r*")
         id_spec = config.get("identity", _DEFAULT_IDENTITY)
@@ -151,18 +153,28 @@ class CollectMetricsStep(PipelineStep):
 
         run_dirs = sorted(d for d in output_dir.glob(run_glob) if d.is_dir())
         if scenarios_filter:
-            run_dirs = [d for d in run_dirs
-                        if _parse_identity(d, output_dir, id_spec).get("scenario", "") in scenarios_filter]
+            run_dirs = [
+                d for d in run_dirs if _parse_identity(d, output_dir, id_spec).get("scenario", "") in scenarios_filter
+            ]
 
         fieldnames = [
-            "scenario", "item_id", "run_idx", "metric", "value",
-            "cache_key", "run_hash",
-            "latency_s", "n_llm_calls", "n_tool_calls",
-            "model", "status",
-            "n_warnings", "n_errors", "run_status",
+            "scenario",
+            "item_id",
+            "run_idx",
+            "metric",
+            "value",
+            "cache_key",
+            "run_hash",
+            "latency_s",
+            "n_llm_calls",
+            "n_tool_calls",
+            "model",
+            "status",
+            "n_warnings",
+            "n_errors",
+            "run_status",
             "details",
         ] + dataset_columns
-
 
         rows: list = []
         with open(output_path, "w", newline="", encoding="utf-8") as f:
@@ -180,7 +192,7 @@ class CollectMetricsStep(PipelineStep):
                     try:
                         run_info = json.loads(ri_path.read_text(encoding="utf-8"))
                     except Exception:
-                        logger.debug('suppressed', exc_info=True)
+                        logger.debug("suppressed", exc_info=True)
 
                 # --- .run_ref: trace hash for cache linkage ---
                 run_hash: str = run_info.get("run_hash", "")
@@ -190,6 +202,7 @@ class CollectMetricsStep(PipelineStep):
                 if run_ref_f.exists():
                     try:
                         from mas.lab.paths import trace_cache as _trace_cache
+
                         _hash = run_ref_f.read_text(encoding="utf-8").strip()
                         run_hash = run_hash or _hash
                         _cache_dir = _trace_cache() / _hash
@@ -211,9 +224,9 @@ class CollectMetricsStep(PipelineStep):
                                     elif _ev_kind == "tool_call_start":
                                         n_tool_calls += 1
                                 except Exception:
-                                    logger.debug('suppressed', exc_info=True)
+                                    logger.debug("suppressed", exc_info=True)
                     except Exception:
-                        logger.debug('suppressed', exc_info=True)
+                        logger.debug("suppressed", exc_info=True)
 
                 latency_s = run_info.get("elapsed_ms", 0) / 1000.0
                 model = run_info.get("model", "")
@@ -277,11 +290,13 @@ class CollectMetricsStep(PipelineStep):
             return StepOutput(data={"rows": 0, "df": None}, metadata={"error": "no data"})
 
         import pandas as pd
+
         df = pd.DataFrame(rows)
         logger.info("CollectMetricsStep: %d rows → %s", len(rows), output_path)
 
         try:
             from mas.lab.benchmark.schema.validation import validate_metrics_csv
+
             validate_metrics_csv(output_path)
             logger.debug("CollectMetricsStep: schema validation passed")
         except Exception as _ve:
@@ -298,8 +313,11 @@ class CollectMetricsStep(PipelineStep):
 # Helpers
 # ------------------------------------------------------------------
 
+
 def _parse_identity(
-    run_dir: Path, output_dir: Path, id_spec: Dict[str, str],
+    run_dir: Path,
+    output_dir: Path,
+    id_spec: Dict[str, str],
 ) -> dict:
     """Extract identity columns from a run directory path."""
     rel = run_dir.relative_to(output_dir)
@@ -321,6 +339,7 @@ def _parse_identity(
 # ------------------------------------------------------------------
 # Dataset enrichment helpers
 # ------------------------------------------------------------------
+
 
 def _load_dataset_lookup(
     dataset_config: Any,
@@ -355,6 +374,7 @@ def _load_dataset_lookup(
         # Resolve by name if path not provided
         if not ds_path_raw and ds_name:
             from mas.lab.benchmark.experiment import _resolve_dataset_by_name
+
             try:
                 resolved = _resolve_dataset_by_name(
                     config_path.parent if config_path else Path("."),
@@ -383,7 +403,9 @@ def _load_dataset_lookup(
         with ds_path.open(encoding="utf-8") as fh:
             raw = yaml.safe_load(fh) if ds_path.suffix in (".yaml", ".yml") else json.load(fh)
     except Exception as exc:
-        logger.warning("collect_metrics: cannot load dataset %s: %s", ds_path, exc)
+        from mas.runtime.spec.yaml_errors import yaml_error_text
+
+        logger.warning("collect_metrics: cannot load dataset %s: %s", ds_path, yaml_error_text(exc))
         return {}
 
     # Normalise to list of items
@@ -464,4 +486,3 @@ def _dataset_columns_from_config(dataset_config: Any) -> list[str]:
             return []
         return [c.split(".")[-1] for c in cols]
     return []
-

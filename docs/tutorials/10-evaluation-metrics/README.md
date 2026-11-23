@@ -101,7 +101,7 @@ needs the judge key:
 
 ```bash
 mas-lab eval --list-metrics
-export OPENAI_API_KEY=...
+echo KEY | mas-ctl secrets set openai
 mas-lab eval docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl \
   --metric goal_success_rate --model gpt-4o
 ```
@@ -200,8 +200,9 @@ instead of `module`/`class`. For an LLM judge, call
 `mas.library.eval.metrics.llm_json.complete_json(messages)`. It uses the
 OpenAI-compatible client `eval_mce` already installed
 (`install_openai_llm_service`), shared with stock MCE and
-`llm_service_config()` (for an external scorer): same credentials, retries
-and proxy. Do not build a second HTTP client.
+`judge_client()` (for an external scorer): a context manager that reveals the
+key once for the run and hands you the same client, retries and proxy. Do not
+copy an API key out of the process and do not build a second HTTP client.
 
 Rules:
 

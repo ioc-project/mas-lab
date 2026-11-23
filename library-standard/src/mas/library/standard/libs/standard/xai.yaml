@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: xai
   description: >
-    xAI chat-completions host. Same wire as openai. Requires XAI_API_KEY.
+    xAI chat-completions host. Same wire as openai. The key is `{secret: xai}`.
 
 spec:
   protocol: xai
   proxy:
-    api_base: env:XAI_API_BASE|https://api.x.ai/v1
-    api_key_env: XAI_API_KEY
+    api_base: https://api.x.ai/v1
+    api_key: {secret: xai}

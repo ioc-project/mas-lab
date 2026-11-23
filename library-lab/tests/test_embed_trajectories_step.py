@@ -9,7 +9,7 @@ import json
 from types import SimpleNamespace
 
 from mas.library.lab.steps.data import embed_trajectories as et
-from mas.runtime import hostenv
+from secret_fakes import bound_secrets
 
 
 def _run(tmp_path, monkeypatch, **config):
@@ -30,23 +30,23 @@ def test_missing_trajectories_embed_nothing(tmp_path, monkeypatch) -> None:
     assert out.metadata == {"embedded": 0}
 
 
-def test_key_comes_from_the_host_environment_and_a_rerun_skips_done_runs(tmp_path, monkeypatch) -> None:
+def test_key_comes_from_the_secret_store_and_a_rerun_skips_done_runs(tmp_path, monkeypatch) -> None:
     rows = [
         {"run_id": "a", "session": {"input": "one"}},
         {"run_id": "b", "session": {"input": "skip"}},
         {"run_id": "c", "session": {"input": "three"}, "_extraction_error": "bad"},
     ]
     (tmp_path / "trajectories.jsonl").write_text("\n".join([*map(json.dumps, rows), "{broken"]), encoding="utf-8")
-    with hostenv.overlay({"EMBED_KEY_PROBE": "k-1"}):
-        out, seen = _run(tmp_path, monkeypatch, api_key_env="EMBED_KEY_PROBE", api_base="http://x", batch_size=2)
-    assert seen["kw"]["api_key"] == "k-1" and seen["kw"]["batch_size"] == 2
-    assert seen["texts"] == ["one", "skip"]
-    assert out.metadata == {"embedded": 1}
-    written = tmp_path / "embeddings" / "session__input.jsonl"
-    assert [json.loads(line)["run_id"] for line in written.read_text().splitlines()] == ["a"]
+    with bound_secrets({"openai": "k-1"}):
+        out, seen = _run(tmp_path, monkeypatch, api_key={"secret": "openai"}, api_base="https://x", batch_size=2)
+        assert seen["kw"]["api_key"] == "k-1" and seen["kw"]["batch_size"] == 2
+        assert seen["texts"] == ["one", "skip"]
+        assert out.metadata == {"embedded": 1}
+        written = tmp_path / "embeddings" / "session__input.jsonl"
+        assert [json.loads(line)["run_id"] for line in written.read_text().splitlines()] == ["a"]
 
-    with written.open("a", encoding="utf-8") as fh:
-        fh.write("{broken\n")
-    again, seen2 = _run(tmp_path, monkeypatch, max_items=2)
-    assert seen2["texts"] == ["skip"]
-    assert again.metadata == {"embedded": 0}
+        with written.open("a", encoding="utf-8") as fh:
+            fh.write("{broken\n")
+        again, seen2 = _run(tmp_path, monkeypatch, max_items=2)
+        assert seen2["texts"] == ["skip"]
+        assert again.metadata == {"embedded": 0}

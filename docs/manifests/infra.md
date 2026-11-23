@@ -7,7 +7,7 @@
 **Package:** `ctl/` | **Model:** `mas.ctl.infra.models.InfraManifest` | **Resolver:** `mas.ctl.infra.resolve.resolve_infra_refs`
 
 An **infra** manifest declares *where* deployment resources live.
-It covers LLM endpoints (proxy URL, API-key env var name, model mappings), tool servers, application and A2A agent endpoints, and middleware wrapped around LLM calls.
+It covers LLM endpoints (proxy URL, API-key SecretRef, model mappings), tool servers, application and A2A agent endpoints, and middleware wrapped around LLM calls.
 Write one when you point a MAS at a different provider, proxy, tool server, or cache without editing any agent.
 
 Terms used on this page:
@@ -25,8 +25,8 @@ metadata:
 spec:
   protocol: openai
   proxy:
-    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openai}
 ```
 
 `protocol: anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, `openresponses`, `groq`, `openrouter`, `xai`, `litellm`, `cerebras`, `mistral`, `vllm`, `huggingface`, and `databricks` are the same sugar as `openai`: a url becomes layers `[http, <protocol>]`.
@@ -40,12 +40,12 @@ spec:
   protocol: anthropic
   proxy:
     api_base: https://api.anthropic.com/v1
-    api_key_env: ANTHROPIC_API_KEY
+    api_key: {secret: anthropic}
 ```
 
 Groq, OpenRouter, xAI, LiteLLM, Cerebras, Mistral, vLLM, and Hugging Face inherit the openai body. Databricks posts that body at `/serving-endpoints/{name}/invocations`. Azure, Bedrock, and Vertex have their own POST. Bundled rows: `standard:groq`, `standard:openrouter`, `standard:xai`, `standard:litellm`, `standard:cerebras`, `standard:mistral`, `standard:vllm`, `standard:huggingface`, `standard:databricks`, `standard:azure`, `standard:bedrock`, `standard:vertex`, `standard:openresponses`.
 
-Put the env var *name* in the file so several providers can run at once, each with its own variable. `mas-lab init` writes that form for the OpenAI default URL. A custom URL at init uses `<infra-name>_API_BASE`. If `proxy.api_base` is empty, the engine uses `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. The right place for the name is still the file. When the address comes from the shell, the engine logs one warning naming the host, because the API key is sent there.
+Write `api_base` as a plain host URL. Write `api_key` as `{secret: NAME}`. Values live in the secret store (`mas-ctl secrets set`). If `proxy.api_base` is empty, `mas-ctl` falls back to `OPENAI_BASE_URL`, then `OPENAI_API_BASE`. A file that already sets `api_base` wins over those variables.
 
 The runtime resolves infra from deployment configuration, in this order of source:
 
@@ -99,7 +99,7 @@ Middleware, tool servers, and endpoints merge as follows:
 - Middleware steps append in order.
 - `models.generation` on an `LLMProxy` that omits `proxy.api_base` overlays output-token policy onto the resolved view.
 
-Each `LLMProxy` / `LLMLocal` that declares `proxy.api_base` is a **leaf**, not a last-wins overlay of `api_base` / `api_key_env`. See [Several LLMProxy refs](#several-llmproxy-refs).
+Each `LLMProxy` / `LLMLocal` that declares `proxy.api_base` is a **leaf**, not a last-wins overlay of `api_base` / `api_key`. See [Several LLMProxy refs](#several-llmproxy-refs).
 
 ## Several LLMProxy refs
 
@@ -122,10 +122,10 @@ experiment:
 ```
 
 An empty `models.allowed` is the default (`*`) owner, like a local tool provider. Two stars, or two leaves claiming the same name, is an error.
-Two files with the same `metadata.name` do not error: the later ref **replaces** the earlier leaf, including `api_base`, `api_key_env`, `models.allowed`, mappings, and that leaf's steps.
+Two files with the same `metadata.name` do not error: the later ref **replaces** the earlier leaf, including `api_base`, `api_key`, `models.allowed`, mappings, and that leaf's steps.
 Pinning a call to a leaf by infra name is not in this release.
 
-Each leaf owns its credentials. The engine does not forward the first leaf's `api_key_env` value; the factory reads that leaf's env var once and hands the token to the layer. `mas-ctl` checks every live leaf at engine build, including a leaf the run never calls. A named model that no leaf claims is an error.
+Each leaf owns its credentials. The engine does not forward the first leaf's `api_key`; the layer reveals that leaf's secret at the request. `mas-ctl` checks every live leaf at engine build, including a leaf the run never calls. A named model that no leaf claims is an error.
 
 The middleware cache key includes the leaf name, canonical model, and `api_base`. A cache written for one endpoint does not hit on another. See [Cache key](../references/llm-cache.md#cache-key).
 
@@ -247,8 +247,8 @@ metadata:
 spec:
   protocol: openai
   proxy:
-    api_base: env:OPENAI_BASE_URL|https://api.openai.com/v1
-    api_key_env: OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openai}
   models:
     mappings:
       default: gpt-4o-mini     # agents may write model: default
@@ -267,18 +267,16 @@ spec:
 Other `spec` fields:
 
 - `spec.proxy.timeout` (seconds) sets the HTTP timeout for LLM calls. The provider default is 120 s.
-- `spec.proxy.api_key_env` defaults to `OPENAI_API_KEY`. Like every field that ends in `_env`, it holds the *name* of the env var that contains the secret, never the secret itself. The factory reads that env var once and hands the token to the protocol layer; the layer does not read the environment on a call.
+- `spec.proxy.api_key` is a SecretRef (default `{secret: openai}`). The protocol layer reveals it at the request and does not store the value.
+- The key goes over https, or over plain http to a loopback host (`localhost`, `127.0.0.0/8`, `::1`). A call to `http://` on any other host fails (`PLAIN_HTTP_KEY`, naming the host) before anything is sent. There is no escape setting. The OTLP exporter follows the same rule for secret headers.
 - `spec.protocol` selects the wire-protocol plugin and defaults to `openai`. `groq`, `openrouter`, `xai`, `litellm`, `cerebras`, `mistral`, `vllm`, and `huggingface` inherit the openai chat-completions layer and only change the host and key name; Ollama still uses `protocol: openai`. `databricks` posts that same body at `/serving-endpoints/{name}/invocations`. `protocol: anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, and `openresponses` are the same shape with their own POST: a url expands to `[http, <protocol>]`. Azure classic uses `/openai/deployments/{name}/chat/completions` and `api-key`; a host that already ends in `/v1` keeps `/chat/completions`; `proxy.auth: bearer` sends `Authorization` instead. Bedrock posts Converse with a bearer token (`AWS_BEARER_TOKEN_BEDROCK`; no SigV4, and `stream: true` returns the whole text in one chunk). Anthropic and Bedrock send `temperature`, `top_p` and `top_k` only when the spec sets them and the [model catalog](llm-model-catalog.md) does not mark them unsupported (current Claude models do); set anything else through `extra`. Anthropic marks the system prompt, the last tool and the last two user turns for prompt caching by default, and counts cache tokens as prompt tokens; `prompt_cache_breakpoints`, `prompt_cache_retention` and `prompt_cache_key` tune it, see [LLM prompt cache](llm-prompt-cache.md), and each protocol's mapping is in [LLM providers](llm-providers.md); a refusal, or a tool call cut off by `max_tokens`, is a failed call. Gemini replays function calls with the skip-validation thought signature and treats an error body on HTTP 200 as a failed call. Anthropic and Gemini do not map `reasoning` or round-trip thinking blocks. Vertex posts generateContent at the project path with a bearer token (`VERTEX_ACCESS_TOKEN`, `proxy.project`). Open Responses posts `/responses` with typed items, stateless (`store: false`), and replays a reasoning item's `encrypted_content` with its tool call. The protocol layer posts through the http transport's `client` / `aclient`. A `structured` wrap layer (Flavour `bind.llm` `{stack: NAME}`) asks for schema-conforming JSON and puts a validated `parsed` object on the completion.
 
-String values may use `env:VAR|default`, so an environment variable can override a manifest default.
-For example: `api_base: env:LLM_PROXY_API_BASE|https://api.openai.com/v1`.
-`env:VAR` without a default is for secrets.
-It resolves to an empty string when the variable is unset.
+`env:` prefixes and `*_env` keys are validation errors. Write a SecretRef for a secret, or a plain overlay value for a host.
 
 ### LLM retry
 
 Retry is a `retry` layer on the infra pipeline, not a field on `spec.proxy`
-(`api_base`, `api_key_env`, `timeout`). Default steps load when the pipeline
+(`api_base`, `api_key`, `timeout`). Default steps load when the pipeline
 omits retry. Prefer listing the layer. See [reliability.md](../references/reliability.md).
 
 ## Bundles
@@ -392,7 +390,7 @@ kind: Application
 metadata: {name: desk}
 spec:
   endpoints:
-    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret_env: SLIM_SECRET,
+    desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
                 usage: [connect, listen]}
     desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
     outage-server: {protocol: a2a, url: "http://127.0.0.1:9003", usage: [connect, listen]}
@@ -416,7 +414,7 @@ Layer params that a naming transport reads:
 | --- | --- |
 | `identity` | Three-part `org/ns/service` (`slim`, `local-group`). Each agent is `<identity>/<agent_id>`. |
 | `url` | The node or server (`slim`, `http`, an A2A server). Plain HTTP only on `127.0.0.1`, `localhost`, `::1`. |
-| `secret_env` | The *name* of the env var that holds the secret. ctl reads it and passes the value to the layer as `secret`; no layer reads the environment. |
+| `secret` | A SecretRef. The layer reveals it when it starts. |
 
 The schema requires `protocol` on every row and cannot require `url`: an agent-keyed
 row and an endpoint row differ only by their key (an agent id of the MAS, or an
@@ -425,16 +423,11 @@ endpoint name), and an infra document is validated without its MAS. A framing ro
 agent-keyed row without a `url` when it applies the Flavour, where it knows the agent
 ids, and the plugin of an endpoint row that needs a `url` refuses the row without one.
 
-A key named `secret`, `password`, `passwd`, `passphrase`, `token`, `api_key`,
-`authorization`, `cookie`, `credential(s)` or `private_key`, in any case, alone or after
-`_` or `-` (`access_token`, `X-Api-Key`), or capitalized after a lower-case letter
-(`accessToken`, `clientSecret`), is refused: by `mas-ctl validate` for a row's own keys
-and its `headers`, and by ctl at any depth of a bound row when it applies the Flavour, and so is an agent-keyed row that names no protocol. A row
+A secret field holds a SecretRef, never a value. A listed HTTP auth header cannot be a literal string. A URL must not carry userinfo. A missing required secret stops the run and names the secret. A row
 resolves to an `agent_comm` link first, then a `layer`
 ([the rule](../references/comm-stack.md#stack)). So `a2a` (a one-row chain on an A2A
 server) is the A2A SDK client at its url, the same as an agent-keyed `a2a` row, and
-`a2a-framing` is the A2A framing layer above a transport. A missing secret stops the
-run when the chain starts.
+`a2a-framing` is the A2A framing layer above a transport.
 
 Every local agent on a chain gets its own instance of the layers and its own
 receive; what the layers share (the SLIM node connection, the in-process fabric) is
@@ -552,8 +545,8 @@ metadata:
   name: shared-vllm
 spec:
   proxy:
-    api_base: env:LLM_PROXY_API_BASE|http://vllm.example.com:8000/v1
-    api_key_env: VLLM_API_KEY
+    api_base: http://vllm.example.com:8000/v1
+    api_key: {secret: vllm}
   models:
     generation:
       max_tokens: 4096
@@ -621,7 +614,7 @@ spec:
       follow_pagination: true
       cache_scope: private
       # headers:
-      #   Authorization: "env:MCP_AUTH_HEADER"
+      #   Authorization: {secret: {name: mcp-upstream, key: bearer, prefix: "Bearer "}}
 ```
 
 Canonical sample: [`library-samples/infra/mcp-localhost.yaml`](https://github.com/ioc-project/mas-lab/blob/main/library-samples/infra/mcp-localhost.yaml).
@@ -634,12 +627,12 @@ It sets only the required connection fields, and runtime defaults supply the opt
 | `name` / `description` | `id` / none | Display name and free text |
 | `usage` | `connect` | `connect`, `listen`, or `[connect, listen]` (`use`, `deploy`, `use-and-deploy`: deprecated aliases) |
 | `transport` | `streamable-http` | `stdio` \| `streamable-http` \| `sse` \| `http` |
-| `url` / `endpoint` | none | HTTP/SSE URL (manifest). Optional override `env:VAR\|default` |
+| `url` / `endpoint` | none | HTTP/SSE URL (manifest). A plain overlay value |
 | `host` / `port` | `127.0.0.1:9001` | Listener address for `usage: listen` |
 | `tools_dir` | `tools` | Tool manifest directory (`protocol: local`, or served when deploying) |
 | `skills_dir` | `skills` | Skill directory (`protocol: local`) |
 | `command` / `args` / `env` / `cwd` | none | stdio process |
-| `headers` | `{}` | Omit unless auth is needed. Secrets: `env:VAR` (unset omits the header) |
+| `headers` | `{}` | Omit unless auth is needed. Secrets: a SecretRef (listed HTTP auth headers cannot be a literal string) |
 | `timeout` | `30` | Per-call timeout (seconds) |
 | `follow_pagination` | `true` | Walk MCP `nextCursor` and flatten |
 | `cache_ttl_ms` | omit | Client list-cache TTL in ms (`0` disables; omit uses the server's `ttlMs`, else 60 s; `notifications/tools/list_changed` or a failed tool call drops it sooner) |

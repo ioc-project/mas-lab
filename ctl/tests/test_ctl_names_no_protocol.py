@@ -4,11 +4,9 @@
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import pytest
-from mas.ctl.env import env_named_secret
 from mas.ctl.overrides.bind import expand_connects, expand_listens
 from mas.ctl.validate import validate_file
 
@@ -41,21 +39,6 @@ def test_no_ctl_source_file_names_slim() -> None:
         str(path.relative_to(src)) for path in src.rglob("*.py") if "slim" in path.read_text(encoding="utf-8").lower()
     )
     assert named == []
-
-
-def test_env_named_secret_does_not_log_the_value(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    secret = "e4aaecb9ae0b23b82086bb8a8633e01fba16ae8d9c1379a613c00838"
-    monkeypatch.setenv("SLIM_SECRET", secret)
-    with caplog.at_level(logging.DEBUG, logger="mas.ctl.env"):
-        assert env_named_secret("SLIM_SECRET") == secret
-    assert secret not in caplog.text
-    monkeypatch.delenv("SLIM_SECRET")
-    with pytest.raises(ValueError, match="missing secret"):
-        env_named_secret("SLIM_SECRET")
-    with pytest.raises(ValueError, match="environment variable name"):
-        env_named_secret("not a var")
 
 
 def test_mas_spec_rejects_agent_comm(tmp_path: Path) -> None:

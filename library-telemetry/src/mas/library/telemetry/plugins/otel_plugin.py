@@ -7,8 +7,15 @@ opts into incremental topology/tool/llm signals; when it is on, the
 end-of-run ``.graph`` span is not also emitted (realtime replaces it).
 
 Live OTLP does not need an infra ``OtelCollector`` manifest: add the ``otel``
-plugin on the spec and set ``$OTEL_EXPORTER_OTLP_ENDPOINT``.
-``otlp_endpoint_env`` / ``binding.otlp_endpoint_env`` override that name.
+plugin on the spec and set ``otlp_endpoint`` (a plain overlay URL). A collector that
+wants credentials gets them through ``headers`` (name to string or SecretRef; an auth
+header must be a SecretRef), revealed when the exporter is built.
+
+The OpenTelemetry SDK also adds the headers of ``OTEL_EXPORTER_OTLP_HEADERS`` and
+``OTEL_EXPORTER_OTLP_{TRACES,LOGS}_HEADERS`` from the process environment to every export; it has no
+switch to ignore them. The ``mas-ctl`` and ``mas-lab`` entry points remove them from the process before
+any exporter is built. A program that embeds this plugin without those entry points must not set them:
+the credential would go to the collector from the environment, outside the secret store.
 """
 
 from __future__ import annotations
@@ -20,7 +27,7 @@ from typing import Any
 from mas.library.standard.lib.observability.native.emit_transition import project_transition
 from mas.library.standard.lib.observability.native.transform import NativeObservabilityTransform, TransformContext
 from mas.library.telemetry.conversion.layers import ExportLayers, parse_export_layers
-from mas.library.telemetry.conversion.session import OtelExport, create_otel_export
+from mas.library.telemetry.conversion.session import OtelExport, check_otlp_headers, create_otel_export
 from mas.runtime import hostenv
 from mas.runtime.boundary.obs.binding import ObservabilityBinding
 from mas.runtime.boundary.obs.observability_plugin import ObservabilityPlugin
@@ -48,6 +55,7 @@ def create_otel_plugin(
     service_name: str = "",
     app_name: str = "",
     otlp_endpoint: str | None = None,
+    otlp_headers: dict[str, Any] | None = None,
     export_layers: ExportLayers | None = None,
     converter_profile: str | None = "observe_sdk",
     realtime: bool = False,
@@ -62,6 +70,7 @@ def create_otel_plugin(
         service_name=mas_name,
         app_name=mas_name,
         otlp_endpoint=otlp_endpoint,
+        otlp_headers=otlp_headers,
         export_layers=export_layers,
         converter_profile=converter_profile,
         realtime=realtime,
@@ -210,8 +219,8 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
         if not spans_path.is_absolute():
             spans_path = (base_path / spans_path).resolve()
 
-        env_name = str(otel_cfg.get("otlp_endpoint_env") or binding.otlp_endpoint_env or "OTEL_EXPORTER_OTLP_ENDPOINT")
-        endpoint = hostenv.get(env_name, "").strip() or None
+        endpoint = str(otel_cfg.get("otlp_endpoint") or getattr(binding, "otlp_endpoint", None) or "").strip() or None
+        headers = check_otlp_headers(otel_cfg.get("headers"))
 
         from mas.library.telemetry.conversion.topology import require_mas_name
 
@@ -230,6 +239,7 @@ class OtelObservabilityPlugin(ObservabilityPlugin):
             service_name=mas_name,
             app_name=mas_name,
             otlp_endpoint=endpoint,
+            otlp_headers=headers,
             export_layers=parse_export_layers(otel_cfg),
             converter_profile=profile,
             realtime=realtime,

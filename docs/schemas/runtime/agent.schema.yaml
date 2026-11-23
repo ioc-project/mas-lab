@@ -102,7 +102,7 @@ properties:
         description: >
           Preferred model(s) for this agent. ``kind`` selects the wire-protocol
           plugin for model calls.
-          Connection fields (api_base, api_key_env) belong on infra, not here.
+          Connection fields (api_base, api_key) belong on infra, not here.
           Static sampling/reasoning live on each row; per-call dynamic fields
           are LLMProvider.chat_completion kwargs. Capabilities:
           docs/manifests/llm-model-catalog.md.

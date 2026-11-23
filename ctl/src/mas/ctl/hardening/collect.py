@@ -98,15 +98,26 @@ def _step_settings(entries: Iterable[dict[str, Any]], kind: str) -> list[tuple[s
     ]
 
 
+def _store_fields() -> dict[str, Any]:
+    """Store kind and loose flag of the process resolver's store (the one this process reads)."""
+    from mas.library.standard.plugins.secrets.env_store import EnvSecretStore
+    from mas.runtime.secrets import current_resolver
+
+    store = current_resolver().store
+    return {
+        "secret_store": "env" if isinstance(store, EnvSecretStore) else "file",
+        "allow_loose_permissions": getattr(store, "allow_loose_permissions", False) is True,
+    }
+
+
 def from_session(
     agents: dict[str, dict[str, Any]],
     infra: ResolvedInfra | None,
-    *,
-    raw_documents: tuple[tuple[str, dict[str, Any]], ...] = (),
 ) -> HardeningInput:
     """The input for agents (effective specs) running on a resolved infra."""
+    store = _store_fields()
     if infra is None:
-        return HardeningInput(agents=dict(agents), raw_documents=raw_documents)
+        return HardeningInput(agents=dict(agents), **store)
     llm: tuple[dict[str, Any], ...] = ()
     tool: tuple[dict[str, Any], ...] = ()
     from mas.ctl.infra.show import infra_show_payload
@@ -131,12 +142,17 @@ def from_session(
         urls=_urls(llm, tool, infra.applications or {}, tool_servers),
         settings=tuple(settings),
         engine_cache=dict((infra.runtime_engine or {}).get("cache") or {}),
-        raw_documents=raw_documents,
+        **store,
     )
 
 
-def from_documents(documents: Iterable[tuple[str, dict[str, Any]]]) -> HardeningInput:
-    """The input for manifest files read alone: agents, applications, tool servers and LLM proxies."""
+def from_documents(
+    documents: Iterable[tuple[str, dict[str, Any]]],
+) -> HardeningInput:
+    """The input for manifest files read alone: agents, applications, tool servers and LLM proxies.
+
+    The secret store fields come from the bound resolver.
+    """
     docs = [(source, doc) for source, doc in documents if isinstance(doc, dict)]
     agents: dict[str, dict[str, Any]] = {}
     applications: dict[str, dict[str, Any]] = {}
@@ -183,21 +199,5 @@ def from_documents(documents: Iterable[tuple[str, dict[str, Any]]]) -> Hardening
         tool_servers=tool_servers,
         urls=_urls(llm, (), applications, tool_servers),
         settings=tuple(settings),
-        raw_documents=tuple(docs),
+        **_store_fields(),
     )
-
-
-def raw_infra_documents(refs: Iterable[str], anchor: Path) -> tuple[tuple[str, dict[str, Any]], ...]:
-    """The infra files a session names, as written (``env:`` not expanded). Library refs are not read."""
-    from mas.runtime.spec.source import load_yaml_file, resolve_ref_with_search
-
-    out: list[tuple[str, dict[str, Any]]] = []
-    for ref in refs:
-        try:
-            path = resolve_ref_with_search(str(ref), anchor)
-            data = load_yaml_file(path)
-        except (FileNotFoundError, ValueError, OSError):
-            continue
-        if isinstance(data, dict):
-            out.append((str(ref), data))
-    return tuple(out)

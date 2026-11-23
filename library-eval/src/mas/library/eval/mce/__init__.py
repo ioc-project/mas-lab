@@ -17,8 +17,8 @@ from mas.library.eval.mce.runner import (
     METRICS_SCHEMA_VERSION,
     build_metrics_document,
     get_effective_judge_model,
-    get_openai_client,
     install_openai_llm_service,
+    judge_client,
     llm_service_config,
 )
 from mas.library.eval.mce.runner import (
@@ -39,8 +39,8 @@ __all__ = [
     "compute_session_metrics",
     "compute_trace_metrics",
     "get_effective_judge_model",
-    "get_openai_client",
     "install_openai_llm_service",
+    "judge_client",
     "llm_service_config",
     "resolve_judge_model",
     "unique_application_model",

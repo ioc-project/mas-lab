@@ -3,7 +3,7 @@
 """``mas-lab telemetry`` CLI component — a thin wrapper over the library.
 
 Registered via the ``mas.lab.cli.components`` entry-point group so ``mas-lab
-telemetry ...`` (and the legacy ``mas-lab otel`` alias) work as shortcuts to the
+telemetry ...`` works as a shortcut to the
 same functions the standalone ``mas-telemetry`` CLI and the pipeline steps use.
 
 All commands here just call ``mas.library.telemetry`` functions — no logic lives
@@ -21,7 +21,6 @@ from pathlib import Path
 
 import click
 from mas.library.telemetry import inspection
-from mas.library.telemetry.collector.clickhouse import dump_spans, list_apps
 from mas.library.telemetry.conversion.mappings.base import registered_kinds
 from mas.library.telemetry.steps.compare_spans import run_compare_spans
 from mas.library.telemetry.steps.convert import run_convert
@@ -36,7 +35,7 @@ from mas.library.telemetry.verification.spanspec import (
 
 @click.group("telemetry")
 def telemetry_group() -> None:
-    """Telemetry utilities: convert, verify, inspect, push, dump OTel spans."""
+    """Telemetry utilities: convert, verify, inspect and push OTel spans."""
 
 
 @telemetry_group.command("convert")
@@ -242,21 +241,6 @@ def _push(
     click.echo(json.dumps(result, indent=2))
 
 
-@telemetry_group.command("dump")
-@click.argument("session_id")
-@click.option("--by", "query_by", type=click.Choice(["session", "trace"]), default="session")
-@click.option("--output", "-o", default=None)
-def _dump(session_id: str, query_by: str, output: str | None) -> None:
-    """Dump a session's spans from ClickHouse to JSONL."""
-    click.echo(json.dumps(dump_spans(session_id, query_by=query_by, output_path=output), indent=2))
-
-
-@telemetry_group.command("list-apps")
-def _list_apps() -> None:
-    """List apps (ServiceName) present in the ClickHouse otel_traces table."""
-    click.echo(json.dumps(list_apps(), indent=2, default=str))
-
-
 @telemetry_group.command("compare")
 @click.argument("reference", type=click.Path(exists=True, dir_okay=False))
 @click.argument("candidate", type=click.Path(exists=True, dir_okay=False))
@@ -282,20 +266,9 @@ class TelemetryCliComponent:
         existing = app.commands.get(telemetry_group.name)
         if existing is telemetry_group:
             return None
-        # Replace the core ``mas-lab telemetry`` stub's push/verify/dump with
-        # this library's OTel-aware versions, but keep any of its commands
-        # with no equivalent here (e.g. `show`, `sessions`, `traces` — native
-        # trace inspection, nothing to do with OTel) instead of silently
-        # dropping them.
+        # keep core's ClickHouse and native-trace commands (`show`, `dump`, `apps`, ...) beside the OTel ones
         if isinstance(existing, click.Group):
             for name, cmd in existing.commands.items():
-                if name not in telemetry_group.commands:
-                    telemetry_group.add_command(cmd, name=name)
+                telemetry_group.commands.setdefault(name, cmd)
         app.add_command(telemetry_group)
-        if app.commands.get("otel") is not telemetry_group:
-            app.add_command(telemetry_group, name="otel")
         return telemetry_group.name
-
-
-# Backward-compatible alias for the legacy `otel` CLI component name.
-OtelCliComponent = TelemetryCliComponent

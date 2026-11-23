@@ -8,10 +8,11 @@ import hmac
 from typing import Any
 
 from fastapi import HTTPException, Request, WebSocket
+from mas.lab.ui_ingest import ui_ingest_token
 from mas.runtime import hostenv
+from mas.runtime.secrets import is_loopback_host
 from starlette.datastructures import Headers
 
-_LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1", "testclient", "testserver"})
 _PROTECTED_PREFIXES = (
     "/api/ingest",
     "/api/commands",
@@ -32,17 +33,6 @@ CSP = (
 )
 
 
-def ui_token() -> str:
-    return str(hostenv.get("MAS_DEMO_UI_TOKEN") or "").strip()
-
-
-def is_loopback(host: str) -> bool:
-    name = str(host or "").split("%", 1)[0].strip().lower().strip("[]")
-    if name.startswith("127."):
-        return True
-    return name in _LOOPBACK
-
-
 def ssl_enabled() -> bool:
     cert = str(hostenv.get("MAS_DEMO_UI_SSL_CERTFILE") or "").strip()
     key = str(hostenv.get("MAS_DEMO_UI_SSL_KEYFILE") or "").strip()
@@ -60,12 +50,12 @@ def ssl_uvicorn_kwargs() -> dict[str, str]:
 
 def assert_ui_bind(host: str) -> None:
     """Refuse a non-loopback bind that has no TLS or no token."""
-    if is_loopback(host):
+    if is_loopback_host(host):
         return
     if not ssl_enabled():
         raise RuntimeError("TLS is required for a non-loopback mas-lab serve bind")
-    if not ui_token():
-        raise RuntimeError("MAS_DEMO_UI_TOKEN is required for a non-loopback mas-lab serve bind")
+    if not ui_ingest_token():
+        raise RuntimeError("secret ui-ingest is required for a non-loopback mas-lab serve bind")
 
 
 def token_from_headers(headers: Headers | dict[str, str] | None, extra: str | None = None) -> str:
@@ -94,7 +84,7 @@ def check_token(provided: str, expected: str) -> bool:
 
 
 def authorize_http(request: Request) -> None:
-    expected = ui_token()
+    expected = ui_ingest_token()
     if not expected:
         return
     if not check_token(token_from_request(request), expected):
@@ -102,7 +92,7 @@ def authorize_http(request: Request) -> None:
 
 
 def authorize_ws(ws: WebSocket, hello: dict[str, Any] | None = None) -> None:
-    expected = ui_token()
+    expected = ui_ingest_token()
     if not expected:
         return
     query = str(ws.query_params.get("token") or "").strip()
@@ -124,7 +114,7 @@ def path_is_protected(path: str) -> bool:
 
 def ingest_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
-    token = ui_token()
+    token = ui_ingest_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers

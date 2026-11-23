@@ -6,10 +6,10 @@ kind: LLMProxy
 metadata:
   name: huggingface
   description: >
-    Hugging Face router. Same wire as openai. Requires HF_TOKEN.
+    Hugging Face router. Same wire as openai. The key is `{secret: hf}`.
 
 spec:
   protocol: huggingface
   proxy:
-    api_base: env:HF_API_BASE|https://router.huggingface.co/v1
-    api_key_env: HF_TOKEN
+    api_base: https://router.huggingface.co/v1
+    api_key: {secret: hf}

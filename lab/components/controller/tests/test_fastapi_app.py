@@ -52,7 +52,7 @@ def client(demo_lab, monkeypatch):
         "mas.lab.controller.deps.get_manifest_store",
         lambda: store,
     )
-    return TestClient(fastapi_app.app)
+    return TestClient(fastapi_app.create_app())
 
 
 # -- Health -------------------------------------------------------------------
@@ -281,7 +281,8 @@ def test_mas_canvas_persists_to_ui_canvas_overlay(client, demo_lab):
     assert detail["ui_canvas_overlay"].endswith("overlays/canvas-app.yaml")
     assert "hello" in detail["agents"]["coordinator"]
 
-    # Unparseable agent YAML must not drop the agent on save.
+    # Unparseable agent YAML cannot be checked for secret values: refused, nothing rewritten.
+    before = (app_dir / "agents" / "coordinator.yaml").read_text(encoding="utf-8")
     resp = client.put(
         "/api/libraries/demo/apps/canvas-app",
         json={
@@ -290,9 +291,9 @@ def test_mas_canvas_persists_to_ui_canvas_overlay(client, demo_lab):
             "agents": {"coordinator": "spec: [\n"},
         },
     )
-    assert resp.status_code == 200
-    saved_agent = (app_dir / "agents" / "coordinator.yaml").read_text(encoding="utf-8")
-    assert saved_agent == "spec: [\n"
+    assert resp.status_code == 422
+    assert resp.json()["detail"].startswith("YAML does not parse")
+    assert (app_dir / "agents" / "coordinator.yaml").read_text(encoding="utf-8") == before
 
 
 # -- Pipeline step types ------------------------------------------------------

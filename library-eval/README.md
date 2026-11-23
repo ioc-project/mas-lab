@@ -28,8 +28,7 @@ mas-lab eval path/to/experiment/ --metric goal_success_rate --recursive
 |------|---------|
 | `--metric` | Metric to compute; repeatable. |
 | `--model` | Judge model name (default `azure/gpt-4o`). |
-| `--api-base` | LLM proxy base URL (default `https://api.openai.com/v1`). |
-| `--api-key-env` | Environment variable holding the API key (default `OPENAI_API_KEY`). |
+| `--api-base` | Judge API base from workspace infra. The key is `{secret: openai}`. |
 | `--json` | Print results as JSON. |
 | `--list-metrics` | List available metrics and exit; `SOURCE` is then optional. |
 | `--recursive` | Score every trace under the `SOURCE` directory. |
@@ -134,9 +133,8 @@ List registered ids in the `metrics:` list of an `eval_mce` step, or split famil
 ## Programmatic use
 
 ```python
-import os
-
 from mas.library.eval.mce import build_session_from_trace, compute_session_metrics
+from mas.runtime.secrets import SecretRef, current_resolver
 
 session_entity = build_session_from_trace("path/to/events.jsonl")
 
@@ -146,7 +144,7 @@ results = await compute_session_metrics(      # async
     llm_config={
         "LLM_MODEL_NAME": "azure/gpt-4o",
         "LLM_BASE_MODEL_URL": "https://api.openai.com/v1",
-        "LLM_API_KEY": os.environ["OPENAI_API_KEY"],
+        "LLM_API_KEY": current_resolver().reveal(SecretRef(name="openai")),
     },
 )
 ```
@@ -159,7 +157,7 @@ from metrics_computation_engine.models.requests import LLMJudgeConfig
 llm_config = LLMJudgeConfig(
     LLM_MODEL_NAME="azure/gpt-4o",
     LLM_BASE_MODEL_URL="https://api.openai.com/v1",
-    LLM_API_KEY=os.environ["OPENAI_API_KEY"],
+    LLM_API_KEY=current_resolver().reveal(SecretRef(name="openai")),
 )
 ```
 

@@ -11,10 +11,13 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import httpx2
+from mas.runtime.secrets.transport import httpx_client_kwargs_for
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.shared._httpx_utils import MCP_DEFAULT_SSE_READ_TIMEOUT, MCP_DEFAULT_TIMEOUT
 from mcp.types import PaginatedRequestParams, ToolListChangedNotification
 from pydantic import BaseModel
 
@@ -138,10 +141,10 @@ class MCPClient:
         *,
         command: str | None = None,
         args: list[str] | None = None,
-        env: dict[str, str] | None = None,
+        env: dict[str, Any] | None = None,
         cwd: str | Path | None = None,
         url: str | None = None,
-        headers: dict[str, str] | None = None,
+        headers: dict[str, Any] | None = None,
         timeout: float | None = None,
         transport: str | None = None,
         follow_pagination: bool = True,
@@ -154,7 +157,10 @@ class MCPClient:
         self.env = dict(env or {})
         self.cwd = cwd
         self.url = url
+        from mas.runtime.secrets.ref import check_http_header_secrets
+
         self.headers = dict(headers or {})
+        check_http_header_secrets(self.headers)
         self.timeout = timeout
         self.http_client = http_client
         self.follow_pagination = follow_pagination
@@ -176,6 +182,31 @@ class MCPClient:
             self.transport = "streamable-http"
         else:
             self.transport = "stdio"
+
+    def _http_client(self, headers: Any = None, timeout: Any = None, auth: Any = None) -> Any:
+        """The SDK's client (its timeouts), proxy settings ignored for a loopback url. A server's HTTP error
+        is handled as the SDK reports it: its replies are its own output."""
+        if timeout is None:
+            timeout = httpx2.Timeout(MCP_DEFAULT_TIMEOUT, read=MCP_DEFAULT_SSE_READ_TIMEOUT)
+        kwargs: dict[str, Any] = {"timeout": timeout, **httpx_client_kwargs_for(self.url)}
+        if headers is not None:
+            kwargs["headers"] = headers
+        if auth is not None:
+            kwargs["auth"] = auth
+        return httpx2.AsyncClient(**kwargs)
+
+    def _revealed_headers(self) -> dict[str, str]:
+        from mas.runtime.secrets.transport import PlainHttpRefused, reveal_headers_for
+
+        try:
+            return reveal_headers_for(self.url, self.headers, what="secret headers")
+        except PlainHttpRefused as exc:
+            raise ValueError(f"mcp client: {exc}") from None
+
+    def _stdio_env(self) -> dict[str, str]:
+        from mas.runtime.secrets.resolver import reveal_mapping
+
+        return reveal_mapping(self.env)
 
     def invalidate_list_cache(self) -> None:
         # A listing already on the wire must not be stored after this: it may predate the change.
@@ -230,9 +261,10 @@ class MCPClient:
         if self.transport in _SSE_TRANSPORTS:
             if not self.url:
                 raise ValueError("MCP SSE client requires a url")
-            sse_kw: dict[str, Any] = {}
-            if self.headers:
-                sse_kw["headers"] = self.headers
+            sse_kw: dict[str, Any] = {"httpx_client_factory": self._http_client}
+            headers = self._revealed_headers()
+            if headers:
+                sse_kw["headers"] = headers
             transport = await stack.enter_async_context(sse_client(self.url, **sse_kw))
             read_stream, write_stream = _streams_from_transport(transport)
             session = await stack.enter_async_context(self._client_session(read_stream, write_stream))
@@ -245,13 +277,11 @@ class MCPClient:
             # Connection timeout stays on the SDK client (30s / 300s read).
             # spec timeout is call_tool read_timeout_seconds, not the HTTP budget.
             http_client = self.http_client() if callable(self.http_client) else self.http_client
-            if http_client is not None:
-                transport = await stack.enter_async_context(streamable_http_client(self.url, http_client=http_client))
-            elif self.headers:
-                http_client = await stack.enter_async_context(create_mcp_http_client(headers=self.headers))
-                transport = await stack.enter_async_context(streamable_http_client(self.url, http_client=http_client))
-            else:
-                transport = await stack.enter_async_context(streamable_http_client(self.url))
+            if http_client is None:
+                http_client = await stack.enter_async_context(
+                    self._http_client(headers=self._revealed_headers() or None)
+                )
+            transport = await stack.enter_async_context(streamable_http_client(self.url, http_client=http_client))
             read_stream, write_stream = _streams_from_transport(transport)
             session = await stack.enter_async_context(self._client_session(read_stream, write_stream))
             await session.initialize()
@@ -260,7 +290,9 @@ class MCPClient:
         if not self.command:
             raise ValueError("MCP client requires a command to start the server")
 
-        params = StdioServerParameters(command=self.command, args=self.args, env=self.env or None, cwd=self.cwd)
+        params = StdioServerParameters(
+            command=self.command, args=self.args, env=self._stdio_env() or None, cwd=self.cwd
+        )
         transport = await stack.enter_async_context(stdio_client(params))
         read_stream, write_stream = _streams_from_transport(transport)
         session = await stack.enter_async_context(self._client_session(read_stream, write_stream))

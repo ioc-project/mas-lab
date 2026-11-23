@@ -6,16 +6,14 @@ kind: LLMProxy
 metadata:
   name: openai-proxy
   description: >
-    OpenAI-compatible API gateway. Configure via environment variables:
-    LLM_PROXY_API_BASE (endpoint URL, defaults to https://api.openai.com/v1),
-    LLM_PROXY_API_KEY_ENV (name of the env var holding the API key, defaults
-    to OPENAI_API_KEY).
+    OpenAI-compatible API gateway. api_base is the endpoint URL (change it
+    with an overlay). The key is `{secret: openai}` (`mas-ctl secrets set openai`).
 
 spec:
   protocol: openai
   proxy:
-    api_base: env:LLM_PROXY_API_BASE|https://api.openai.com/v1
-    api_key_env: env:LLM_PROXY_API_KEY_ENV|OPENAI_API_KEY
+    api_base: https://api.openai.com/v1
+    api_key: {secret: openai}
 
   models:
     mappings:

@@ -110,7 +110,6 @@ export const promptInputPlugin = {
         query: text,
         ref: { ...ctx.dataSource, batch },
         timeout: ctx.config.timeout || undefined,
-        pre: targets.flatMap((item) => item?.pre || []),
         targets,
         batch,
       };
@@ -932,7 +931,6 @@ export const liveRunPlugin = {
           experiment,
           ref: { ...ctx.dataSource, batch, mode: "live" },
           timeout: ctx.config.timeout || undefined,
-          pre: targets.flatMap((item) => item?.pre || []),
           targets,
           batch,
           ...(allowLiveFallback === undefined ? {} : { allow_live_fallback: Boolean(allowLiveFallback) }),

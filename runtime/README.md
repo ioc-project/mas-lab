@@ -43,18 +43,18 @@ uv sync --all-packages          # full monorepo; wheel names are in docs/package
 
 ### Credentials
 
-Secrets are never embedded in manifests. Set environment variables or use a
-`.env` file (see [docs/user-config.md](../docs/user-config.md)):
+Secrets are never embedded in manifests. Store the key in the file store
+(see [docs/references/secrets.md](../docs/references/secrets.md)):
 
 ```bash
-export OPENAI_API_KEY=sk-...
+echo KEY | mas-ctl secrets set openai
 ```
 
 ### Infrastructure and flavours
 
 Manifests reference **infra bundles** and **flavours** from `library-standard`
 (`local`, `mock`, `local-benchmark`, …). Only secret *names* appear in YAML
-(`api_key_env: OPENAI_API_KEY`).
+(`api_key: {secret: openai}`).
 
 See [docs/plugin-flavours.md](docs/plugin-flavours.md).
 

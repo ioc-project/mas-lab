@@ -1,12 +1,13 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
 """Load experiment pipeline steps into memory — inline, named ref, or app bundle.
 
 After :func:`resolve_pipeline_specs`, execution is identical regardless of source.
 Uses :mod:`mas.runtime.spec.source` for path / app resolution (same as other manifests).
 A neighbouring file is not loaded unless the manifest or CLI ``--pipeline`` names it.
 """
+
+from __future__ import annotations
 
 import logging
 from pathlib import Path
@@ -113,12 +114,7 @@ def _load_specs_from_yaml(path: Path) -> list:
     from mas.lab.benchmark.pipeline import Pipeline
     from mas.lab.lab.config import PipelineStepSpec
 
-    try:
-        step_dicts = Pipeline.step_dicts_from_yaml(path)
-    except Exception as exc:
-        logger.warning("Failed to load pipeline from %s: %s", path, exc)
-        return []
-
+    step_dicts = Pipeline.step_dicts_from_yaml(path)
     return [PipelineStepSpec.from_dict(dict(step_data)) for step_data in step_dicts]
 
 

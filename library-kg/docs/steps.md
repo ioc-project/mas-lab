@@ -391,8 +391,7 @@ def run_neo4j_push(
     *,
     uri: Optional[str] = None,
     username: Optional[str] = None,
-    password: Optional[str] = None,
-    password_env: Optional[str] = None,
+    password: object = None,
     database: Optional[str] = None,
     batch_size: int = 200,
     app_name: str = "",
@@ -410,8 +409,7 @@ def run_neo4j_push(
 | `artifact` | required | KG to push. |
 | `uri` | `None` | Bolt URI. Falls back to `NEO4J_URI`, then `bolt://localhost:7687`. |
 | `username` | `None` | Falls back to `NEO4J_USER`. |
-| `password` | `None` | Literal password. Prefer `password_env`. |
-| `password_env` | `None` | Name of the environment variable that holds the password. Falls back to `NEO4J_PASSWORD`. |
+| `password` | `None` | SecretRef for the password (default `{secret: neo4j}`). |
 | `database` | `None` | Falls back to `NEO4J_DB_AGENT`, then `"neo4j"`. |
 | `batch_size` | `200` | `UNWIND` batch size for Cypher writes. |
 | `app_name` | `""` | Written as `appName` on every node and edge. |
@@ -438,19 +436,19 @@ Return value:
 ```bash
 export NEO4J_URI=bolt://neo4j.example.com:7687
 export NEO4J_USER=neo4j
-export NEO4J_PASSWORD=...        # your database password
 export NEO4J_DB_AGENT=mas
+echo PASS | mas-ctl secrets set neo4j
 ```
 
 ```python
 result = run_neo4j_push("data/run-001/kg.jsonld", app_name="my-agent-app")
 
-# Explicit connection; the password comes from os.environ["MY_NEO4J_SECRET"]
+# Explicit connection; the password is a SecretRef
 result = run_neo4j_push(
     artifact,
     uri="bolt://neo4j.internal:7687",
     username="neo4j",
-    password_env="MY_NEO4J_SECRET",
+    password={"secret": "neo4j"},
     database="mas-runs",
     app_name="my-agent-app",
     source="lab-experiment-7",
@@ -474,8 +472,7 @@ def run_neo4j_dump(
     output_path: Optional[str | Path] = None,
     uri: Optional[str] = None,
     username: Optional[str] = None,
-    password: Optional[str] = None,
-    password_env: Optional[str] = None,
+    password: object = None,
     database: Optional[str] = None,
 ) -> KGArtifact
 ```
@@ -485,7 +482,7 @@ def run_neo4j_dump(
 | `session_id` | `None` | Session to retrieve (preferred over `run_id`). |
 | `run_id` | `None` | Run to retrieve when `session_id` is absent. Pass at least one of the two; otherwise the function raises `ValueError`. |
 | `output_path` | `None` | Save the fetched `KGArtifact` here. |
-| `uri`, `username`, `password`, `password_env`, `database` | `None` | Same fallbacks as [`run_neo4j_push`](#run_neo4j_push). |
+| `uri`, `username`, `password`, `database` | `None` | Same fallbacks as [`run_neo4j_push`](#run_neo4j_push). |
 
 Returns the `KGArtifact` reconstructed from Neo4j.
 
@@ -494,7 +491,7 @@ artifact = run_neo4j_dump(
     session_id="sess-abc-001",
     uri="bolt://neo4j.internal:7687",
     username="neo4j",
-    password_env="MY_NEO4J_SECRET",
+    password={"secret": "neo4j"},
     database="mas-runs",
     output_path="backup/sess-abc-001.kg.jsonld",
 )
@@ -574,7 +571,7 @@ parity = run_compare_kg(artifact, Path("reference/kg.jsonld"),
                         output_path=OUTPUT_DIR / "parity_report.json")
 print("Parity:", "PASS" if parity["passed"] else "FAIL")
 
-# 5. Push; the connection comes from NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DB_AGENT
+# 5. Push; URI/user/database from host, password from `{secret: neo4j}`
 push_result = run_neo4j_push(artifact, app_name="my-experiment", source="run-007")
 print(push_result["nodes"], push_result["edges"], push_result["uri"])
 ```
@@ -595,8 +592,8 @@ what it writes to the step output directory.
 | `normalize_otel` | `run_normalize_otel` | `spans_path`, `filename`, `run_id`, `all_attributes`, `artifact` (default `kg_otel`) | `kg.jsonld` |
 | `validate_kg` | `run_validate_kg` | `kg_path`, `ontology_path`, `strict`, `fail_on_error` | `kg_validation_report.json` |
 | `compare_kg` | `run_compare_kg` | `reference_artifact`, `candidate_artifact`, `reference_kg_path`, `candidate_kg_path`, `strict`, `strict_nodes`, `strict_edges`, `strict_node_attributes`, `strict_edge_attributes`, `fail_on_error`, `node_types` | `kg_compare_report.json` |
-| `neo4j_push` | `run_neo4j_push` | `kg_path`, `infra`, `uri`, `username`, `password_env`, `database`, `app_name`, `batch_size`, `clear_session`, `dry_run` | push summary |
-| `neo4j_dump` | `run_neo4j_dump` | `session_id`, `run_id`, `infra`, `uri`, `username`, `password_env`, `database` | `kg.jsonld` |
+| `neo4j_push` | `run_neo4j_push` | `kg_path`, `infra`, `uri`, `username`, `password`, `database`, `app_name`, `batch_size`, `clear_session`, `dry_run` | push summary |
+| `neo4j_dump` | `run_neo4j_dump` | `session_id`, `run_id`, `infra`, `uri`, `username`, `password`, `database` | `kg.jsonld` |
 
 A step finds its input from its own config, from the run directory (`events.jsonl`,
 `otel_sdk_spans.jsonl`), or from the output of a step named in `depends_on` (for example

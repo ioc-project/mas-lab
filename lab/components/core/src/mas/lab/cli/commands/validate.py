@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import click
-import yaml
+from mas.runtime.spec.yaml_errors import YAML_ERROR_PREFIX, YamlLoadError, safe_yaml_load
 
 
 @click.command("validate")
@@ -92,10 +92,10 @@ def validate_cmd(
             continue
 
         try:
-            with manifest_path.open(encoding="utf-8") as fh:
-                data = yaml.safe_load(fh)
-        except Exception as exc:
-            click.echo(f"FAIL   {manifest_path_str}  [YAML parse error: {exc}]", err=True)
+            data = safe_yaml_load(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:  # a YamlLoadError is position only; anything else by its type
+            detail = exc if isinstance(exc, YamlLoadError) else type(exc).__name__
+            click.echo(f"FAIL   {manifest_path_str}  [{YAML_ERROR_PREFIX} {detail}]", err=True)
             failed += 1
             continue
 

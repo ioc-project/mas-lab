@@ -95,12 +95,6 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "List native event kinds with a span handler",
         "telemetry",
     ),
-    ManPage(
-        "mas-lab telemetry list-apps",
-        "library-telemetry/docs/cli/list-apps.md",
-        "List apps in ClickHouse otel_traces",
-        "telemetry",
-    ),
     # --- library-kg ---
     ManPage(
         "mas-lab kg",
@@ -177,21 +171,15 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "Print resolved data and cache paths",
         "lab",
     ),
-    ManPage(
-        "mas-lab check", "lab/docs/cli/check.md", "Validate a MAS configuration", "lab"
-    ),
+    ManPage("mas-lab check", "lab/docs/cli/check.md", "Validate a MAS configuration", "lab"),
     ManPage(
         "mas-lab check-config",
         "lab/docs/cli/check-config.md",
         "Validate workspace / experiment config",
         "lab",
     ),
-    ManPage(
-        "mas-lab validate", "lab/docs/cli/validate.md", "Validate YAML manifests", "lab"
-    ),
-    ManPage(
-        "mas-lab serve", "lab/docs/cli/serve.md", "Start the benchmark UI server", "lab"
-    ),
+    ManPage("mas-lab validate", "lab/docs/cli/validate.md", "Validate YAML manifests", "lab"),
+    ManPage("mas-lab serve", "lab/docs/cli/serve.md", "Start the benchmark UI server", "lab"),
     ManPage(
         "mas-lab telemetry show",
         "lab/docs/cli/telemetry-show.md",
@@ -233,12 +221,6 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "lab/docs/cli/telemetry-traces-list.md",
         "List native telemetry traces",
         "lab",
-    ),
-    ManPage(
-        "mas-lab otel",
-        "library-telemetry/docs/cli/otel.md",
-        "Alias of mas-lab telemetry",
-        "telemetry",
     ),
     ManPage(
         "mas-lab plot",
@@ -294,9 +276,7 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "Discover generated plot artefacts",
         "plot",
     ),
-    ManPage(
-        "mas-lab run", "lab/docs/cli/run.md", "Run processors and pipeline steps", "run"
-    ),
+    ManPage("mas-lab run", "lab/docs/cli/run.md", "Run processors and pipeline steps", "run"),
     ManPage(
         "mas-lab run processor",
         "lab/docs/cli/run-processor.md",
@@ -556,9 +536,7 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "control",
     ),
     ManPage("mas-lab worker", "lab/docs/cli/worker.md", "Background workers", "worker"),
-    ManPage(
-        "mas-lab worker list", "lab/docs/cli/worker-list.md", "List workers", "worker"
-    ),
+    ManPage("mas-lab worker list", "lab/docs/cli/worker-list.md", "List workers", "worker"),
     ManPage(
         "mas-lab worker show",
         "lab/docs/cli/worker-show.md",
@@ -622,8 +600,7 @@ def render_man(
 ) -> str:
     title = slug(page.command)
     opts = options.strip() or (
-        f"See `{page.command} --help` for the current flag list "
-        "(Click help is the source of truth)."
+        f"See `{page.command} --help` for the current flag list (Click help is the source of truth)."
     )
     see = "\n".join(f"- `{name}`" for name in see_also) or "- `mas-lab --help`"
     pipe = f"\n## PIPELINE\n\n`{pipeline}`\n" if pipeline else ""
@@ -655,18 +632,14 @@ def click_options_markdown(cmd: object) -> str:
         if not isinstance(param, click.Option):
             continue
         flags = ", ".join(f"`{opt}`" for opt in (*param.opts, *param.secondary_opts))
-        help_text = (param.help or "").replace("|", "\\|").replace(
-            "\n", " "
-        ).strip() or "—"
+        help_text = (param.help or "").replace("|", "\\|").replace("\n", " ").strip() or "—"
         rows.append(f"| {flags} | {help_text} |")
     if not rows:
         return "This command takes no extra flags. See `--help` for inherited group options."
     return "| Flag | Meaning |\n|------|------|\n" + "\n".join(rows)
 
 
-def walk_click_commands(
-    group: object, prefix: str = "mas-lab"
-) -> list[tuple[str, object]]:
+def walk_click_commands(group: object, prefix: str = "mas-lab") -> list[tuple[str, object]]:
     """Depth-first `(command string, click object)` for *group* and its leaves."""
     out: list[tuple[str, object]] = [(prefix, group)]
     commands = getattr(group, "commands", None) or {}

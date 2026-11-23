@@ -31,6 +31,7 @@ from mas.runtime.engine.tool_routing import (
     is_star_claim,
 )
 from mas.runtime.registry.provider_protocol import ToolProvider
+from mas.runtime.reliability.classify import safe_exception_text
 from mas.runtime.spec.endpoint_usage import usage_connects
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,9 @@ def apply_tool_server_defaults(
             out[key] = server[key]
     if _connection_unset(out.get("url")) and not _connection_unset(server.get("endpoint")):
         out["url"] = server["endpoint"]
+    from mas.runtime.secrets.manifest import check_manifest
+
+    check_manifest(out)  # removed keys, header secrets, URL credentials
     return out
 
 
@@ -226,9 +230,10 @@ class ToolProviderRegistry:
         try:
             advertised_specs = discover(ctx=ctx) or []
         except Exception as exc:
-            logger.error("Error discovering tools from provider %s: %s", name, exc, exc_info=True)
+            shown = safe_exception_text(exc)
+            logger.error("Error discovering tools from provider %s: %s", name, shown)
             raise RuntimeError(
-                f"provider {name!r} advertised tools: '*' but discovery failed; refusing local fallback: {exc}"
+                f"provider {name!r} advertised tools: '*' but discovery failed; refusing local fallback: {shown}"
             ) from exc
         return _tool_names(advertised_specs)
 
@@ -238,7 +243,7 @@ class ToolProviderRegistry:
             available = set(_tool_names(provider.list_tools(ctx=ctx) or []))
         except Exception as exc:
             raise ExplicitToolUnavailableError(
-                f"provider {name!r} claims {list(claimed)} but availability check failed: {exc}"
+                f"provider {name!r} claims {list(claimed)} but availability check failed: {safe_exception_text(exc)}"
             ) from exc
         missing = [n for n in claimed if n not in available]
         if missing:
@@ -313,7 +318,7 @@ class ToolProviderRegistry:
             try:
                 listed = handler.list_tools(ctx=ctx)
             except Exception as exc:
-                logger.error("Error listing tools from provider %s: %s", handler, exc, exc_info=True)
+                logger.error("Error listing tools from provider %s: %s", handler, safe_exception_text(exc))
                 listed = []
             cache[key] = _as_spec_list(listed, handler)
         for spec in cache[key]:

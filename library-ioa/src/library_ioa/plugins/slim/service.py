@@ -9,6 +9,8 @@ from typing import Any
 
 from mas.library.standard.lib.comm.names import parse_name
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
+from mas.runtime.secrets import SecretRef, current_resolver
+from mas.runtime.secrets.ref import is_ref, parse_secret_ref
 
 from library_ioa.plugins.slim.actor import ConnectionActor
 from library_ioa.plugins.slim.endpoint import require_secret
@@ -22,8 +24,8 @@ class SlimService:
     """One ``ConnectionActor`` that every agent's ``SlimAgentComm`` on a stack uses.
 
     A stack creates it once (``SlimAgentComm.shared_service``), starts it
-    before the first agent and closes it after the last. The secret is a
-    value: whoever reads the environment passes it in.
+    before the first agent and closes it after the last. ``secret`` is a
+    SecretRef (or a literal from the CLI ``--secret-file`` path).
     """
 
     def __init__(
@@ -31,7 +33,7 @@ class SlimService:
         *,
         identity: str = "",
         url: str = "",
-        secret: str = "",
+        secret: SecretRef | str = "",
         dev: bool = False,
         timeout_s: float = 2.0,
         reply_timeout_s: float = 120.0,
@@ -41,7 +43,12 @@ class SlimService:
         address = str(url or "").strip()
         if not address:
             raise AgentCommError("SLIM layer requires url")
-        require_secret(secret)
+        if is_ref(secret):
+            self._secret_ref: SecretRef | None = parse_secret_ref(secret, field="secret")
+            self._secret_literal = ""
+        else:
+            self._secret_ref = None
+            self._secret_literal = require_secret(str(secret))
         if str(auth_mode or "shared_secret") != "shared_secret":
             raise AgentCommError("SLIM layer auth_mode must be shared_secret, the only mode there is")
         for label, seconds in (("timeout_s", timeout_s), ("reply_timeout_s", reply_timeout_s)):
@@ -57,7 +64,6 @@ class SlimService:
         if "." in parts[2]:
             raise AgentCommError(f"SLIM service cannot contain '.': {parts[2]!r}")
         self.identity = "/".join(parts)
-        self.secret = str(secret)
         self.max_message_size = max_message_size
         self.actor = ConnectionActor(
             endpoint=address,
@@ -75,11 +81,25 @@ class SlimService:
             raise AgentCommError(f"SLIM layer: unknown params {sorted(unknown)}")
         return cls(**dict(params))
 
+    def reveal_secret(self) -> str:
+        """The shared secret, revealed at the call that needs it."""
+        if self._secret_ref is not None:
+            value = current_resolver().reveal(self._secret_ref)
+            return require_secret(value)
+        return require_secret(self._secret_literal)
+
     def __repr__(self) -> str:
         return f"SlimService(identity={self.identity!r})"
 
     def start(self) -> None:
         if not self._started:
+            if self._secret_ref is not None:
+                from mas.runtime.secrets.errors import SecretMissing
+
+                if not current_resolver().describe(self._secret_ref).present:
+                    raise SecretMissing(self._secret_ref)
+            else:
+                require_secret(self._secret_literal)
             self.actor.start()
             self._started = True
 

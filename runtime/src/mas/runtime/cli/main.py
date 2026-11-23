@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import sys
 
+from mas.runtime.entrypoint import install_host_environment
+
 
 def main() -> None:
+    install_host_environment()
     sys.stderr.write(
         "The mas-runtime CLI was removed. Use mas-ctl instead:\n"
-        "  mas-ctl chat <manifest> -q \"...\"\n"
+        '  mas-ctl chat <manifest> -q "..."\n'
         "  mas-ctl validate <manifest>\n"
         "Library API: mas.runtime + mas.ctl.session.bootstrap\n"
     )

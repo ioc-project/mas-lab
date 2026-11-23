@@ -187,7 +187,7 @@ spec:
 
 Agent overlays can patch `spec.models[]`.
 The patch deep-merges by `id`, then `model`, then `main`.
-Connection fields (`api_base`, `api_key_env`) stay infra-only.
+Connection fields (`api_base`, `api_key`) stay infra-only.
 
 ```yaml
 kind: Overlay

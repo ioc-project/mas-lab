@@ -122,7 +122,7 @@ spec:
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent: row name to `{param: value}`. A string value may hold `{agent}`. |
 | `bind.agents.<id>.llm` | That agent's llm stack, instead of `bind.llm`. `{stack: NAME}`. |
 | `bind.agents.<id>.tools` | That agent's tool stack, instead of `bind.tools`. `{stack: NAME}`. |
-| `bind.events` | Application row names of observability sinks this deployment uses. Each row adds the plugin its `protocol` names and gives it the row's own settings (not `url`, `secret_env` or the other endpoint keys). Native `events.jsonl` still records. `--no-events` and an explicit `--events-format` replace the set. |
+| `bind.events` | Application row names of observability sinks this deployment uses. Each row adds the plugin its `protocol` names and gives it the row's own settings (not `url`, `secret` or the other endpoint keys). Native `events.jsonl` still records. `--no-events` and an explicit `--events-format` replace the set. |
 | `bind.llm` | `{stack: NAME}` naming a `kind: Stack` infra row. Default llm stack for every agent that omits its own. Those layers wrap llm calls the way `bind.agent_comm` wraps send. |
 | `bind.tools` | `{stack: NAME}` naming a `kind: Stack` infra row. Default wrap layers (retry, impair) for every agent that omits its own. `http` and `mcp` belong on the tool-server row (`protocol: mcp`), not this stack. |
 

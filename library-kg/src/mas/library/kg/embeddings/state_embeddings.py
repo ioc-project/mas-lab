@@ -212,15 +212,13 @@ def default_openai_embed_fn(
     """Build an embed function using the OpenAI-compatible embeddings API."""
 
     def _fn(texts: Sequence[str]) -> List[Optional[List[float]]]:
+        from mas.library.standard.lib.openai_client import build_openai_client
+
         try:
-            from openai import OpenAI
+            client = build_openai_client(api_key, api_base)
         except ImportError:
             logger.error("openai package required for embeddings")
             return [None] * len(texts)
-        client_kwargs: Dict[str, Any] = {"api_key": api_key}
-        if api_base:
-            client_kwargs["base_url"] = api_base
-        client = OpenAI(**client_kwargs)
         non_empty = [(i, t) for i, t in enumerate(texts) if str(t).strip()]
         batch_results: List[Optional[List[float]]] = [None] * len(texts)
         if non_empty:
@@ -231,14 +229,18 @@ def default_openai_embed_fn(
                 )
                 for j, (orig_idx, _) in enumerate(non_empty):
                     batch_results[orig_idx] = resp.data[j].embedding
-            except Exception:
-                # A failed batch returns None for each of its texts -- the
-                # caller (attach_embeddings_to_kg's "attached" count,
-                # embed_states.py's "embedded" count) already surfaces
-                # partial failure by comparing that against the total
-                # state count; this does not need its own extra signal,
-                # just a real traceback instead of a bare message.
-                logger.exception("Embedding API error for a batch of %d text(s)", len(non_empty))
+            except Exception as exc:
+                from mas.runtime.reliability.classify import error_summary
+
+                # A failed batch returns None for each of its texts: the callers count
+                # what was embedded against the total. The log says the error's type
+                # and status only, never its text (an SDK error's text is the
+                # provider's body, which may echo the key) nor its traceback.
+                logger.error(
+                    "Embedding API error for a batch of %d text(s): %s",
+                    len(non_empty),
+                    error_summary(exc),
+                )
         return batch_results
 
     return _fn

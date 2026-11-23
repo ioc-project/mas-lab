@@ -820,7 +820,7 @@ def test_merge_infra_overlay_json_merge_patch_semantics() -> None:
         "kind": "Infra",
         "metadata": {"name": "default"},
         "spec": {
-            "proxy": {"api_base": "https://api.example", "api_key_env": "OPENAI_API_KEY"},
+            "proxy": {"api_base": "https://api.example", "api_key": {"secret": "openai"}},
             "models": {"allowed": ["gpt-4o-mini"]},
             "tools": {"web": {"kind": "python"}},
         },
@@ -836,7 +836,7 @@ def test_merge_infra_overlay_json_merge_patch_semantics() -> None:
     merged = merge_overlay(base, ov)
     assert merged["spec"]["proxy"] == {
         "api_base": "https://new.example",
-        "api_key_env": "OPENAI_API_KEY",
+        "api_key": {"secret": "openai"},
     }
     assert merged["spec"]["models"] == {"allowed": ["gpt-4o"]}
     assert merged["spec"]["tools"] == {"calc": {"kind": "python"}}

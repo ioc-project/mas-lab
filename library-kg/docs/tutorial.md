@@ -96,8 +96,9 @@ export NEO4J_URI=bolt://localhost:7687
 
 `NEO4J_URI` is a shortcut for the shipped manifest
 [`infra/local-neo4j.yaml`](../infra/local-neo4j.yaml), which you can also pass with
-`--infra`. The manifest holds the name of the password variable, never the password. With
-the authentication-free compose file, leave that variable unset.
+`--infra`. The manifest holds a SecretRef, never the password
+(`echo PASS | mas-ctl secrets set neo4j`). With the authentication-free compose file,
+store an empty value (`echo | mas-ctl secrets set neo4j`).
 
 ```yaml
 apiVersion: mas/v1
@@ -110,7 +111,7 @@ spec:
       uri: bolt://localhost:7687
       database: neo4j
       username: neo4j
-      password_env: NEO4J_PASSWORD   # name of the env var, never the value
+      password: {secret: neo4j}   # value lives in the secret store
 ```
 
 Reference: [neo4j.md, Infra manifest](neo4j.md#infra-manifest).

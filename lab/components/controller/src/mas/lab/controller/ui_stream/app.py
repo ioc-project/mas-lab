@@ -403,7 +403,6 @@ class CommandBody(BaseModel):
     infra_refs: list[str] = Field(default_factory=list)
     timeout: int = 0
     targets: list[dict[str, Any]] = Field(default_factory=list)
-    pre: list[dict[str, Any]] = Field(default_factory=list)
     experiment: str = ""
     batch: str = ""
     speed: float = 0.0
@@ -1017,6 +1016,9 @@ async def post_stream(body: StreamFrameBody, _: None = Depends(authorize_http)) 
 
 @router.post("/api/commands")
 async def commands(body: CommandBody, _: None = Depends(authorize_http)) -> dict[str, Any]:
+    from mas.lab.controller.manifest_validation import refuse_secret_fields
+
+    refuse_secret_fields(body.model_dump())
     nonce = str(body.nonce or "").strip() or None
     token = use_nonce(nonce) if nonce else None
     try:
@@ -1578,7 +1580,6 @@ async def _pump_envelopes(
 async def _start_live_experiment(body: CommandBody, ref: DataSourceRef) -> dict[str, Any]:
     from mas.lab.controller.api import get_controller_api
     from mas.lab.controller.routes.experiments import resolve_experiment_path
-    from mas.lab.controller.routes.run import _run_pre_steps
 
     if not ref.library:
         raise HTTPException(status_code=400, detail="needs: library")
@@ -1586,11 +1587,6 @@ async def _start_live_experiment(body: CommandBody, ref: DataSourceRef) -> dict[
     if not experiment:
         raise HTTPException(status_code=400, detail="needs: experiment")
     lib_dir = _lib_dir(ref.library)
-    pre = list(body.pre or [])
-    for item in body.targets or []:
-        if isinstance(item, dict):
-            pre.extend(item.get("pre") or [])
-    _run_pre_steps(lib_dir, pre)
     experiment_path = resolve_experiment_path(lib_dir, experiment)
     ingest = hostenv.get("MAS_DEMO_UI_INGEST_URL") or _controller_ingest_url()
     target_refs = [ref.merge(item) if isinstance(item, dict) else ref for item in (body.targets or [])]
@@ -1610,7 +1606,6 @@ async def _start_live_experiment(body: CommandBody, ref: DataSourceRef) -> dict[
         "scenario_overlays": scenario_overlays,
         "demo_ui_ingest_url": ingest,
         "demo_ui_ref": {k: v for k, v in _stamp_ui(ref).as_dict().items() if k != "scenario"},
-        "pre": pre,
         "endpoint": f"/api/libraries/{ref.library}/experiment/run",
         "command": f"mas-lab experiment run {experiment_path.name}",
     }

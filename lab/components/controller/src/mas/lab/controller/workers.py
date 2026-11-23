@@ -7,18 +7,34 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import tempfile
 import threading
 import time
+import traceback
 from pathlib import Path
 from typing import Any, Callable
 
 from mas.lab.controller.io_capture import capture_worker_io
+from mas.lab.controller.jobs import job_error_text, yaml_error_in_chain
 from mas.lab.controller.registry import WorkerRegistry
 from mas.lab.controller.worker_model import WorkerKind, WorkerRecord, WorkerStatus
 from mas.runtime.aio import new_thread
 
 logger = logging.getLogger(__name__)
+
+
+def _print_failure() -> None:
+    """Print the exception being handled into the captured stream.
+
+    A failure that comes from a YAML error prints its type and position only: the traceback
+    would carry the error's text, which quotes the document.
+    """
+    exc = sys.exc_info()[1]
+    if exc is not None and yaml_error_in_chain(exc) is not None:
+        print(job_error_text(exc), file=sys.stderr)
+        return
+    traceback.print_exc()
 
 
 class WorkerRunner:
@@ -52,11 +68,15 @@ class WorkerRunner:
                     record.exit_code = 0
                     record.result = result
             except Exception as exc:
-                logger.exception("Worker %s failed", record.id)
+                text = job_error_text(exc)
+                if yaml_error_in_chain(exc) is None:
+                    logger.exception("Worker %s failed", record.id)
+                else:
+                    logger.error("Worker %s failed: %s", record.id, text)
                 record.status = WorkerStatus.FAILED
                 record.exit_code = 1
-                record.error = str(exc)
-                record.append_stderr(str(exc))
+                record.error = text
+                record.append_stderr(text)
             finally:
                 record.finished_at = time.time()
                 self._cancel_flags.pop(record.id, None)
@@ -71,6 +91,9 @@ class WorkerRunner:
 
 
 def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec: dict) -> WorkerRecord:
+    from mas.lab.secret_host import refuse_other_store
+
+    refuse_other_store(spec.get("secrets"))
     experiment_yaml = Path(spec["experiment_yaml"])
     cmd_parts = ["mas-lab", "benchmark", "run", str(experiment_yaml)]
     for flag in ("force", "dry_run", "single_run", "force_lock"):
@@ -85,8 +108,6 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
     )
 
     def _execute() -> bool:
-        import traceback
-
         from mas.lab.benchmark.engine import BenchmarkRunOptions, run_benchmark
 
         with capture_worker_io(record):
@@ -100,7 +121,7 @@ def run_benchmark_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec:
             except Exception:
                 # Print the full traceback into the captured stream, then re-raise
                 # so the CLI shows the real cause, not just "benchmark run failed".
-                traceback.print_exc()
+                _print_failure()
                 raise
             if not ok:
                 raise RuntimeError("benchmark run failed — see the logged error above for the cause")
@@ -142,8 +163,6 @@ def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec
     )
 
     def _execute() -> bool:
-        import traceback
-
         from mas.lab.benchmark.engine import BenchmarkRunOptions, run_benchmark
 
         live_spec = _run_spec_with_demo_ui(spec)
@@ -160,7 +179,7 @@ def run_experiment_worker(registry: WorkerRegistry, runner: "WorkerRunner", spec
                     )
                 )
             except Exception:
-                traceback.print_exc()
+                _print_failure()
                 raise
             finally:
                 os.chdir(prev_cwd)

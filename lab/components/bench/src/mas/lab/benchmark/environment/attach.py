@@ -320,8 +320,16 @@ def control_refs_for_run(*, loaded: Sequence[str], control_path: Path | None) ->
     return refs
 
 
+# The secret the loopback model's proxy row names, as optional: a scripted model ignores the key.
+FIXTURE_LLM_SECRET = "lab"
+
+
 def write_fixture_llm_infra(path: Path, url: str, *, name: str = "openai-direct") -> Path:
-    """Point the session LLM at a loopback OpenAI-compatible fixture."""
+    """Point the session LLM at a loopback OpenAI-compatible fixture.
+
+    The proxy row is keyless: its ``api_key`` names :data:`FIXTURE_LLM_SECRET` as optional, so a
+    run needs no secret in the store; one that is there is sent to the loopback fixture only.
+    """
     import yaml
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -334,7 +342,7 @@ def write_fixture_llm_infra(path: Path, url: str, *, name: str = "openai-direct"
         "metadata": {"name": name},
         "spec": {
             "protocol": "openai",
-            "proxy": {"api_base": base, "api_key": "lab"},
+            "proxy": {"api_base": base, "api_key": {"secret": {"name": FIXTURE_LLM_SECRET, "optional": True}}},
             "models": {
                 "allowed": ["scripted", "any"],
                 "mappings": {"default": "scripted", "any": "scripted"},

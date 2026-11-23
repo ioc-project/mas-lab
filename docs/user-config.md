@@ -111,7 +111,7 @@ and [`lab/components/core/src/mas/lab/templates/infra/llmprovider.yaml`](https:/
 ### 3. Set API key
 
 ```bash
-export OPENAI_API_KEY=sk-...
+echo KEY | mas-ctl secrets set openai
 ```
 
 ### 4. Run without --infra-ref
@@ -189,10 +189,9 @@ ref overrides log a warning when applied.
 | `MAS_LLM_HTTP_RETRIES` | Last-resort interactive override of extra LLM HTTP retries (`attempts = retries + 1`). Prefer a `retry` layer on the infra pipeline — [reliability.md](references/reliability.md) |
 | `MAS_LLM_HTTP_RETRY_BACKOFF` | Last-resort interactive override of LLM HTTP base backoff seconds (also disables jitter) |
 | `MAS_HOME`, `MAS_CONTROLLER_SOCKET` | Controller data root / socket |
-| `HF_TOKEN` | Hugging Face token for `benchmark publish-hf` and `import-hf` (use `--token` / `--token-file`) |
 
-Secrets (`OPENAI_API_KEY`, proxy credentials) are the exception: they belong
-in the environment, never in YAML.
+Secrets (`api_key`, proxy credentials) belong in the file store
+(`mas-ctl secrets set`), never in YAML.
 
 Relative paths in any config file (`config.yaml` or `$XDG_CONFIG_HOME/mas/config.yaml`)
 resolve from **that file's directory** — e.g. with user config at

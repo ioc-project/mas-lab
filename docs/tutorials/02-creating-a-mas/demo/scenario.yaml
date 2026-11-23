@@ -14,7 +14,7 @@ prerequisites:
   - "mas-ctl and mas-lab on PATH"
   - "Tutorial 01 completed (overlays)"
   - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-02"
-  - "Online: OPENAI_API_KEY for mas-ctl run-mas steps"
+  - "Online: secret openai for mas-ctl run-mas steps"
 estimated_duration_min: 30
 working_dir: docs/tutorials/02-creating-a-mas # relative to repo root
 cache_dir: ".demo-cache"

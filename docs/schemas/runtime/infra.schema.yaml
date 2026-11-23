@@ -67,12 +67,17 @@ properties:
     type: object
     description: >
       Kind-specific infrastructure specification. Connection values belong
-      in this document. ``env:VAR_NAME|default`` is an optional override of
-      a manifest default (URLs, API bases). ``env:VAR_NAME`` is for secrets
-      (empty when unset). Fields ending in ``_env`` (e.g.
-      ``api_key_env``, ``password_env``) are secretKeyRef names and must
-      be literal env var names, not ``env:`` lookups.
+      in this document. Secrets are SecretRef objects (``{secret: NAME}``).
+      Hosts and API bases are plain overlay values. The ``env:`` prefix and
+      ``*_env`` keys are removed.
     additionalProperties: true
+    not:
+      anyOf:
+        - required: [api_key_env]
+        - required: [secret_env]
+        - required: [password_env]
+        - required: [embed_api_key_env]
+        - required: [otlp_endpoint_env]
     allOf:
       - $ref: "./fragments/infra-middleware-params-by-id.schema.yaml"
     properties:
@@ -187,18 +192,25 @@ properties:
       proxy:
         type: object
         additionalProperties: true
+        not:
+          anyOf:
+            - required: [api_key_env]
+            - required: [secret_env]
+            - required: [password_env]
+            - required: [embed_api_key_env]
+            - required: [otlp_endpoint_env]
         properties:
           api_base:
             type: string
+            description: OpenAI-compatible base URL. Set in the overlay or Flavour.
+          api_key:
             description: >
-              OpenAI-compatible base URL. Use ``env:LLM_PROXY_API_BASE|https://…``
-              for deploy-time injection (K8s ConfigMap / external secret).
-          api_key_env:
-            type: string
-            default: "OPENAI_API_KEY"
-            description: >
-              Name of the environment variable holding the API key (secretKeyRef).
-              Literal only — do not use ``env:`` syntax here.
+              SecretRef for the endpoint key. Omitted, the protocol's default secret (for example
+              ``openai``) is used only while ``api_base`` is empty or the protocol's own default endpoint;
+              any other host needs this set. ``{secret: {name: NAME, optional: true}}`` is for a server
+              that may take no key: no auth header is sent while the secret is not set.
+            allOf:
+              - $ref: "./fragments/secret-ref.schema.yaml"
           timeout:
             type: number
             description: >
@@ -211,8 +223,14 @@ properties:
         properties:
           api_base:
             type: string
-          api_key_env:
-            type: string
+          api_key:
+            description: >
+              SecretRef for the endpoint key (same rules as ``proxy.api_key``). Omitted, the protocol's default secret (for example
+              ``openai``) is used only while ``api_base`` is empty or the protocol's own default endpoint;
+              any other host needs this set. ``{secret: {name: NAME, optional: true}}`` is for a server
+              that may take no key: no auth header is sent while the secret is not set.
+            allOf:
+              - $ref: "./fragments/secret-ref.schema.yaml"
           timeout:
             type: number
             description: >
@@ -332,13 +350,13 @@ properties:
         type: array
         items:
           type: object
-          required: [id, api_key_env]
+          required: [id, api_key]
           additionalProperties: true
           properties:
             id:
               type: string
-            api_key_env:
-              type: string
+            api_key:
+              $ref: "./fragments/secret-ref.schema.yaml"
             description:
               type: string
 
@@ -362,8 +380,8 @@ properties:
               type: string
             user:
               type: string
-            password_env:
-              type: string
+            password:
+              $ref: "./fragments/secret-ref.schema.yaml"
             database:
               type: string
             description:
@@ -409,7 +427,13 @@ properties:
               type: boolean
             env:
               type: object
-              additionalProperties: true
+              description: >-
+                Variables of the service. A plain value is also exported to the run (overlay only); a
+                SecretRef (``{secret: NAME}``) is revealed into this service's own child only.
+              additionalProperties:
+                oneOf:
+                  - type: string
+                  - $ref: "./fragments/secret-ref.schema.yaml"
             health_check:
               type: object
               additionalProperties: true

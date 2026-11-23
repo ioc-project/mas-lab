@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 
-import pytest
+from fake_openai import FakeOpenAI, text
 from mas.library.eval.metrics.llm_json import complete_json, extract_json_object
 
 
@@ -15,61 +13,15 @@ def test_extract_json_object_from_fence() -> None:
     assert parsed == {"ok": True}
 
 
-class _ScriptedHandler(BaseHTTPRequestHandler):
-    script: list[object] = []
-    calls = 0
+def test_complete_json_retries_malformed(monkeypatch) -> None:
+    import mas.library.eval.mce.runner as runner
+    from mas.runtime.secrets import SecretRef
+    from secret_fakes import bound_secrets
 
-    def log_message(self, format: str, *args) -> None:  # noqa: A003
-        return
-
-    def do_POST(self) -> None:  # noqa: N802
-        length = int(self.headers.get("Content-Length", "0"))
-        self.rfile.read(length)
-        type(self).calls += 1
-        item = self.script[min(self.calls - 1, len(self.script) - 1)]
-        if item == "error":
-            self.send_response(500)
-            self.end_headers()
-            self.wfile.write(b'{"error":"boom"}')
-            return
-        if item == "malformed":
-            content = "not-json"
-        else:
-            content = json.dumps(item)
-        body = json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-
-@pytest.fixture
-def openai_server():
-    server = HTTPServer(("127.0.0.1", 0), _ScriptedHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    host, port = server.server_address
-    yield f"http://127.0.0.1:{port}/v1", _ScriptedHandler
-    server.shutdown()
-    thread.join(timeout=2)
-
-
-def test_complete_json_retries_malformed(openai_server, monkeypatch) -> None:
-    from openai import OpenAI
-
-    base_url, handler = openai_server
-    handler.script = ["malformed", {"label": "ok"}]
-    handler.calls = 0
-    client = OpenAI(api_key="test-key", base_url=base_url)
-    monkeypatch.setattr("mas.library.eval.mce.runner.get_openai_client", lambda: client)
-    monkeypatch.setattr(
-        "mas.library.eval.mce.runner.get_effective_judge_model",
-        lambda: "test-model",
-    )
-    parsed = complete_json(
-        [{"role": "user", "content": "return json"}],
-        retries=2,
-    )
+    replies = iter(["not-json", json.dumps({"label": "ok"})])
+    with FakeOpenAI(lambda _body: text(next(replies))) as fake, bound_secrets({"judge": "test-key"}):
+        service = runner._JudgeService(model="test-model", base_url=fake.url, api_key=SecretRef(name="judge"))
+        monkeypatch.setattr(runner, "_service", service)
+        parsed = complete_json([{"role": "user", "content": "return json"}], retries=2)
     assert parsed == {"label": "ok"}
-    assert handler.calls == 2
+    assert len(fake.bodies) == 2

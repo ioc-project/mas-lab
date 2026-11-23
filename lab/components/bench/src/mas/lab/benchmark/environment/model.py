@@ -70,7 +70,7 @@ class FixtureSpec:
     env_mode: Literal["inherit", "minimal"] = "inherit"
     stop_grace_s: float = 5.0
     keep_running: bool = False
-    env: Mapping[str, str] = field(default_factory=dict)
+    env: Mapping[str, Any] = field(default_factory=dict)  # strings or SecretRefs, revealed at spawn
     passthrough: tuple[str, ...] = ()
 
 
@@ -213,9 +213,9 @@ def compile_fixture(raw: Mapping[str, Any]) -> FixtureSpec:
     env_mode = str(raw.get("env_mode") or "inherit").strip().lower()
     if env_mode not in {"inherit", "minimal"}:
         raise ValueError(f"fixture {name!r}: env_mode must be inherit or minimal, got {raw.get('env_mode')!r}")
-    env = raw.get("env") or {}
-    if not isinstance(env, Mapping):
-        raise ValueError(f"fixture {name!r}: env must be a mapping of name to value")
+    from mas.lab.benchmark.environment.declared_env import compile_env
+
+    env = compile_env(raw.get("env") or {}, where=f"fixture {name!r}")
     passthrough = raw.get("passthrough") or ()
     if isinstance(passthrough, str):
         passthrough = (passthrough,)
@@ -235,16 +235,19 @@ def compile_fixture(raw: Mapping[str, Any]) -> FixtureSpec:
         env_mode=env_mode,  # type: ignore[arg-type]
         stop_grace_s=_positive(f"fixture {name!r}: stop_grace_s", raw.get("stop_grace_s", 5.0)),
         keep_running=bool(raw.get("keep_running")),
-        env={str(k): str(v) for k, v in env.items()},
+        env=env,
         passthrough=tuple(str(item) for item in passthrough),
     )
 
 
 def compile_environment(raw: Any) -> EnvironmentSpec:
+    from mas.runtime.secrets import prepare_manifest
+
     if not raw:
         return EnvironmentSpec()
     if not isinstance(raw, Mapping):
         raise ValueError("environment must be a mapping")
+    raw = prepare_manifest(raw)
     fixtures_raw = raw.get("fixtures") or ()
     if fixtures_raw and not isinstance(fixtures_raw, (list, tuple)):
         raise ValueError("environment.fixtures must be a list")

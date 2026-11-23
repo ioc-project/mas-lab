@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from mas.library.eval.errors import judge_error_text
 from mas.library.eval.mce.catalog import METRIC_REGISTRY as METRIC_REGISTRY
 from mas.library.eval.mce.catalog import run_mce_class
 from metrics_computation_engine.entities.models.session import SessionEntity
@@ -37,7 +38,8 @@ async def compute_session_metrics(
         try:
             result = await run_mce_class(metric_name, session, llm_config=llm_config)
         except Exception as exc:
-            logger.error("Metric %s failed: %s", metric_name, exc, exc_info=True)
+            error = judge_error_text(exc)
+            logger.error("Metric %s failed: %s", metric_name, error)
             results.append(
                 MetricResult(
                     metric_name=metric_name,
@@ -45,7 +47,7 @@ async def compute_session_metrics(
                     aggregation_level="session",
                     category="error",
                     app_name=getattr(session, "app_name", "unknown"),
-                    description=f"Computation failed: {exc}",
+                    description=f"Computation failed: {error}",
                     unit="",
                     reasoning="",
                     span_id="",
@@ -55,7 +57,7 @@ async def compute_session_metrics(
                     edges_involved=[],
                     success=False,
                     metadata={},
-                    error_message=str(exc),
+                    error_message=error,
                 )
             )
             continue

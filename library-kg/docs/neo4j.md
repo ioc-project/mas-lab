@@ -25,7 +25,7 @@ doc = {
 }
 
 conn = dict(uri="bolt://localhost:7687", username="neo4j",
-            password="secret",   # example value; read it from an env var in real code
+            password="secret",   # example value; in real code reveal {secret: neo4j} from the secret store
             database="neo4j")
 print(push_kg_to_neo4j(doc, app_name="my-app", **conn))
 # {"rows": 4, "nodes": 3, "edges": 1, "uri": "bolt://localhost:7687"}
@@ -90,14 +90,15 @@ The core functions in `mas.library.kg.neo4j` take explicit connection parameters
 are in their signatures) and never read the environment. The step functions
 (`run_neo4j_push`, `run_neo4j_dump`), the `mas-lab kg push` / `dump` commands and the
 pipeline steps resolve each connection field in this order: explicit value, `--infra`
-manifest, environment variable.
+manifest, then host values for URI/user/database. The password is a SecretRef.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEO4J_URI` | `bolt://localhost:7687` | Bolt or `neo4j+s` connection URI |
 | `NEO4J_USER` | `neo4j` | Database username |
-| `NEO4J_PASSWORD` | empty | Database password (rename the variable with `password_env` / `--password-env`) |
 | `NEO4J_DB_AGENT` | `neo4j` | Target database name |
+
+The password is `{secret: neo4j}` (`echo PASS | mas-ctl secrets set neo4j`).
 
 ---
 
@@ -487,8 +488,8 @@ if isinstance(raw_value, str) and raw_value.startswith("__json__:"):
 ## Infra manifest
 
 Connection settings can live in a small `kind: Infra` manifest instead of flags. The
-library owns the `Neo4j` target kind. The manifest never stores the password, only the
-name of the environment variable that holds it. The shipped example is
+library owns the `Neo4j` target kind. The manifest never stores the password, only a
+SecretRef. The shipped example is
 [`infra/local-neo4j.yaml`](../infra/local-neo4j.yaml):
 
 ```yaml
@@ -502,15 +503,15 @@ spec:
       uri: bolt://localhost:7687
       database: neo4j
       username: neo4j
-      password_env: NEO4J_PASSWORD
+      password: {secret: neo4j}
 ```
 
 Pass it with `--infra` (CLI and the `neo4j_push` / `neo4j_dump` pipeline steps). Each
-connection field resolves as explicit flag, then manifest, then environment (`NEO4J_URI`,
-`NEO4J_USER`, `NEO4J_DB_AGENT`, `NEO4J_PASSWORD`). Setting `NEO4J_URI` alone is a shortcut
-for the shipped manifest. The Python helpers are `mas.library.kg.infra.neo4j_target` and
-`resolve_neo4j`. For a shared Neo4j instance, copy the file and change `uri`, `database`
-and `password_env`.
+connection field resolves as explicit flag, then manifest, then host (`NEO4J_URI`,
+`NEO4J_USER`, `NEO4J_DB_AGENT`). The password is `{secret: neo4j}`. Setting `NEO4J_URI`
+alone is a shortcut for the shipped manifest. The Python helpers are
+`mas.library.kg.infra.neo4j_target` and `resolve_neo4j`. For a shared Neo4j instance,
+copy the file and change `uri`, `database` and `password`.
 
 ---
 
@@ -528,7 +529,7 @@ mas-lab kg push kg.jsonld --infra library-kg/infra/local-neo4j.yaml --clear-sess
 mas-lab kg dump --session-id SESSION_ID --infra library-kg/infra/local-neo4j.yaml -o dumped.jsonld
 ```
 
-`neo4j-push` is an alias of `push`. `push` takes `--uri`, `--username`, `--password-env`,
+`neo4j-push` is an alias of `push`. `push` takes `--uri`, `--username`,
 `--database`, `--infra`, `--app-name`, `--batch-size`, `--enable-extension-layer
 experiment`, `--clear-session` and `--dry-run`. `dump` takes exactly one of
 `--session-id` / `--run-id`.

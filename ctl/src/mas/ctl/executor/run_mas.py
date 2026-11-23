@@ -202,9 +202,9 @@ def execute_run_mas(
 
         deployment_doc = None
         if deployment_path is not None:
-            import yaml
+            from mas.runtime.secrets.manifest import load_checked_document
 
-            deployment_doc = yaml.safe_load(Path(deployment_path).read_text(encoding="utf-8"))
+            deployment_doc = load_checked_document(Path(deployment_path))
         obs_config = resolve_observability_config(
             events=events,
             events_file=events_file,

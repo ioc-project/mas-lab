@@ -225,7 +225,7 @@ def test_explicit_pipeline_retry_is_not_clobbered_by_overlay() -> None:
         None,
         llm_proxy={
             "api_base": "https://x.example/v1",
-            "api_key_env": "X_KEY",
+            "api_key": {"secret": "x"},
             "pipeline": [
                 {
                     "layer": "retry",
@@ -257,7 +257,7 @@ def test_explicit_pipeline_retry_wins_over_overlay() -> None:
         None,
         llm_proxy={
             "api_base": "https://x.example/v1",
-            "api_key_env": "X_KEY",
+            "api_key": {"secret": "x"},
             "pipeline": [
                 {
                     "layer": "retry",
@@ -279,7 +279,7 @@ def test_default_retry_takes_overlay_when_pipeline_omits_retry() -> None:
 
     provider = llm_providers_from_manifest(
         None,
-        llm_proxy={"api_base": "https://x.example/v1", "api_key_env": "X_KEY"},
+        llm_proxy={"api_base": "https://x.example/v1", "api_key": {"secret": "x"}},
         retry_overlay={"max_attempts": 6, "backoff_s": 0.05, "jitter": False},
     )
     policy = _retry_on_provider(provider)
@@ -295,7 +295,7 @@ def test_yaml_from_defaults_stamp_cannot_open_explicit_retry() -> None:
         None,
         llm_proxy={
             "api_base": "https://x.example/v1",
-            "api_key_env": "X_KEY",
+            "api_key": {"secret": "x"},
             "pipeline": [
                 {
                     "layer": "retry",
@@ -318,7 +318,7 @@ def test_spec_control_retry_wins_over_overlay() -> None:
 
     provider = llm_providers_from_manifest(
         {"spec": {"control": {"retry": {"llm": {"max_attempts": 7}}}}},
-        llm_proxy={"api_base": "https://x.example/v1", "api_key_env": "X_KEY"},
+        llm_proxy={"api_base": "https://x.example/v1", "api_key": {"secret": "x"}},
         retry_overlay={"max_attempts": 6, "jitter": False},
     )
     assert _retry_on_provider(provider).max_attempts == 7
@@ -366,15 +366,17 @@ def test_fault_inject_seeded_draws_are_identical() -> None:
     assert [a._draw() for _ in range(16)] == [b._draw() for _ in range(16)]
 
 
-def test_factory_fills_api_key_from_the_named_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_does_not_copy_an_api_key_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     from mas.runtime.registry.llm_provider_registry import apply_llm_endpoint_defaults, instantiate_llm_provider
+    from mas.runtime.secrets.ref import SecretRef
 
-    monkeypatch.setenv("X_KEY", "from-env")
-    spec = apply_llm_endpoint_defaults({"kind": "openai"}, {"api_base": "https://x.example/v1", "api_key_env": "X_KEY"})
-    assert spec["api_key"] == "from-env"
-    assert instantiate_llm_provider("openai", spec).api_key == "from-env"
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+    spec = apply_llm_endpoint_defaults({"kind": "openai"}, {"api_base": "https://x.example/v1"})
+    assert spec.get("api_key") != "from-env"
+    assert instantiate_llm_provider("openai", spec).api_key is None
+    assert instantiate_llm_provider("openai", {}).api_key == SecretRef(name="openai")
     held = apply_llm_endpoint_defaults(
-        {"kind": "openai", "api_key": "already"},
-        {"api_base": "https://x.example/v1", "api_key_env": "X_KEY"},
+        {"kind": "openai", "api_key": {"secret": "custom"}},
+        {"api_base": "https://x.example/v1"},
     )
-    assert held["api_key"] == "already"
+    assert held["api_key"] == {"secret": "custom"}

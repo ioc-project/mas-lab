@@ -60,7 +60,7 @@ Only `local-inproc` placement is supported in mas-lab OSS. Strategies
 
 ### Audit secret usage
 
-- Secrets are never stored in manifests. Verify that every `*_env` reference names an environment variable that is set at runtime.
+- Secrets are never stored in manifests. Verify every SecretRef with `mas-ctl validate`.
 
 ## CLI map
 

@@ -9,8 +9,6 @@ injected fake client (no real ClickHouse needed).
 from __future__ import annotations
 
 import json
-import sys
-import types
 
 import pytest
 
@@ -46,7 +44,6 @@ def test_exception_hierarchy_and_messages():
     assert "field" in str(ex.MissingRequiredFieldError("field", "kind", "detail"))
     assert "spec" in str(ex.SpecNotFoundError("/nope/spec.yaml")).lower()
     assert "4318" in str(ex.CollectorPushError("http://x:4318", "boom"))
-    assert "clickhouse-connect" in str(ex.ClickHouseUnavailableError())
     assert "convert" in str(ex.OtelSdkUnavailableError())
 
 
@@ -146,62 +143,6 @@ def test_otlp_empty_file(tmp_path):
     assert push_file(p, "http://x:4318")["spans"] == 0
 
 
-# ── ClickHouse read-back via a fake client ───────────────────────────────────
-
-
-class _FakeRows:
-    column_names = ["ServiceName", "spans"]
-    result_rows = [["app-a", 5], ["app-b", 3]]
-
-
-class _FakeClient:
-    def query(self, q):
-        return _FakeRows()
-
-
-@pytest.fixture
-def fake_clickhouse(monkeypatch):
-    mod = types.ModuleType("clickhouse_connect")
-    mod.get_client = lambda **kw: _FakeClient()
-    monkeypatch.setitem(sys.modules, "clickhouse_connect", mod)
-    return mod
-
-
-def test_clickhouse_list_apps_and_dump(tmp_path, fake_clickhouse):
-    from mas.library.telemetry.collector.clickhouse import dump_spans, list_apps
-
-    seen_queries = []
-
-    class _CapturingClient(_FakeClient):
-        def query(self, q):
-            seen_queries.append(q)
-            return super().query(q)
-
-    fake_clickhouse.get_client = lambda **kw: _CapturingClient()
-
-    apps = list_apps()
-    assert apps[0]["ServiceName"] == "app-a"
-    assert "uniq(session_id) AS sessions" in seen_queries[0]
-    out = tmp_path / "d.jsonl"
-    result = dump_spans("sess-1", output_path=out)
-    assert result["spans"] == 2
-    assert out.exists()
-    assert "WHERE session_id = {'sess-1'}" in seen_queries[1]
-    result_t = dump_spans("trace-1", query_by="trace", output_path=tmp_path / "t.jsonl", app_name="app-a")
-    assert result_t["query_by"] == "trace"
-    assert "WHERE TraceId = {'trace-1'} AND ServiceName = {'app-a'}" in seen_queries[2]
-
-
-def test_clickhouse_unavailable(monkeypatch):
-    from mas.library.telemetry.collector import clickhouse
-    from mas.library.telemetry.exceptions import ClickHouseUnavailableError
-
-    # Simulate the import failing.
-    monkeypatch.setitem(sys.modules, "clickhouse_connect", None)
-    with pytest.raises(ClickHouseUnavailableError):
-        clickhouse.list_apps()
-
-
 # ── artifact helpers ─────────────────────────────────────────────────────────
 
 
@@ -215,13 +156,6 @@ def test_artifact_stream_and_repr(tmp_path):
     assert len(loaded) == 2
     assert "OtelSpanSet(" in repr(s1)
     assert not OtelSpanSet.empty()
-
-
-def test_artifact_fetch_from_clickhouse(tmp_path, fake_clickhouse):
-    from mas.library.telemetry import OtelSpanSet
-
-    ss = OtelSpanSet.fetch_from_clickhouse("sess-1")
-    assert ss.metadata["source"] == "clickhouse"
 
 
 # ── converter helpers (no SDK needed for the pure ones) ──────────────────────
@@ -435,13 +369,6 @@ def test_otlp_push_and_convert_native_input(tmp_path, events_path):
     conv = convert_file_to_otlp_jsonl(events_path, out, app_name="a")
     assert conv["spans"] > 0
     assert out.exists()
-
-
-def test_push_otlp_dump_step(tmp_path, fake_clickhouse):
-    from mas.library.telemetry.steps.push_otlp import run_dump_spans
-
-    result = run_dump_spans("sess-1", output_path=tmp_path / "d.jsonl")
-    assert result["spans"] == 2
 
 
 def test_otlp_push_file_sdk_input(tmp_path):

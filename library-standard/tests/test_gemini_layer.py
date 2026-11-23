@@ -46,7 +46,7 @@ def _provider(transport: _Transport, monkeypatch: pytest.MonkeyPatch, **params: 
     del monkeypatch
     return GeminiLLMProvider.wrap(
         transport,
-        {"api_base": "http://127.0.0.1:9/v1beta", "api_key": "secret", "api_key_env": "K", **params},
+        {"api_base": "http://127.0.0.1:9/v1beta", "api_key": {"secret": "gemini"}, **params},
         call_kinds=("llm",),
     )
 
@@ -368,7 +368,7 @@ def test_error_body_on_http_200_is_a_failure(monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(ClassifiedFailure) as exc:
         _chat(provider, model="m", messages=[{"role": "user", "content": "q"}])
     assert exc.value.failure_class is FailureClass.TRANSIENT
-    assert exc.value.code == "RESOURCE_EXHAUSTED"
+    assert exc.value.code == "HTTP_429" and "quota" not in str(exc.value)
 
 
 def test_blocked_prompt_is_a_content_filter(monkeypatch: pytest.MonkeyPatch) -> None:

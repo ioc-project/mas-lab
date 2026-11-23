@@ -391,6 +391,6 @@ def _neo4j_conn(config: dict) -> dict:
         infra=config.get("infra"),
         uri=config.get("uri"),
         username=config.get("username"),
-        password_env=config.get("password_env"),
+        password=config.get("password"),
         database=config.get("database"),
     )

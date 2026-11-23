@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from mas.runtime import hostenv
+from mas.runtime.secrets import current_resolver
+from mas.runtime.secrets.ref import parse_secret_ref_optional
 
 from mas.library.kg.artifact import KGArtifact
 
@@ -16,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 _ENV_URI = "NEO4J_URI"
 _ENV_USER = "NEO4J_USER"
-_ENV_PASSWORD = "NEO4J_PASSWORD"
 _ENV_DATABASE = "NEO4J_DB_AGENT"
 
 
@@ -29,15 +30,17 @@ def _as_artifact(inp: "KGArtifact | str | Path") -> KGArtifact:
 def _resolve_conn(
     uri: Optional[str],
     username: Optional[str],
-    password: Optional[str],
-    password_env: Optional[str],
+    password: object,
     database: Optional[str],
+    *,
+    reveal: bool = True,
 ) -> Dict[str, str]:
-    """Resolve Neo4j connection params, falling back to environment variables."""
+    """Resolve Neo4j connection params. Host for uri/user/database; SecretRef for password."""
+    ref = parse_secret_ref_optional(password, field="password") if reveal else None
     return {
         "uri": uri or hostenv.get(_ENV_URI, "bolt://localhost:7687"),
         "username": username or hostenv.get(_ENV_USER, "neo4j"),
-        "password": password or hostenv.get(password_env or _ENV_PASSWORD, ""),
+        "password": (current_resolver().reveal_or_none(ref) or "") if ref else "",
         "database": database or hostenv.get(_ENV_DATABASE, "neo4j"),
     }
 
@@ -47,8 +50,7 @@ def run_neo4j_push(
     *,
     uri: Optional[str] = None,
     username: Optional[str] = None,
-    password: Optional[str] = None,
-    password_env: Optional[str] = None,
+    password: object = None,
     database: Optional[str] = None,
     batch_size: int = 200,
     app_name: str = "",
@@ -61,16 +63,16 @@ def run_neo4j_push(
 ) -> Dict[str, Any]:
     """Push a KG to Neo4j.
 
-    Connection params fall back to environment variables
-    (``NEO4J_URI``, ``NEO4J_USER``, ``NEO4J_PASSWORD``, ``NEO4J_DB_AGENT``).
+    Connection params fall back to host values
+    (``NEO4J_URI``, ``NEO4J_USER``, ``NEO4J_DB_AGENT``). The password is a
+    SecretRef (required unless optional); none declared means no password.
 
     Args:
         artifact: Input KG. Accepts a KGArtifact, a path string, or a Path
             object.
         uri: Bolt URI.
         username: Neo4j username.
-        password: Literal password (prefer ``password_env``).
-        password_env: Name of the env var holding the password.
+        password: SecretRef for the password (none: no password).
         database: Target database name.
         batch_size: UNWIND batch size.
         app_name: Written as ``appName`` on every element.
@@ -92,7 +94,7 @@ def run_neo4j_push(
 
     kg = _as_artifact(artifact)
 
-    conn = _resolve_conn(uri, username, password, password_env, database)
+    conn = _resolve_conn(uri, username, password, database, reveal=not dry_run)
     logger.info(
         "neo4j_push: %s → %s  db=%s  dry_run=%s",
         input_path_obj if input_path_obj else repr(artifact),

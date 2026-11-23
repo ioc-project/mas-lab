@@ -33,6 +33,7 @@ from mas.library.standard.plugins.llm.thinking import (
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
+from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,7 @@ class BedrockLLMProvider(HttpLlmProtocol):
     provider_id = "bedrock"
     kind = "bedrock"
     default_api_base = "https://bedrock-runtime.us-east-1.amazonaws.com"
-    default_api_key_env = "AWS_BEARER_TOKEN_BEDROCK"
+    default_secret = SecretRef(name="bedrock")
 
     def _build_chat_request(
         self,
@@ -63,7 +64,6 @@ class BedrockLLMProvider(HttpLlmProtocol):
         tools: list[dict[str, Any]] | None,
         temperature: float,
         max_tokens: int | None,
-        api_key: str,
         reasoning: ReasoningSettings,
         max_completion_tokens: int | None = None,
         extra_body: dict[str, Any] | None = None,
@@ -126,7 +126,7 @@ class BedrockLLMProvider(HttpLlmProtocol):
             payload, cache_breakpoints(sampling, model, default_unknown=False), _cache_ttl(sampling, model)
         )
         headers = {
-            "Authorization": f"Bearer {api_key}",
+            **self._key_headers(),
             "Content-Type": "application/json",
         }
         if extra_headers:

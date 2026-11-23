@@ -15,8 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
 
-import yaml
-from mas.runtime import hostenv
+from mas.runtime.spec.yaml_errors import YAML_ERROR_PREFIX, YamlLoadError, safe_yaml_load
 
 logger = logging.getLogger(__name__)
 
@@ -82,32 +81,14 @@ class _SilentDisplay:
         return
 
 
-def _load_workspace_dotenv(base_dir: Path) -> None:
-    """Load optional .env files; container env from docker/.env still wins (override=False)."""
-
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
-
-    candidates = [
-        Path("/workspace/.env"),
-        base_dir / ".env",
-        Path(hostenv.get("MAS_WORKSPACE_ROOT", "")) / ".env",
-    ]
-    for path in candidates:
-        if path.is_file():
-            load_dotenv(path, override=False)
-
-
 def _quiet_logging_for_chat() -> None:
     """Suppress exchange logs; UI chat must not capture CLI-style stdout."""
 
     from mas.ctl.logging_setup import setup_logging
     from mas.runtime import hostenv
 
-    hostenv.set_overlay({"LOG_LEVEL": ""})
-    setup_logging(verbosity=0)
+    with hostenv.overlay({"LOG_LEVEL": ""}):
+        setup_logging(verbosity=0)
     logging.getLogger("mas.runtime").setLevel(logging.WARNING)
     logging.getLogger("mas.ctl").setLevel(logging.WARNING)
 
@@ -135,7 +116,6 @@ def run_agent_turn(
     )
 
     _quiet_logging_for_chat()
-    _load_workspace_dotenv(base_dir)
 
     base_dir = Path(base_dir)
     sid = session_id or f"ui:{uuid.uuid4()}"
@@ -148,12 +128,11 @@ def run_agent_turn(
         )
 
     try:
-        current_manifest = yaml.safe_load(manifest_yaml)
-    except yaml.YAMLError as exc:
+        current_manifest = safe_yaml_load(manifest_yaml)
+    except YamlLoadError as exc:  # position only, never the value
         return AgentTurnResult(
             status="error",
-            error_message=f"Invalid manifest YAML: {exc}",
-            error_detail=str(exc),
+            error_message=f"{YAML_ERROR_PREFIX} {exc}",
             session_id=sid,
         )
 

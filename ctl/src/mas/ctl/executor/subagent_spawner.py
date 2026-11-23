@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-import yaml
 from mas.ctl.executor.engine_tool_context import MaterializedEngineToolContext
 from mas.ctl.manifest.spec_bindings import SpecBindingError, parse_subagent_templates
 from mas.library.standard.plugins.tools.containment import containment_roots, resolve_under_roots
@@ -16,6 +15,7 @@ from mas.runtime.boundary.context.working_memory_registry import WorkingMemoryRe
 from mas.runtime.driver.instance import RuntimeInstance
 from mas.runtime.engine.tools import SPAWN_SUBAGENT_TOOL, spawn_subagent_params
 from mas.runtime.registry import get_registry
+from mas.runtime.secrets import load_checked_document
 from mas.runtime.system_plugins.spawn_ledger import SpawnLedger
 
 
@@ -83,9 +83,7 @@ def load_subagent_templates(
         path = resolve_under_roots(base_dir, row["ref"], containment_roots=roots)
         if not path.is_file():
             raise FileNotFoundError(f"subagent template {template_id!r} not found: {path}")
-        template_manifest = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        if not isinstance(template_manifest, dict):
-            raise ValueError(f"subagent template {template_id!r} must be a manifest object")
+        template_manifest = load_checked_document(path)
         validate_file(path, kind="agent").raise_if_failed()
         validate_agent_spec_bindings(template_manifest.get("spec") or {})
         templates[template_id] = SubagentTemplate(

@@ -20,8 +20,9 @@ By default (CI / offline) only steps that list ``offline`` (or have no
 Online steps use ``gpt-4o-mini`` via ``MAS_CTL_MODEL`` and expect ``Paris`` in the
 agent reply.  Infra is resolved from ``config.yaml``; override without
 editing YAML via ``MAS_INFRA_REFS`` (e.g. ``MAS_INFRA_REFS=standard:llm-proxy``
-for the Outshift OpenAI-compatible proxy).  Set ``LLM_PROXY_API_BASE`` and
-``OPENAI_API_KEY`` in ``.env`` (see Tutorial 0).
+for the Outshift OpenAI-compatible proxy).  The model key comes from the secret
+store: ``mas-ctl secrets set openai`` (see Tutorial 0); no key is read from the
+environment or ``.env``.
 
 Run from the ioc-project/mas-lab repo root:
 
@@ -66,7 +67,10 @@ _TEST_ENV: dict[str, str] | None = None
 
 
 def _merge_dotenv(env: dict[str, str], path: Path) -> None:
-    """Load KEY=VALUE lines from a gitignored .env without overriding existing env."""
+    """Load the ``MAS_*`` settings of a gitignored .env without overriding existing env.
+
+    Only the configuration namespace: a key in the file (``MAS_SECRET_*`` included) is never copied.
+    """
     if not path.is_file():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -75,7 +79,7 @@ def _merge_dotenv(env: dict[str, str], path: Path) -> None:
             continue
         key, _, value = stripped.partition("=")
         key = key.strip()
-        if not key or key in env:
+        if not key.startswith("MAS_") or key.startswith("MAS_SECRET_") or key in env:
             continue
         env[key] = value.strip().strip('"').strip("'")
 
@@ -91,10 +95,7 @@ def _test_env() -> dict[str, str]:
         if env.get("MAS_LLM_MODEL", "").strip() and not env.get("MAS_CTL_MODEL", "").strip():
             env["MAS_CTL_MODEL"] = env["MAS_LLM_MODEL"].strip()
         if _ONLINE_MODE and not env.get("MAS_CTL_MODEL", "").strip():
-            if env.get("LLM_PROXY_API_BASE", "").strip():
-                env["MAS_CTL_MODEL"] = "azure/gpt-4o-mini"
-            else:
-                env["MAS_CTL_MODEL"] = "gpt-4o-mini"
+            env["MAS_CTL_MODEL"] = "gpt-4o-mini"
         _TEST_ENV = env
     return _TEST_ENV
 
@@ -103,25 +104,13 @@ _DOCKER_ENV_KEYS = (
     "MAS_CTL_MODEL",
     "MAS_LLM_MODEL",
     "MAS_INFRA_REFS",
-    "LLM_PROXY_API_BASE",
-    "OPENAI_API_KEY",
     "SSL_CERT_FILE",
     "MAS_LLM_VERIFY_SSL",
 )
 
 
-def _redact_secrets(text: str) -> str:
-    import re
-
-    return re.sub(
-        r"(OPENAI_API_KEY|API_KEY)=[^\s'\"]+",
-        r"\1=***",
-        text,
-    )
-
-
 def _inject_docker_env(command: str, env: dict[str, str]) -> str:
-    """Pass online-test env vars into ``docker compose run`` (docker/.env is minimal)."""
+    """Pass online-test settings into ``docker compose run``; keys come from the mounted secret store."""
     stripped = command.strip()
     if not stripped.startswith("docker compose"):
         return command
@@ -345,17 +334,15 @@ def run_scenario_case(case: _CommandCase, cwd: Path | None = None) -> None:
     combined = result.stdout + result.stderr
 
     assert result.returncode == case.expected_exit_code, (
-        f"\nCommand: {_redact_secrets(command)}"
+        f"\nCommand: {command}"
         f"\nWorking dir: {case.working_dir}"
         f"\nExit code: {result.returncode} (expected {case.expected_exit_code})"
-        f"\nOutput:\n{_redact_secrets(combined)}"
+        f"\nOutput:\n{combined}"
     )
 
     if case.expected_output:
         assert case.expected_output in combined, (
-            f"\nCommand: {_redact_secrets(command)}"
-            f"\nExpected substring in output: {case.expected_output!r}"
-            f"\nActual output:\n{_redact_secrets(combined)}"
+            f"\nCommand: {command}\nExpected substring in output: {case.expected_output!r}\nActual output:\n{combined}"
         )
 
 

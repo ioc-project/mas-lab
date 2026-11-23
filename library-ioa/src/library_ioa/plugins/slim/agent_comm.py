@@ -24,10 +24,10 @@ from mas.library.standard.lib.comm.payload import (
     send_result,
 )
 from mas.library.standard.lib.comm.send_context import align_send
-from mas.library.standard.lib.comm.text import safe_text
 from mas.library.standard.lib.stack.layer import ChainMember
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
+from library_ioa.plugins.slim.actor import SlimBindingError, binding_failure, raise_clean
 from library_ioa.plugins.slim.endpoint import assert_endpoint_allowed
 from library_ioa.plugins.slim.inbound import (
     ENVELOPE_SLACK,
@@ -63,7 +63,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
 
     The row's ``identity`` (``org/ns/service``) names the agents: each one is
     ``<identity>/<agent_id>`` (``agent_name``). The service takes the secret
-    value: ctl reads the row's ``secret_env`` and passes ``secret``. One event
+    value: the row holds a SecretRef; the service reveals it at start. One event
     loop is shared; each agent opens its own node connection.
 
     Names and signatures from the slim-bindings 2.2.0 wheel:
@@ -124,7 +124,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         self.max_message_size = int(service.max_message_size or MAX_MESSAGE_SIZE)
         self.timeout_s = actor.timeout_s
         self.reply_timeout_s = actor.reply_timeout_s
-        self._secret = service.secret  # checked by the service
+        self._slim_service = service
         self._instance_id = ""
         self._run_turn = run_turn
         self._sticky: dict[str, str] = {}
@@ -228,7 +228,9 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         # A frame's source_name is the app name without the instance, so each
         # agent needs its own app name for replies to route back to it.
         org, ns, third = slim_app_triple(self.name)
-        app = self._sync_call(service.create_app_with_secret, sb.Name(org, ns, third), self._secret)
+        app = self._sync_call(
+            service.create_app_with_secret, sb.Name(org, ns, third), self._slim_service.reveal_secret()
+        )
         self._instance_id = str(app.id())
         actor.register_instance(self.local_agent_id, self._instance_id)
         actor.register_instance(self.agent_id, self._instance_id)
@@ -593,7 +595,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             ctx = await self._call(self._app.create_session_async(cfg, dest))
             await self._call(ctx.completion.wait_async())
         except AgentCommError as exc:
-            if "retries exhausted" in str(exc):
+            if isinstance(exc, SlimBindingError) and exc.kind == "retries_exhausted":
                 raise AgentCommError(f"no peer answers to {target!r}") from exc
             raise
         session = ctx.session
@@ -618,12 +620,8 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             return fn(*args, **kwargs)
         except AgentCommError:
             raise
-        except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
-            raise
         except Exception as exc:
-            # create_app_with_secret takes the secret, and a binding may echo its arguments in an error
-            text = safe_text(str(exc).replace(self._secret, "***") if self._secret else str(exc))
-            raise AgentCommError(text or "slim binding error") from None
+            raise_clean(binding_failure(exc, self._sb))
 
     async def _call(self, value: Any) -> Any:
         try:
@@ -634,10 +632,8 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
             raise
         except asyncio.CancelledError:
             raise
-        except (AttributeError, TypeError, KeyboardInterrupt, SystemExit):
-            raise
         except Exception as exc:
-            raise AgentCommError(safe_text(exc) or "slim binding error") from exc
+            raise_clean(binding_failure(exc, self._sb))
 
     def _run(self, coro: Any) -> Any:
         if not asyncio.iscoroutine(coro):

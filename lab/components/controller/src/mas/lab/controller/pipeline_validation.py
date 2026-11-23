@@ -13,14 +13,10 @@ def validate_pipeline_yaml(content: str) -> dict:
     import json
 
     import jsonschema
-    import yaml as _yaml
+    from mas.lab.controller.manifest_validation import refuse_secret_values
 
     errors: list[str] = []
-
-    try:
-        doc = _yaml.safe_load(content)
-    except _yaml.YAMLError as exc:
-        return {"valid": False, "errors": [f"YAML parse error: {exc}"]}
+    doc = refuse_secret_values(content)  # a 422 when unreadable or holding a secret
 
     if not isinstance(doc, dict):
         return {"valid": False, "errors": ["Document must be a YAML mapping"]}

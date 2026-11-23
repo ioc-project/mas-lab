@@ -78,6 +78,7 @@ LIBRARY_TYPES = frozenset(
         "control_protocol",
         "checkpoint_store",
         "eval_metric",
+        "secret_store",
     }
 )
 

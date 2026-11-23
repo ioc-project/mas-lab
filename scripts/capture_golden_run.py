@@ -18,11 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 def _load_dotenv(root: Path) -> None:
-    """Load ``root/.env`` into ``os.environ`` without overwriting existing vars.
+    """Load the ``MAS_*`` settings of ``root/.env`` into ``os.environ`` without overwriting existing vars.
 
     Direnv is not always active (e.g. when running inside tox, CI, or a bare
-    Python subprocess).  Loading .env here ensures ``LLM_PROXY_API_BASE`` and
-    similar vars are available regardless of the invoking shell.
+    Python subprocess). Only the configuration namespace is loaded (``MAS_SECRET_*``
+    excluded): a model key comes from the secret store, never from the environment.
     Lines starting with ``#`` and blank lines are skipped.  ``export`` prefix
     is stripped.  Existing env vars are never overwritten (same semantics as
     ``source_env_if_exists .env`` in direnv).
@@ -40,7 +40,7 @@ def _load_dotenv(root: Path) -> None:
         key, _, val = line.partition("=")
         key = key.strip()
         val = val.strip().strip("\"'")
-        if key and key not in os.environ:
+        if key.startswith("MAS_") and not key.startswith("MAS_SECRET_") and key not in os.environ:
             os.environ[key] = val
             logger.debug("dotenv: loaded %s from .env", key)
 
@@ -94,7 +94,6 @@ def _capture_one(
     print(
         f"  workspace: MAS_WORKSPACE_ROOT={os.environ['MAS_WORKSPACE_ROOT']!r}",
         f"  infra:     MAS_INFRA_REFS={os.environ.get('MAS_INFRA_REFS', '<not set — workspace infra_refs used>')!r}",
-        f"  api_base:  LLM_PROXY_API_BASE={os.environ.get('LLM_PROXY_API_BASE', '<not set>')!r}",
         sep="\n",
         file=sys.stderr,
     )

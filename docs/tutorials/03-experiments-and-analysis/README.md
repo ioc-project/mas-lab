@@ -16,7 +16,7 @@ Each run writes `events.jsonl`, the machine-readable event log.
 ## What you need
 
 - [Tutorial 0](../00-environment-setup/README.md) (data paths), [Tutorial 1](../01-building-an-agent/README.md), [Tutorial 2](../02-creating-a-mas/README.md).
-- `OPENAI_API_KEY` for the live benchmarks (Parts A and C). Steps marked "offline" need no key.
+- `echo KEY | mas-ctl secrets set openai` for the live benchmarks (Parts A and C). Steps marked "offline" need no key.
 - `mas-lab config` shows where your machine stores lab output and the trace cache.
 
 A lab is a pack of experiments. A library is reusable YAML and code. See [labs-and-libraries.md](../../labs-and-libraries.md).
@@ -125,7 +125,7 @@ mas-lab eval --list-metrics        # ids: answer_relevancy, goal_success_rate, g
 Then score a trace. Metric ids are snake_case (`goal_success_rate`, `groundedness`, `answer_relevancy`):
 
 ```bash
-export OPENAI_API_KEY=...          # judge key; --api-key-env names another variable
+echo KEY | mas-ctl secrets set openai          # judge key
 mas-lab eval docs/tutorials/03-experiments-and-analysis/fixtures/events.jsonl \
   --metric goal_success_rate --metric groundedness --model gpt-4o
 ```

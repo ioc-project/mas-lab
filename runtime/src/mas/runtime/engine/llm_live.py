@@ -168,7 +168,6 @@ class LiveLlmEngine(Lifecycle):
     ctx: AutoCtxAssembler | None = None
     manifest: dict | None = None
     api_base: str = "https://api.openai.com/v1"
-    api_key_env: str = "OPENAI_API_KEY"
     model: str = "gpt-4o-mini"
     temperature: float = 0.7
     # None sends no limit (server default). Reasoning models bill thinking
@@ -385,7 +384,6 @@ class LiveLlmEngine(Lifecycle):
 
         proxy = dict(self.llm_proxy or {})
         proxy.setdefault("api_base", self.api_base)
-        proxy.setdefault("api_key_env", self.api_key_env)
         if self.http_timeout is not None:
             proxy.setdefault("timeout", self.http_timeout)
         return llm_provider_from_infra(
