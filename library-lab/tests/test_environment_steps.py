@@ -130,7 +130,7 @@ async def test_http_call_loopback() -> None:
             return
 
     server = HTTPServer(("127.0.0.1", 0), H)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     try:
         host, port = server.server_address[:2]
         url = f"http://{host}:{port}/health"
@@ -223,7 +223,7 @@ async def test_http_call_json_and_expect_status() -> None:
             return
 
     server = HTTPServer(("127.0.0.1", 0), H)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     try:
         host, port = server.server_address[:2]
         url = f"http://{host}:{port}/admin"
@@ -256,7 +256,7 @@ async def test_http_call_does_not_follow_a_redirect() -> None:
             return
 
     server = HTTPServer(("127.0.0.1", 0), H)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     try:
         host, port = server.server_address[:2]
         url = f"http://{host}:{port}/go"

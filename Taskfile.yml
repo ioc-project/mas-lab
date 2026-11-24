@@ -337,7 +337,7 @@ tasks:
     desc: "Tutorial integration tests (subprocess CLI; no mas-lab-tutorial package required)"
     deps: [install-dev]
     cmds:
-      - "{{.VENV}}/pytest tests/tutorials/ -q --tb=line"
+      - "{{.VENV}}/pytest tests/tutorials/ -q --tb=line -n auto"
 
   verify-lab-smoke:
     desc: "Per-lab smoke run + post-pipeline + envelope parity + cache invalidation"

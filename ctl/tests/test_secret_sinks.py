@@ -217,7 +217,7 @@ def test_http_layer_401_omits_the_canary(monkeypatch: pytest.MonkeyPatch, canary
     monkeypatch.setenv("no_proxy", "127.0.0.1,localhost")
     _Unauthorized.seen = []
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Unauthorized)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
         layer = HttpLayer(

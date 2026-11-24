@@ -30,7 +30,7 @@ async def test_several_sends_share_one_connection_until_the_layer_stops() -> Non
             return None
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Echo)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     try:
         layer = HttpLayer(url=f"http://127.0.0.1:{server.server_address[1]}/")
         for index in range(4):
