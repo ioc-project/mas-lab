@@ -209,3 +209,56 @@ def test_hosted_model_ids_resolve_without_their_routing_decorations() -> None:
     ):
         assert catalog.get(hosted) is base, hosted
     assert catalog.get("amazon.nova-pro-v1:0") is None
+
+
+def test_accepts_modality_unknown_model_is_true():
+    catalog = default_model_catalog()
+    assert catalog.get("no-such-model") is None
+    assert catalog.accepts_modality("no-such-model", "image") is True
+    assert catalog.accepts_modality("no-such-model", "audio", direction="output") is True
+
+
+def test_accepts_modality_known_model_without_field_is_true(tmp_path):
+    path = tmp_path / "cat.yaml"
+    path.write_text(
+        'apiVersion: mas/v1\nkind: LlmModelCatalog\nmetadata: {name: t, version: "1"}\n'
+        "spec:\n  models:\n    toy:\n      context_window: 8\n",
+        encoding="utf-8",
+    )
+    catalog = load_model_catalog(path)
+    assert catalog.get("toy") is not None
+    assert catalog.get("toy").modalities is None
+    assert catalog.accepts_modality("toy", "image") is True
+    assert catalog.accepts_modality("toy", "pdf", direction="output") is True
+
+
+def test_accepts_modality_known_model_with_field_membership(tmp_path):
+    path = tmp_path / "cat.yaml"
+    path.write_text(
+        'apiVersion: mas/v1\nkind: LlmModelCatalog\nmetadata: {name: t, version: "1"}\n'
+        "spec:\n  models:\n    toy:\n      aliases: [vendor/toy]\n"
+        "      modalities:\n        input: [text, image]\n        output: [text]\n",
+        encoding="utf-8",
+    )
+    catalog = load_model_catalog(path)
+    assert catalog.accepts_modality("toy", "text") is True
+    assert catalog.accepts_modality("toy", "image") is True
+    assert catalog.accepts_modality("toy", "audio") is False
+    assert catalog.accepts_modality("vendor/toy", "image") is True
+    assert catalog.accepts_modality("toy", "text", direction="output") is True
+    assert catalog.accepts_modality("toy", "image", direction="output") is False
+
+
+def test_load_model_catalog_round_trips_modalities(tmp_path):
+    path = tmp_path / "cat.yaml"
+    path.write_text(
+        'apiVersion: mas/v1\nkind: LlmModelCatalog\nmetadata: {name: t, version: "1"}\n'
+        "spec:\n  models:\n    toy:\n      modalities:\n        input: [text, pdf]\n"
+        "        output: [text]\n",
+        encoding="utf-8",
+    )
+    info = load_model_catalog(path).get("toy")
+    assert info is not None
+    assert info.modalities is not None
+    assert info.modalities["input"] == ("text", "pdf")
+    assert info.modalities["output"] == ("text",)
