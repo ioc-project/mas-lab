@@ -24,6 +24,8 @@ from __future__ import annotations
 import dataclasses
 import json
 import re
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
@@ -571,6 +573,48 @@ def bind_flavour(
         raise BindError(str(exc)) from None
 
 
-def bind_session(resolved: ResolvedInfra | None, flavour: Any, *, agent_ids: list[str]) -> ResolvedInfra:
+def _rekey_bind_agents(agents: dict[str, Any], groups: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    """Copy ``bind.agents.<group>`` onto each copy. A key that is already a copy wins."""
+    out: dict[str, Any] = {}
+    source: dict[str, str] = {}
+    for key, value in agents.items():
+        members = groups.get(str(key))
+        if not members:
+            continue
+        for member in members:
+            if str(member) in agents:
+                continue
+            if str(member) in out and out[str(member)] != value:
+                raise BindError(
+                    f"bind.agents.{source[str(member)]} and bind.agents.{key} both set {member!r} with different "
+                    f"values; add bind.agents.{member} to decide"
+                )
+            out[str(member)] = deepcopy(value)
+            source[str(member)] = str(key)
+    for key, value in agents.items():
+        if str(key) not in groups:
+            out[str(key)] = deepcopy(value)
+    return out
+
+
+def _flavour_with_group_bind(spec: dict[str, Any], groups: Mapping[str, Sequence[str]]) -> dict[str, Any]:
+    bind = spec.get("bind") if isinstance(spec, dict) else None
+    agents = bind.get("agents") if isinstance(bind, dict) else None
+    if not isinstance(agents, dict) or not agents:
+        return spec
+    rekeyed = _rekey_bind_agents(agents, groups)
+    return {**spec, "bind": {**bind, "agents": rekeyed}}
+
+
+def bind_session(
+    resolved: ResolvedInfra | None,
+    flavour: Any,
+    *,
+    agent_ids: list[str],
+    groups: Mapping[str, Sequence[str]] | None = None,
+) -> ResolvedInfra:
     """Apply a Flavour (a document or its ``spec``) to a session's infra: the one call every entry point makes."""
-    return bind_flavour(resolved or ResolvedInfra(), flavour_spec_of(flavour), agent_ids=agent_ids)
+    spec = flavour_spec_of(flavour)
+    if groups:
+        spec = _flavour_with_group_bind(spec, groups)
+    return bind_flavour(resolved or ResolvedInfra(), spec, agent_ids=agent_ids)

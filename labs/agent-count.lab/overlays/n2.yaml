@@ -1,0 +1,15 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Overlay
+metadata:
+  id: n2
+  description: 2 identical worker(s).
+  tags: [agent-count]
+spec:
+  target:
+    kind: MAS
+  patch:
+    agents:
+      $op:
+        count: {worker: 2}

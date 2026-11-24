@@ -373,3 +373,50 @@ def test_stacked_control_does_not_copy_onto_a_non_matching_agent(tmp_path: Path)
     assert config["agents"][1]["governance"] == ["retry_on_error"]
     assert "governance" in config["agents"][0]
     assert "sample_governance" not in (config["agents"][1].get("governance") or [])
+
+
+def test_control_group_id_matches_count_copies() -> None:
+    from mas.lab.lab.config.scenario_loading import _rewrite_agent_control_lists
+
+    config = {
+        "agents": [
+            {"id": "moderator"},
+            {"id": "worker-1"},
+            {"id": "worker-2"},
+        ],
+        "groups": {"worker": ["worker-1", "worker-2"]},
+        "_lab_flavour_spec": {
+            "_controls": [{"agents": "worker", "spec": {"governance": ["sample_governance"]}}],
+        },
+    }
+    _rewrite_agent_control_lists(config, config["_lab_flavour_spec"])
+    assert config["agents"][1]["governance"] == ["sample_governance"]
+    assert config["agents"][2]["governance"] == ["sample_governance"]
+    assert "governance" not in config["agents"][0]
+
+
+def test_overlay_remove_of_a_count_group_removes_every_copy() -> None:
+    from pathlib import Path
+
+    from mas.lab.lab.config.scenario_loading import _apply_overlay_agent_collection_ops
+
+    config = {
+        "agents": [{"id": "moderator"}, {"id": "worker-1"}, {"id": "worker-2"}],
+        "groups": {"worker": ["worker-1", "worker-2"]},
+    }
+    _apply_overlay_agent_collection_ops({"agents": {"$op": {"remove": ["worker"]}}}, config, Path("mas.yaml"))
+    assert [agent["id"] for agent in config["agents"]] == ["moderator"]
+
+
+def test_a_removed_agent_leaves_its_groups() -> None:
+    config = {
+        "agents": [{"id": "critic"}, {"id": "verifier"}, {"id": "worker-1"}],
+        "groups": {"reviewers": ["critic", "verifier"], "worker": ["worker-1"]},
+    }
+    from mas.lab.lab.config.scenario_loading import _apply_overlay_agent_collection_ops
+
+    overlay_spec = {"agents": {"$op": {"remove": ["reviewers"]}}}
+    _apply_overlay_agent_collection_ops(overlay_spec, config, Path("mas.yaml"))
+
+    assert [a["id"] for a in config["agents"]] == ["worker-1"]
+    assert config["groups"] == {"worker": ["worker-1"]}

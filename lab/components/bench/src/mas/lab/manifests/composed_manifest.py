@@ -9,6 +9,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from mas.ctl.infra.identities import agency_row_id
+from mas.ctl.manifest.agency_groups import group_members
+
 logger = logging.getLogger(__name__)
 
 
@@ -28,8 +31,9 @@ def _is_inline_agent(entry: dict[str, Any]) -> bool:
 
 
 def _load_agent_entry(entry: dict[str, Any], *, mas_dir: Path) -> tuple[str, dict[str, Any]]:
+
     if _is_inline_agent(entry):
-        aid = str(entry.get("metadata", {}).get("name") or entry.get("id") or "agent")
+        aid = agency_row_id(entry) or "agent"
         doc = copy.deepcopy(entry)
         return aid, doc
 
@@ -43,10 +47,10 @@ def _load_agent_entry(entry: dict[str, Any], *, mas_dir: Path) -> tuple[str, dic
     if not isinstance(doc, dict):
         raise FileNotFoundError(f"agent manifest is not a mapping: {path}")
     doc["_validation_base_dir"] = str(path.parent)
-    aid = str(entry.get("id") or doc.get("metadata", {}).get("name") or path.stem)
+    aid = agency_row_id(entry) or str((doc.get("metadata") or {}).get("name") or path.stem)
     merged = copy.deepcopy(doc)
-    if entry.get("id") and merged.get("metadata", {}).get("name") != entry["id"]:
-        merged.setdefault("metadata", {})["name"] = entry["id"]
+    if aid and merged.get("metadata", {}).get("name") != aid:
+        merged.setdefault("metadata", {})["name"] = aid
     return aid, merged
 
 
@@ -147,6 +151,7 @@ def materialize_composed_mas_tree(
     entry = declared_entry_id(mas)
     delegates = list(peers_of(mas, ids).get(entry) or [])
     control_rows = control_files_from_paths(overlay_paths)
+    groups = group_members(mas)
     for aid in ids:
         agents_by_id[aid] = apply_overlay_controls_to_manifest(
             agents_by_id[aid],
@@ -154,6 +159,7 @@ def materialize_composed_mas_tree(
             agent_id=aid,
             entry_id=entry,
             delegate_ids=delegates,
+            groups=groups,
             control_rows=control_rows,
         )
 
@@ -162,7 +168,7 @@ def materialize_composed_mas_tree(
     final_ids: list[str] = []
     for entry in agency.get("agents") or []:
         if isinstance(entry, dict):
-            eid = str(entry.get("id") or entry.get("metadata", {}).get("name") or "")
+            eid = agency_row_id(entry)
             if eid and eid in agents_by_id and eid not in final_ids:
                 final_ids.append(eid)
     for aid in agents_by_id:
@@ -220,7 +226,7 @@ def validate_composed_mas_tree(mas_doc: dict[str, Any], *, label: str, mas_dir: 
     for entry in (spec.get("agency") or {}).get("agents") or []:
         if not isinstance(entry, dict):
             continue
-        aid = str(entry.get("metadata", {}).get("name") or entry.get("id") or "")
+        aid = agency_row_id(entry)
         if entry.get("_validation_base_dir"):
             agent_bases[aid] = Path(str(entry["_validation_base_dir"]))
             entry.pop("_validation_base_dir", None)
@@ -244,7 +250,7 @@ def validate_composed_mas_tree(mas_doc: dict[str, Any], *, label: str, mas_dir: 
         violations.append(f"{label}: composed MAS has no agents (cardinality 1..N)")
         return violations
 
-    agent_ids = {str(a.get("metadata", {}).get("name") or a.get("id") or "") for a in agents if isinstance(a, dict)}
+    agent_ids = {agency_row_id(a) for a in agents if isinstance(a, dict)}
     agent_ids.discard("")
     entry = (spec.get("workflow") or {}).get("entry")
     if entry and str(entry) not in agent_ids:

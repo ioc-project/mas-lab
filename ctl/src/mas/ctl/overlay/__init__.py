@@ -14,6 +14,7 @@ from mas.ctl.overlay.merge import (
     merge_agent_overlay,
     merge_flavour_overlay,
     merge_overlay,
+    rekey_agent_patches,
 )
 from mas.ctl.overlay.normalize import normalize_overlay
 
@@ -30,4 +31,5 @@ __all__ = [
     "merge_flavour_overlay",
     "merge_overlay",
     "normalize_overlay",
+    "rekey_agent_patches",
 ]

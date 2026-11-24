@@ -84,6 +84,11 @@ properties:
                       type: string
                     ref:
                       type: string
+                    count:
+                      type: integer
+                      minimum: 1
+                      maximum: 256
+                      description: "Number of agents this entry stands for (see the MAS schema count field)."
               add:
                 type: array
                 items:
@@ -95,6 +100,11 @@ properties:
                       type: string
                     ref:
                       type: string
+                    count:
+                      type: integer
+                      minimum: 1
+                      maximum: 256
+                      description: "Number of agents this entry stands for (see the MAS schema count field)."
               remove:
                 type: array
                 items:
@@ -102,3 +112,13 @@ properties:
               clear:
                 type: boolean
                 const: true
+              count:
+                type: object
+                minProperties: 1
+                description: >
+                  Map of agency entry id to count (integer, at least 1). Sets count on each named
+                  entry and leaves the others unchanged. See the MAS schema count field.
+                additionalProperties:
+                  type: integer
+                  minimum: 1
+                  maximum: 256

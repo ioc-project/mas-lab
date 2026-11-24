@@ -1,0 +1,165 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Sample lab: how agreement and cost change with the number of identical agents.
+#
+# One `count` entry (worker) creates the group; each scenario overlay sets its size (1, 2, 4, 8, 16).
+# The moderator sends the same question to every worker in one batch (no model call). The workers
+# answer on their own, at temperature 1. The metrics (agreement, accuracy, majority, tokens) are computed from events.jsonl only: no judge model.
+# Every cell runs n_runs times; the figures show the mean over the runs with a 95% interval across them.
+#
+#   mas-lab benchmark run labs/agent-count.lab/experiment.yaml --progress
+
+experiment:
+  name: agent-count
+  description: >
+    Agreement, accuracy and cost against the number of identical agents answering one question.
+    The number of agents is the only thing that changes between scenarios.
+  default_flavour: local
+  overrides:
+    # A LiteLLM gateway caches identical requests on its server, and every worker sends the same request, so
+    # all would get the first worker's answer. This asks the gateway to skip its cache. Delete it for an
+    # endpoint that rejects unknown request fields.
+    - .mas.agent[worker].spec.models[0].extra.cache.no-cache=true
+  models:
+    main: gpt-4o-mini        # the agents say "any"; override to use another model, e.g. gemma4
+  application:
+    manifest: ./apps/crowd-qa/mas.yaml
+    configs_dir: ./overlays
+  scenarios:
+  - id: n1
+    description: "1 identical worker"
+    overlays:
+      logic: [n1]
+      control: []
+      infra: []
+  - id: n2
+    description: "2 identical workers"
+    overlays:
+      logic: [n2]
+      control: []
+      infra: []
+  - id: n4
+    description: "4 identical workers"
+    overlays:
+      logic: [n4]
+      control: []
+      infra: []
+  - id: n8
+    description: "8 identical workers"
+    overlays:
+      logic: [n8]
+      control: []
+      infra: []
+  - id: n16
+    description: "16 identical workers"
+    overlays:
+      logic: [n16]
+      control: []
+      infra: []
+  dataset:
+    path: ./datasets/crowd-questions.yaml
+  run:
+    n_runs: 10
+    post:
+      # Per run, no model call: the metrics are the eval_metric plugins of agent_count_lab/metrics.py.
+      - name: crowd-metrics
+        type: eval_mce
+        config:
+          metrics: [crowd_agents, crowd_agreement, crowd_accuracy, crowd_majority_correct, crowd_tokens]
+
+  post:
+    - name: collect-metrics
+      type: collect_metrics
+      depends_on: [crowd-metrics]
+
+    # One observation per run (the mean over the questions), then a Student t interval across the runs.
+    - name: ci-by-run
+      type: compute_ci
+      depends_on: [collect-metrics]
+      config:
+        data: "@collect-metrics"
+        groupby: [scenario, metric]
+        pre_aggregate: {by: [scenario, metric, run_idx], agg: mean}
+        ci_method: t
+        ci_level: 0.95
+        output: "results/ci_by_run.csv"
+
+    # Per question: the interval across the runs of that question.
+    - name: ci-by-question
+      type: compute_ci
+      depends_on: [collect-metrics]
+      config:
+        data: "@collect-metrics"
+        metrics: [crowd_majority_correct, crowd_accuracy]
+        groupby: [scenario, item_id, metric]
+        ci_method: t
+        ci_level: 0.95
+        output: "results/ci_by_question.csv"
+
+    - name: figure-agreement
+      type: plotnine
+      depends_on: [ci-by-run]
+      config:
+        data: "@ci-by-run"
+        filter:
+          metric: [crowd_agreement, crowd_accuracy, crowd_majority_correct]
+        mapping: {x: scenario, y: mean, color: metric, group: metric, ymin: ci_low, ymax: ci_high}
+        geom: line
+        rename_values:
+          scenario: {n1: "1", n2: "2", n4: "4", n8: "8", n16: "16"}
+          metric:
+            crowd_agreement: "Agreement (share on the modal answer)"
+            crowd_accuracy: "Accuracy of one agent"
+            crowd_majority_correct: "Majority is correct"
+        factor_levels:
+          scenario: ["1", "2", "4", "8", "16"]
+        labels:
+          title: "Agreement and correctness against the number of agents"
+          x: "Agents answering"
+          y: "Mean (bars: 95% interval across runs)"
+        output: "results/figure-agreement.png"
+        width: 7
+        height: 4
+
+    - name: figure-cost
+      type: plotnine
+      depends_on: [ci-by-run]
+      config:
+        data: "@ci-by-run"
+        filter:
+          metric: [crowd_tokens]
+        mapping: {x: scenario, y: mean, group: metric, ymin: ci_low, ymax: ci_high}
+        geom: line
+        rename_values:
+          scenario: {n1: "1", n2: "2", n4: "4", n8: "8", n16: "16"}
+        factor_levels:
+          scenario: ["1", "2", "4", "8", "16"]
+        labels:
+          title: "Tokens per question against the number of agents"
+          x: "Agents answering"
+          y: "Tokens per run (bars: 95% interval)"
+        output: "results/figure-cost.png"
+        width: 7
+        height: 4
+
+    - name: figure-questions
+      type: plotnine
+      depends_on: [ci-by-question]
+      config:
+        data: "@ci-by-question"
+        filter:
+          metric: [crowd_majority_correct]
+        mapping: {x: scenario, y: mean, color: item_id, group: item_id}
+        geom: line
+        rename_values:
+          scenario: {n1: "1", n2: "2", n4: "4", n8: "8", n16: "16"}
+        factor_levels:
+          scenario: ["1", "2", "4", "8", "16"]
+        labels:
+          title: "Voting rescues a question only when the right answer is the most common one"
+          x: "Agents answering"
+          y: "Share of runs where the majority is right"
+        output: "results/figure-questions.png"
+        width: 8
+        height: 5

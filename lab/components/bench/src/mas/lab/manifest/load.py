@@ -1,10 +1,9 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 """MAS manifest loading for mas-lab bench — compose + agent resolution."""
 
+from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
@@ -13,6 +12,8 @@ from typing import Any
 
 from mas.ctl.compose.runner import ComposeRequest, ComposeResult, compose_run
 from mas.ctl.executor.mas_session import entry_agent_id
+from mas.ctl.infra.identities import agency_row_id
+from mas.ctl.manifest.agency_groups import group_members
 from mas.ctl.manifest.mas_agent_merge import apply_agency_entry_overlay, find_agency_entry
 from mas.ctl.overlay import apply_merge_patch
 from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
@@ -227,13 +228,11 @@ def load_mas_config(
             patches = {}
             if result.bind.composed_application is not None:
                 patches = result.bind.composed_application.agent_patches or {}
-            aid = str(entry.get("id") or (agent_doc or {}).get("metadata", {}).get("name") or ap.stem)
-            agent_doc = apply_agency_entry_overlay(
-                agent_doc or {}, entry, agent_patch=patches.get(aid)
-            )
+            aid = agency_row_id(entry) or str((agent_doc or {}).get("metadata", {}).get("name") or ap.stem)
+            agent_doc = apply_agency_entry_overlay(agent_doc or {}, entry, agent_patch=patches.get(aid))
             raw_agents.append(_agent_runtime_dict(agent_doc or {}, agent_id=aid, agent_dir=ap.parent))
         elif entry.get("kind", "").lower() == "agent" or "metadata" in entry:
-            aid = str(entry.get("metadata", {}).get("name") or entry.get("id") or "agent")
+            aid = agency_row_id(entry) or "agent"
             raw_agents.append(_agent_runtime_dict(entry, agent_id=aid, agent_dir=base_dir))
 
     if not raw_agents and str(mas.get("kind", "")).lower() == "agent":
@@ -248,6 +247,7 @@ def load_mas_config(
             "entry_agent": entry_id,
         },
         "agents": raw_agents,
+        "groups": group_members(mas),
         "workflow": spec.get("workflow") or {},
         "capabilities": spec.get("capabilities") or {},
     }

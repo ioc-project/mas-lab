@@ -18,6 +18,7 @@ from mas.ctl.executor.mas_session import (
     wire_peer_delegation,
 )
 from mas.ctl.executor.stacks import ChainStartError
+from mas.ctl.manifest.agency_groups import group_members
 
 if TYPE_CHECKING:
     from mas.runtime.boundary.obs.plugins import ObsPluginSet
@@ -105,12 +106,15 @@ def open_entry_session(materialized: Any, args: _EntrySession, *, display: Any) 
     for agent_instance in materialized.materialized.instances.values():
         apply_runtime_params_to_instance(args.runtime_params, agent_instance)
     # The entry agent's governance as the Controls give it (warnings print once, at instantiation).
+
+    mas = getattr(getattr(materialized, "compose", None), "mas_config", None)
     apply_flavour_controls(
         prepared.enriched_manifest,
         args.flavour_spec,
         agent_id=args.entry,
         entry_id=args.declared,
         delegate_ids=args.delegates,
+        groups=group_members(mas) if isinstance(mas, dict) else None,
         warn=False,
     )
     hitl_responder, _ = resolve_hitl_from_manifest(
@@ -120,6 +124,7 @@ def open_entry_session(materialized: Any, args: _EntrySession, *, display: Any) 
         agent_id=args.entry,
         entry_id=args.declared,
         delegate_ids=args.delegates,
+        groups=group_members(mas) if isinstance(mas, dict) else None,
     )
     if hitl_responder is not None:
         prepared.instance.driver.hitl = hitl_responder
@@ -189,11 +194,12 @@ def execute_run_mas(
     ids = agency_ids(result.mas_config)
     declared = declared_entry_id(result.mas_config)
     delegates = list(peers_of(result.mas_config, ids).get(declared) or [])
+    groups = group_members(result.mas_config)
     if not isinstance(flavour_spec, dict):
         flavour_spec = {}
     try:
         attach_overlay_controls(flavour_spec, overlay_paths or [])
-        result.resolved_infra = bind_session(result.resolved_infra, flavour_spec, agent_ids=ids)
+        result.resolved_infra = bind_session(result.resolved_infra, flavour_spec, agent_ids=ids, groups=groups)
         result.bind.flavour_spec = flavour_spec
     except (BindError, ControlError) as exc:
         logger.error("%s", exc)
@@ -217,6 +223,7 @@ def execute_run_mas(
             flavour_spec=flavour_spec,
             resolved_infra=result.resolved_infra,
             entry_id=declared,
+            groups=groups,
         )
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
     result.bind.obs_config = obs_config

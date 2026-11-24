@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Lab-local library for agent-count.lab (listed from lab-config.yaml).
+apiVersion: mas/v1
+kind: Library
+
+name: agent-count-lib
+description: Per-run metrics for agent-count.lab. Not a shipped package.
+version: "0.1.0"
+
+types:
+  - eval_metric
+
+plugins:
+  - type: eval_metric
+    name: crowd_metrics
+    module: agent_count_lab.metrics
+    attributes:
+      factory: agent_count_lab.metrics:build_metrics

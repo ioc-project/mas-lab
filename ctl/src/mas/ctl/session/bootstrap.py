@@ -23,6 +23,7 @@ from mas.ctl.adapters.memory_seed import (
 )
 from mas.ctl.compose.models import ResolvedInfra
 from mas.ctl.infra.resolve import resolution_anchor
+from mas.ctl.manifest.agency_groups import group_members
 from mas.ctl.session.engine_factory import EngineSelection, build_engine
 from mas.ctl.validate import validate_file, validation_enabled
 from mas.ctl.workspace.config import WorkspaceConfig
@@ -202,15 +203,18 @@ def instantiate_runtime(
             if parent:
                 entry = declared_entry_id(parent)
                 delegates = list(peers_of(parent, agency_ids(parent)).get(entry) or [])
+                groups = group_members(parent)
             else:
                 entry = agent_id
                 delegates = []
+                groups = None
             apply_flavour_controls(
                 options.agent_manifest,
                 options.flavour_spec,
                 agent_id=agent_id,
                 entry_id=entry,
                 delegate_ids=delegates,
+                groups=groups,
             )
     policy = parse_checkpoint_policy(((options.agent_manifest or {}).get("spec") or {}).get("checkpoint"))
     store = build_checkpoint_store(policy, options.checkpoint_dir)
@@ -264,12 +268,16 @@ def instantiate_runtime(
 
         agent_id = agent_id_from_manifest(options.agent_manifest)
         parent = options.parent_spec
+        groups = None
         if options.entry_id:
             entry = options.entry_id
             delegates = list(options.delegate_ids)
+            if parent:
+                groups = group_members(parent)
         elif parent:
             entry = declared_entry_id(parent)
             delegates = list(peers_of(parent, agency_ids(parent)).get(entry) or [])
+            groups = group_members(parent)
         else:
             entry = agent_id
             delegates = []
@@ -279,6 +287,7 @@ def instantiate_runtime(
             agent_id=agent_id,
             entry_id=entry,
             delegate_ids=delegates,
+            groups=groups,
         )
     spec = _enforce_hardening(options, spec)
     if options.resolved_infra is not None and options.resolved_infra.identity_scope:

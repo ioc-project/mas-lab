@@ -228,6 +228,21 @@ properties:
                     ref:
                       type: string
                       description: "Path to the agent manifest, relative to the MAS manifest directory."
+                    count:
+                      type: integer
+                      minimum: 1
+                      maximum: 256
+                      description: >
+                        Number of agents this entry stands for. The entry creates the group <id>
+                        and mas-ctl expands it into the agents <id>-1 .. <id>-<count>, each from
+                        the same ref. Omit for one agent. delegates_to and a node whose id is the
+                        group expand to all members. workflow.entry, spec.entry_agent, and
+                        node.agent accept a group only when count is 1. Overlay patches name the
+                        group id. Control selectors and Flavour bind.agents that name the group
+                        apply to every member. Not provided: text templating in prompts.
+                    group:
+                      type: string
+                      description: "Set by expansion on a copy made by count: the group it came from. Do not author it."
                 - type: object
                   required: [kind, metadata, spec]
                   additionalProperties: false
@@ -245,6 +260,22 @@ properties:
                       type: object
                     spec:
                       type: object
+                    count:
+                      type: integer
+                      minimum: 1
+                      maximum: 256
+                      description: "Number of copies of this inline agent, as for a ref entry."
+
+          groups:
+            type: object
+            description: >
+              Explicit groups: a group id and its members. A member is an agency agent or a group made by
+              count; groups do not nest, and a group id may not be an agent id. A count entry makes its own
+              group implicitly. An expanded manifest lists every group, implicit ones included.
+            additionalProperties:
+              type: array
+              items:
+                type: string
 
       workflow:
         type: object

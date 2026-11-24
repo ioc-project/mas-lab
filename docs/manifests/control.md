@@ -18,7 +18,8 @@ no matching Control names them.
 A Flavour lists Control files under `spec.control`. Each row is `{ref, agents}`.
 `agents` is `$all` (default), `$entry` (`workflow.entry` or `spec.entry_agent`; omitted, nobody), `$not-entry`, `$delegates`, one agent id,
 a list of ids, or the same agent path as `--override` (`.mas.agent[id]`,
-`.mas.agent[id=name]`, `.mas.agent[*]`, `mas:agent[id]`). That is the
+`.mas.agent[id=name]`, `.mas.agent[*]`, `mas:agent[id]`). A count group id
+matches every copy (see [Groups of agents with `count`](mas.md#groups-of-agents-with-count)). That is the
 same idea as Flavour `bind`: `$all` is the default chain, one id is
 `bind.agents.<id>`. A field after the agent is not a selector. When the Flavour
 row omits `agents`, the Control's own `spec.agents` is the default (`$all`).

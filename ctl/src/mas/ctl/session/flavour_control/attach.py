@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -46,13 +46,14 @@ def apply_controls(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Matching Controls stay on the Flavour. The agent spec is not rewritten.
 
     Observability and governance are Control attributes.
     """
     _refuse_leftover_control_keys(controls)
-    matching_controls(controls, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids)
+    matching_controls(controls, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids, groups=groups)
     merged = copy.deepcopy(manifest) if isinstance(manifest, dict) else {"spec": {}}
     return merged, []
 
@@ -206,6 +207,7 @@ def apply_resolved_controls(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
     warn: bool = True,
 ) -> dict[str, Any]:
     """Resolve matching Controls for *agent_id*. The agent spec is unchanged."""
@@ -217,6 +219,7 @@ def apply_resolved_controls(
         agent_id=agent_id,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     if warn:
         for message in warnings:
@@ -231,6 +234,7 @@ def apply_overlay_controls_to_manifest(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
     warn: bool = True,
     control_rows: Sequence[dict[str, Any]] = (),
 ) -> dict[str, Any]:
@@ -244,6 +248,7 @@ def apply_overlay_controls_to_manifest(
         agent_id=agent_id,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
         warn=warn,
     )
 
@@ -256,6 +261,7 @@ def apply_flavour_controls(
     search_dirs: Sequence[Path | str] = (),
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
     warn: bool = True,
 ) -> dict[str, Any]:
     """Resolve Flavour control rows. Matching Controls stay on the Flavour, not the agent."""
@@ -265,5 +271,6 @@ def apply_flavour_controls(
         agent_id=agent_id,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
         warn=warn,
     )

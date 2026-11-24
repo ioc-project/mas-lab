@@ -32,6 +32,7 @@ from mas.ctl.executor.subagent_spawner import wire_subagent_spawning
 from mas.ctl.infra.bind import BindError, bind_session, flavour_spec_of
 from mas.ctl.infra.identities import agency_ids, declared_entry_id
 from mas.ctl.infra.resolve import resolve_infra_refs
+from mas.ctl.manifest.agency_groups import group_members
 from mas.ctl.paths import OverlayRefEntry, resolve_overlay_ref_entries
 from mas.ctl.session.bootstrap import InstantiationOptions, hitl_contract_for_mode, instantiate_runtime
 from mas.ctl.session.controller import ConversationConfig, SessionController, close_observability
@@ -137,6 +138,9 @@ def bench_obs_config(
 
     agent_id = agent_manifest_label(manifest, manifest_path)
     entry_id = declared_entry_id(mas_config) if mas_config else agent_id
+    groups = None
+    if mas_config:
+        groups = group_members(mas_config)
     obs_cfg = resolve_observability_config(
         events=True,
         events_file=str(events_path),
@@ -147,6 +151,7 @@ def bench_obs_config(
         manifest=manifest,
         flavour_spec=flavour_spec_of(flavour) if flavour else None,
         entry_id=entry_id,
+        groups=groups,
     )
     return events_path, obs_cfg
 
@@ -496,7 +501,9 @@ class MasBenchRunner:
                 controls=controls,
                 search_dirs=control_search_dirs(workspace_root, resolved_mas_path.parent, spec_path.parent, Path.cwd()),
             )
-            compose.resolved_infra = bind_session(compose.resolved_infra, flavour, agent_ids=ids)
+            compose.resolved_infra = bind_session(
+                compose.resolved_infra, flavour, agent_ids=ids, groups=group_members(compose.mas_config)
+            )
         except (BindError, ControlError) as exc:
             return RunResult(content="", status="error", error=str(exc))
         compose.bind.flavour_spec = flavour_spec_of(flavour)
@@ -539,6 +546,8 @@ class MasBenchRunner:
                     obs_config=obs_cfg,
                     obs_from_cli=True,
                     obs_binding_override=obs_config_to_binding(obs_cfg),
+                    parent_spec=compose.mas_config,
+                    entry_id=entry,
                 ),
             )
             _attach_tool_fixtures([instance], tool_fixtures, run_params)

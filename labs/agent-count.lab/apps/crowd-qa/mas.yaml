@@ -1,0 +1,23 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: MAS
+metadata:
+  name: crowd-qa
+  description: A moderator sends one question to a group of identical workers and returns their answers.
+spec:
+  agency:
+    agents:
+      - id: moderator
+        ref: agents/moderator.yaml
+      # One entry, many agents: `count` creates the group "worker" and the agents worker-1 .. worker-n.
+      # The experiment overlays set the number; the base keeps count: 1 so the ids are the same in every scenario.
+      - id: worker
+        ref: agents/worker.yaml
+        count: 1
+  workflow:
+    entry: moderator
+    nodes:
+      - id: moderator
+        delegates_to: [worker]   # the group id expands to every worker
+      - id: worker

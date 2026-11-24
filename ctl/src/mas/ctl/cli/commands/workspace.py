@@ -11,6 +11,7 @@ import click
 import yaml
 from mas.ctl.cli.bind_flags import control_option, middleware_option
 from mas.ctl.libraries.bundles import TYPE_HELP, catalog_kinds, list_bundles, list_manifest_libraries
+from mas.ctl.manifest.agency_groups import group_members, loaded_session_mas
 from mas.ctl.session.flavour import SUPPORTED_FLAVOURS
 from mas.runtime.spec.yaml_errors import YamlLoadError, safe_yaml_load, yaml_error_text
 
@@ -144,6 +145,8 @@ def _run_infra_resolved(
         document = loaded if isinstance(loaded, dict) else None
     connections, pipeline = _view_flags(connections, pipeline)
     try:
+        if document:
+            document = loaded_session_mas(document)
         flavour_spec = resolve_session_flavour(flavour, overrides=overrides, controls=controls, search_dirs=[start])
         infra = resolve_session_infra(
             document,
@@ -160,7 +163,7 @@ def _run_infra_resolved(
         if document:
             from mas.ctl.infra.bind import bind_session
 
-            infra = bind_session(infra, flavour_spec, agent_ids=ids)
+            infra = bind_session(infra, flavour_spec, agent_ids=ids, groups=group_members(document))
         else:
             infra = bind_flavour(infra, flavour_spec, agent_ids=None)
         from mas.ctl.session.llm_retry_env import llm_http_retry_overrides

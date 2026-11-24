@@ -12,7 +12,7 @@ sink and keeps native unless a Control named the observability list (including
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 
 import click
 from mas.ctl.adapters.obs.config import ObservabilityConfig
@@ -73,6 +73,7 @@ def resolve_observability_config(
     resolved_infra: ResolvedInfra | None = None,
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> ObservabilityConfig:
     """Resolve the effective observability config.
 
@@ -97,6 +98,7 @@ def resolve_observability_config(
         resolved_infra=resolved_infra,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     patches = parse_cli_patches(transport_observability)
     if patches:

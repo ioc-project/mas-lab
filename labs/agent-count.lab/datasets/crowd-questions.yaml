@@ -1,0 +1,64 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: lab/v1
+kind: Dataset
+metadata:
+  name: crowd-questions
+  display_name: Crowd questions
+  version: '1.0'
+  description: >-
+    Counting and arithmetic questions with one integer answer. Picked from 30 candidates by running one worker
+    (gpt-4o-mini, step-by-step answer, temperature 1, no truncation) 8 times on each. How often one worker is
+    right differs by question on purpose, from never to always, and is about half on several of them.
+spec:
+  items:
+  - id: rr
+    inputs:
+      user: "How many times does the letter r appear in 'the preferred correspondent arrived on Thursday'?"
+    expectations:
+      ground_truth: "8"
+  - id: aa
+    inputs:
+      user: "How many times does the letter a appear in 'a banana bread and an apple tart at the alhambra'?"
+    expectations:
+      ground_truth: "13"
+  - id: mod
+    inputs:
+      user: "What is the remainder when 2 to the power of 40 is divided by 97?"
+    expectations:
+      ground_truth: "36"
+  - id: days
+    inputs:
+      user: "How many days are there from 14 February to 3 September of a non-leap year?"
+    expectations:
+      ground_truth: "201"
+  - id: ds2
+    inputs:
+      user: "What is the sum of the digits of 7 to the power of 18?"
+    expectations:
+      ground_truth: "73"
+  - id: d3
+    inputs:
+      user: "How many integers from 1 to 500 contain the digit 3?"
+    expectations:
+      ground_truth: "176"
+  - id: ds
+    inputs:
+      user: "What is the sum of the digits of 3 to the power of 25?"
+    expectations:
+      ground_truth: "63"
+  - id: m3
+    inputs:
+      user: "What is 729 times 38?"
+    expectations:
+      ground_truth: "27702"
+  - id: m2
+    inputs:
+      user: "What is 3847 times 46?"
+    expectations:
+      ground_truth: "176962"
+  - id: lcm
+    inputs:
+      user: "What is the least common multiple of 84 and 126 and 90?"
+    expectations:
+      ground_truth: "1260"

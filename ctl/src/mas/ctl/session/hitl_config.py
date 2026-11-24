@@ -14,6 +14,7 @@ Architecture
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mas.ctl.manifest.spec_bindings import parse_governance
@@ -52,6 +53,7 @@ def resolve_hitl_from_manifest(
     agent_id: str = "",
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[Any | None, Any | None]:
     """Return (hitl_responder, hitl_terminal) for SessionController / RuntimeBuilder.
 
@@ -66,6 +68,7 @@ def resolve_hitl_from_manifest(
         agent_id=who,
         entry_id=entry_id or who,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     gov = parse_governance(spec.get("governance"))
     holds_possible = bool(

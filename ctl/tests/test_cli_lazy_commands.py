@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
 
@@ -17,7 +18,8 @@ def test_listed_help_is_the_commands_own(name: str) -> None:
     command = app.get_command(click.Context(app), name)
     assert command is not None
     assert command.name is not None
-    assert (command.help or "") == LAZY_COMMANDS[name][2]
+    # Python before 3.13 keeps the docstring indentation; 3.13 strips it. Compare the cleaned text.
+    assert inspect.cleandoc(command.help or "") == inspect.cleandoc(LAZY_COMMANDS[name][2])
 
 
 def test_a_command_added_to_the_app_is_listed_and_run() -> None:

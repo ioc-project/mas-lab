@@ -328,15 +328,10 @@ def document_agent_ids(document: dict[str, Any] | None) -> list[str]:
     """The agent ids of a MAS document (its agency), or the one id of an Agent document."""
     if not isinstance(document, dict):
         return []
-    spec = document.get("spec") if isinstance(document.get("spec"), dict) else {}
     if str(document.get("kind") or "") == "MAS":
-        agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
-        ids: list[str] = []
-        for row in agency.get("agents") or []:
-            agent_id = str((row.get("id") or row.get("name")) if isinstance(row, dict) else row or "").strip()
-            if agent_id:
-                ids.append(agent_id)
-        return ids
+        from mas.ctl.infra.identities import agency_ids
+
+        return agency_ids(document)
     name = str((document.get("metadata") or {}).get("name") or "").strip()
     return [name] if name else []
 

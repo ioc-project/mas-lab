@@ -7,7 +7,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from mas.ctl.compose.pattern_registry import pattern_for_agent
 from mas.ctl.compose.models import (
     AgentBindSlice,
     AgentPlacement,
@@ -17,6 +16,8 @@ from mas.ctl.compose.models import (
     ResolvedInfra,
     RuntimeId,
 )
+from mas.ctl.compose.pattern_registry import pattern_for_agent
+from mas.ctl.infra.identities import agency_row_id
 
 
 def _resolve_plan_runtime(spec: dict) -> RuntimeId:
@@ -98,12 +99,8 @@ def compose_effective_bind(
         agents.append(
             AgentBindSlice(
                 agent_id=placement.agent_id,
-                pattern_plugin_id=pattern_for_agent(
-                    composed.config, placement.agent_id, mas_base_dir=mas_base_dir
-                ),
-                manifest_path=placement.manifest_path or _manifest_path_for_agent(
-                    composed.config, placement.agent_id
-                ),
+                pattern_plugin_id=pattern_for_agent(composed.config, placement.agent_id, mas_base_dir=mas_base_dir),
+                manifest_path=placement.manifest_path or _manifest_path_for_agent(composed.config, placement.agent_id),
                 bind_address=placement.bind_address or f"inproc://{placement.agent_id}",
                 framework_adapter=placement.framework_adapter,
                 llm_ref="infra:llm-proxy",
@@ -136,7 +133,7 @@ def _agents_from_mas(config: dict[str, Any]) -> list[dict[str, str]]:
         if not isinstance(a, dict):
             out.append({"id": f"agent-{i}"})
             continue
-        aid = a.get("name") or a.get("id") or f"agent-{i}"
+        aid = agency_row_id(a) or f"agent-{i}"
         # An agency entry with only agent_comm describes a remote peer. It is
         # discoverable for routing but must not be materialized locally.
         if not a.get("ref") and not isinstance(a.get("spec"), dict):
@@ -150,12 +147,9 @@ def _agents_from_mas(config: dict[str, Any]) -> list[dict[str, str]]:
 
 def _manifest_path_for_agent(config: dict[str, Any], agent_id: str) -> str:
     spec = config.get("spec", config)
-    for entry in (spec.get("agents") or (spec.get("agency") or {}).get("agents") or []):
+    for entry in spec.get("agents") or (spec.get("agency") or {}).get("agents") or []:
         if not isinstance(entry, dict):
             continue
-        name = entry.get("name", entry.get("id", ""))
-        if name == agent_id:
+        if agency_row_id(entry) == agent_id:
             return entry.get("manifest") or entry.get("ref") or ""
     return ""
-
-

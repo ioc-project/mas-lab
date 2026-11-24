@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from mas.lab.benchmark.execution.roles import PlannedRun
 from mas.lab.benchmark.execution.wire import read_results, run_run_dir
+from mas.runtime.secrets import child_env
 
 DEFAULT_MAX_SCHEDULED_BATCHES = 8
 MAX_BATCH_DEPTH = 3
@@ -162,6 +163,7 @@ def _spawn_child(handle: BatchHandle) -> None:
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=handle.stderr_file,
+        env=child_env(lab=True),
     )
     handle.status = "running"
 

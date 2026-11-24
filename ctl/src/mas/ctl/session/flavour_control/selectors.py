@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mas.ctl.overrides.parser import parse_agent_target
@@ -66,12 +66,13 @@ def agent_matches(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> bool:
     """Whether ``selector`` includes ``agent_id``.
 
     Overlay aliases: ``$all`` (default), ``$entry``, ``$not-entry``, ``$delegates``.
     Ids: one name or a list. Agent path: the same targeting as ``--override``
-    (``.mas.agent[id]`` / ``.mas.agent[*]``).
+    (``.mas.agent[id]`` / ``.mas.agent[*]``). A count group id matches every copy.
     """
     if selector in (None, "$all"):
         return True
@@ -83,14 +84,20 @@ def agent_matches(
         return agent_id in set(delegate_ids)
     if isinstance(selector, list):
         return any(
-            agent_matches(item, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids) for item in selector
+            agent_matches(item, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids, groups=groups)
+            for item in selector
         )
     text = str(selector)
     if text == "*":
         raise ControlError("Control agents '*' is not a selector; use $all or .mas.agent[*]")
     picked = path_picks_agent(text, agent_id)
     if picked is not None:
-        return picked
+        if picked:
+            return True
+        _, name = parse_selector_path(text)
+        return bool(name and groups and agent_id in list(groups.get(name) or ()))
+    if groups and agent_id in list(groups.get(text) or ()):
+        return True
     return agent_id == text
 
 
