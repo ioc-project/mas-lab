@@ -17,7 +17,7 @@
 | `mas-lab-library-eval`         | Libraries     | Evaluation and quality metrics library for MAS Lab — MCE integration.                                   | —                     |
 | `mas-lab-library-lab`          | Libraries     | MAS Lab provider library with public eval plugins.                                                      | —                     |
 | `mas-lab-library-samples`      | Libraries     | Community-contributed MAS sample apps, datasets, and tools.                                             | —                     |
-| `mas-lab-library-ioa`          | Libraries     | MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers.   | `mas-mcp`, `mas-slim` |
+| `mas-lab-library-ioa`          | Libraries     | MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A-over-SLIM stack layers. | `mas-mcp`, `mas-slim` |
 | `mas-lab-library-telemetry`    | Libraries     | MAS Lab native-events → OTel conversion, span contracts/verification, and OTLP collector serialization. | —                     |
 | `mas-lab-library-kg`           | Libraries     | MAS Lab trace normalization and knowledge-graph validation algorithms.                                  | —                     |
 ---
@@ -306,7 +306,7 @@ uv pip install mas-lab-library-samples  # PyPI
 ### `mas-lab-library-ioa`
 **Install path:** `library-ioa`  
 **Layer:** Libraries  
-MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A framing stack layers.
+MCP client/server bridge, A2A agent_comm / agent_expose, and SLIM, HTTP and A2A-over-SLIM stack layers.
 
 ```bash
 uv pip install -e library-ioa  # source
@@ -317,12 +317,12 @@ uv pip install "mas-lab-library-ioa[all]"  # PyPI, all extras
 
 **Optional extras:**
 
-| Extra      | Packages / features     |
-| ---------- | ----------------------- |
-| `cli`      | `mcp[cli]`              |
-| `all`      | `mcp[cli]`              |
-| `slim`     | `slim-bindings>=2.2,<3` |
-| `a2a-grpc` | `a2a-sdk[grpc]>=1.1.5`  |
+| Extra      | Packages / features                         |
+| ---------- | ------------------------------------------- |
+| `cli`      | `mcp[cli]`                                  |
+| `all`      | `mcp[cli]`                                  |
+| `slim`     | `slim-bindings>=3.3.6,<4`, `slima2a==0.9.3` |
+| `a2a-grpc` | `a2a-sdk[grpc]>=1.1.5`                      |
 
 **CLI commands:**
 

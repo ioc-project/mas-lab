@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import get_type_hints
 
 import pytest
+from mas.library.standard.lib.comm.headers import bound_headers
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.system_tools.send import SendTool, SendToolContext
@@ -530,6 +531,30 @@ def test_engine_tool_context_does_not_declare_the_comm_bus() -> None:
 
     assert "agent_comm" not in EngineToolContext.__dict__
     assert "arun_turn" in EngineToolContext.__dict__
+
+
+async def test_send_tool_passes_ambient_hop_headers_to_the_link() -> None:
+    seen: dict[str, object] = {}
+
+    class Rec(LinkIdentity):
+        plugin_id = "a2a"
+
+        async def asend(self, target_agent_id: str, task: str, **kwargs: object) -> str:
+            del target_agent_id, task
+            seen.update(kwargs)
+            return "ok"
+
+    tool = SendTool(comm=Rec(), allowed_peers=["peer"])  # type: ignore[arg-type]
+    trace = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    with bound_headers({"traceparent": trace, "baggage": "k=v"}):
+        assert await tool.asend("peer", "x") == "ok"
+    headers = seen["headers"]
+    assert isinstance(headers, dict)
+    assert headers["traceparent"] == trace
+    assert headers["baggage"] == "k=v"
+    context = seen["context"]
+    assert isinstance(context, SendContext)
+    assert dict(context.headers) == headers
 
 
 def test_send_tool_reads_send_tool_context() -> None:

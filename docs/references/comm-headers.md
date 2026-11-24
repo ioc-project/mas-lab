@@ -17,9 +17,13 @@ link. A header is the wrong carrier unless a trusted layer sets it.
 intent. The caller may set those; only the link sets `sender`. See
 [Communication stack](comm-stack.md).
 
-The in-process `local` link carries the map. **A2A does not:**
-`A2AAgentComm.send` accepts `headers` so the contract is implemented, and then
-drops them. Forwarding hop headers over HTTP is a later decision.
+The in-process `local` link carries the map. The `a2a` HTTP link sends it too:
+`A2AAgentComm.asend` validates it (a framing header such as `host` or
+`content-length` raises `AgentCommError`) and puts it on that call's JSON-RPC
+request through the A2A SDK's per-call context, over the row's static
+`headers`. It never goes on the shared HTTP client, so concurrent sends do not
+see each other's headers. The `a2a-rpc` layer copies the hop-safe keys onto A2A
+message metadata and restores them as the ambient headers of the served turn.
 
 ## What rides the next hop
 

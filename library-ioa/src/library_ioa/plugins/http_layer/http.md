@@ -39,18 +39,17 @@ a loopback `https` url.
 
 It only connects: it never receives. `usage: listen` for an agent on a
 chain whose bottom row is `http` is refused when ctl applies the Flavour; serve an agent over HTTP with the `a2a` `agent_expose` plugin
-(`mas-ctl serve`). Bind an [`a2a-framing`](../a2a/a2a-framing.md) row above it to reach such a server:
+(`mas-ctl serve`). To *reach* an A2A server at an HTTP url, use the [`a2a`](../a2a/a2a.md) link (one row), not `a2a-rpc`. `a2a-rpc` runs over `slim` only.
 
 ```yaml
 # infra rows
-outage-web: {protocol: http, url: "http://127.0.0.1:9003"}
-outage-a2a: {protocol: a2a-framing}
+outage-server: {protocol: a2a, url: "http://127.0.0.1:9003"}
 # Flavour
 bind:
-  agent_comm: [outage-web, outage-a2a]
+  agents:
+    outage:
+      agent_comm: [outage-server]
+      usage: connect
 ```
-
-The url is the address, so every send of the chain goes to that one
-server.
 
 [Communication stack](../../../../../docs/references/comm-stack.md#chains-from-a-flavour).

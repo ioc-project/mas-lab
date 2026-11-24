@@ -23,7 +23,7 @@ Each layer depends only on the layers above it. There are no cycles.
 | | `library-telemetry/` | Converts and replays traces, exports to OpenTelemetry |
 | | `library-kg/` | Turns traces into a knowledge graph |
 | | `library-skills/` | The skill catalogue and the tools that read skills |
-| | `library-ioa/` | MCP client/server bridge, A2A plugins, and SLIM, HTTP and A2A framing stack layers |
+| | `library-ioa/` | MCP client/server bridge, A2A plugins, and SLIM, HTTP and A2A-over-SLIM stack layers |
 
 A *lab* is an experiment folder. A *library* is a folder with a `library.yaml`
 holding reusable applications, tools and plugins, referenced as `name:path`. The

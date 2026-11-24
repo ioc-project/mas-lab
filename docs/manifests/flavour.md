@@ -205,7 +205,7 @@ on every row of its chain, whether or not the row uses `{agent}`. `local-group` 
 `slim` name an agent `<identity>/<agent_id>`, so the id is one name part: letters,
 digits, `.`, `_` and `-`. `slim` is stricter: neither the identity's service nor the
 agent id may contain `.`, so `x.y` is refused on a `slim` row and accepted on a
-`local-group` or `http` row. `http`, `a2a` and `a2a-framing` name nothing and accept
+`local-group` or `http` row. `http`, `a2a` and `a2a-rpc` name nothing and accept
 any id that fits the url grammar where `{agent}` is used. A refused id is one line:
 `Flavour bind: agent 'x.y' cannot ride row 'desk-node' (layer 'slim'): SLIM agent id
 cannot contain '.': 'x.y'`.

@@ -396,6 +396,33 @@ def _add_admission(app: FastAPI, admission: list[AdmissionCaller]) -> None:
         return await call_next(request)
 
 
+def build_request_handler(
+    agent_card: AgentCard | dict[str, Any],
+    executor: Any,
+    *,
+    push_config_store: PushNotificationConfigStore | None = None,
+    push_sender: PushNotificationSender | None = None,
+    extended_agent_card: AgentCard | dict[str, Any] | None = None,
+) -> DefaultRequestHandler:
+    """The SDK request handler every A2A binding shares: the HTTP routes and the slimrpc server both call it."""
+    card = _coerce_agent_card(agent_card)
+    task_store = InMemoryTaskStore()
+    request_handler = _A2ARequestHandler(
+        agent_executor=executor,
+        task_store=task_store,
+        agent_card=card,
+        push_config_store=push_config_store,
+        push_sender=push_sender,
+        extended_agent_card=(_coerce_agent_card(extended_agent_card) if extended_agent_card is not None else None),
+    )
+    request_handler._active_task_registry = _ClosingActiveTaskRegistry(
+        agent_executor=executor,
+        task_store=task_store,
+        push_sender=push_sender,
+    )
+    return request_handler
+
+
 def build_app(
     agent_card: AgentCard | dict[str, Any],
     executor: Any,
@@ -414,19 +441,12 @@ def build_app(
     if admission is not None:
         admission = checked_admission(admission)
     card = _coerce_agent_card(agent_card)
-    task_store = InMemoryTaskStore()
-    request_handler = _A2ARequestHandler(
-        agent_executor=executor,
-        task_store=task_store,
-        agent_card=card,
+    request_handler = build_request_handler(
+        card,
+        executor,
         push_config_store=push_config_store,
         push_sender=push_sender,
-        extended_agent_card=(_coerce_agent_card(extended_agent_card) if extended_agent_card is not None else None),
-    )
-    request_handler._active_task_registry = _ClosingActiveTaskRegistry(
-        agent_executor=executor,
-        task_store=task_store,
-        push_sender=push_sender,
+        extended_agent_card=extended_agent_card,
     )
 
     @asynccontextmanager

@@ -33,7 +33,7 @@ _FRAMING_HEADERS = frozenset(
 )
 
 
-def _sendable(headers: Mapping[str, str] | None) -> dict[str, str]:
+def sendable(headers: Mapping[str, str] | None) -> dict[str, str]:
     """``headers`` validated, names lowercased; ``AgentCommError`` for a framing header."""
     checked = validate_headers(headers)
     framing = sorted(set(checked) & _FRAMING_HEADERS)
@@ -53,7 +53,7 @@ def _check_header_names(headers: Mapping[str, Any] | None) -> None:
         else:
             probe[str(key)] = str(value)
     if probe:
-        _sendable(probe)
+        sendable(probe)
 
 
 def shown_url(url: str) -> str:
@@ -151,7 +151,7 @@ class HttpCallTransport(LayerLifecycle):
             owner_url=self.url,
             error=AgentCommError,
             what="http call transport",
-            prepare=_sendable,
+            prepare=sendable,
         )
         self._client: httpx.Client | None = None
         # One async client per event loop, keyed by the loop's id. The loop is held so a closed one can be seen
@@ -364,8 +364,8 @@ class HttpLayer(Layer):
     def _request_headers(self, envelope: Envelope) -> dict[str, Any]:
         out: dict[str, Any] = dict(self._headers)
         if self._header_refs:
-            out.update(_sendable(reveal_headers_for(self.url, self._header_refs, what="http transport headers")))
-        for key, value in _sendable(envelope.headers).items():
+            out.update(sendable(reveal_headers_for(self.url, self._header_refs, what="http transport headers")))
+        for key, value in sendable(envelope.headers).items():
             out[key] = value.encode("utf-8")  # a header value may hold any text; send it as UTF-8 bytes
         return out
 

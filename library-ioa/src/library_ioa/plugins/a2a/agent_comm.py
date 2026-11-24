@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from mas.library.standard.lib.comm.headers import merge_headers
 from mas.library.standard.lib.stack.layer import LinkIdentity
 from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
 
 from library_ioa.plugins.a2a.client import A2AClient, peer_error
+from library_ioa.plugins.http_layer.transport import sendable
 
 
 class A2AAgentComm(LinkIdentity, AgentCommContract):
@@ -62,7 +64,9 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
             raise AgentCommError(f"intent {kind!r} is not supported")
         # The sender is what the link says it speaks for. ``context.sender`` is caller supplied and not trusted.
         sender = str(self.agent_id or "")
-        del headers, context
+        explicit = headers if headers is not None else (dict(context.headers) if context is not None else None)
+        # Hop-safe ambient keys, then this send's headers. A framing header raises before anything is sent.
+        call_headers = sendable(merge_headers(explicit))
         from library_ioa.plugins.a2a.hooks import bound_identity
 
         try:
@@ -70,6 +74,7 @@ class A2AAgentComm(LinkIdentity, AgentCommContract):
                 response = await self._client.asend_message(
                     task,
                     context_id=context_id,
+                    headers=call_headers,
                     metadata={
                         "mas.correlation_id": str(correlation_id),
                         "mas.caller_call_id": caller_call_id,

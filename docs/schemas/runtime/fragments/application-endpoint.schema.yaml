@@ -8,20 +8,20 @@ description: >
   (named by an agent id, as --connect and --listen write it) is a peer
   reached at its ``url`` by the ``protocol`` link; it needs ``url`` and
   ``protocol``, as before. An endpoint row (named by what it is: a SLIM node,
-  an A2A server, an in-process channel, an A2A framing) is a layer a Flavour
+  an A2A server, an in-process channel, the A2A layer over slim) is a layer a Flavour
   can name in ``spec.bind``: ``protocol`` is the layer plugin, ``usage`` is
   its capability (``connect``, a server we can dial; ``listen``, a place to
   host the agents we run), and the other fields are its params; a string
   param may hold ``{agent}``. The two kinds differ only by their key (an
   agent id of the MAS, or an endpoint name), and an infra document is
   validated without its MAS, so one fragment serves both and cannot require
-  ``url``: a framing row and an in-process channel have no address. ctl
+  ``url``: an `a2a-rpc` row and an in-process channel have no address. ctl
   requires ``url`` on an agent-keyed row when it applies the Flavour (it
   knows the agent ids then), and each plugin on the endpoint rows that need
   one. Secrets are SecretRef objects (``{secret: NAME}``). URL userinfo is refused.
 
 type: object
-# protocol is always required. url is not, explicitly: an endpoint row with no address (A2A framing above a
+# protocol is always required. url is not, explicitly: an endpoint row with no address (the A2A layer above a
 # transport, an in-process channel) is valid. ctl requires url on an agent-keyed row when it wires it.
 required: [protocol]
 # Other keys stay allowed: a layer row passes them to its plugin, which rejects what it does not know.

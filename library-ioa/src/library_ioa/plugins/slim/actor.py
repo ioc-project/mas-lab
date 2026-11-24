@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 MAX_READ_ERRORS = 5
 
 
-# What the bindings say when a read found nothing before its deadline (slim-bindings 2.2: a ReceiveError).
+# What the bindings say when a read found nothing before its deadline (slim-bindings 3.x: a Timeout).
 IDLE_READ_MESSAGES = ("listen_for_session timed out", "receive timeout")
 
 _BINDING_MESSAGES = {

@@ -575,7 +575,7 @@ def _desk(tmp_path: Path) -> tuple[Path, Path, Path]:
         "    desk-node: {protocol: slim, url: 'http://127.0.0.1:46357',\n"
         "                identity: acme/lab/desk, secret: {secret: slim},\n"
         "                usage: [connect, listen]}\n"
-        "    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}\n",
+        "    desk-a2a: {protocol: a2a-rpc, usage: [connect, listen]}\n",
         encoding="utf-8",
     )
     flavour = tmp_path / "flavour.yaml"
@@ -597,13 +597,13 @@ def test_infra_show_reads_the_flavour_chain_and_names_each_agent_on_it(
     args = ["infra", "resolved", str(mas), "--infra-ref", str(rows), "--flavour", str(flavour)]
     result = runner.invoke(app, [*args, "--json"])
     agents = {row["id"]: row for row in _json_payload(result)["agents"]}
-    assert agents["triage"] == {"id": "triage", "comm": ["slim", "a2a-framing"], "identity": "acme/lab/desk/triage"}
-    assert agents["billing"] == {"id": "billing", "comm": ["slim", "a2a-framing"], "identity": "acme/lab/desk/billing"}
+    assert agents["triage"] == {"id": "triage", "comm": ["slim", "a2a-rpc"], "identity": "acme/lab/desk/triage"}
+    assert agents["billing"] == {"id": "billing", "comm": ["slim", "a2a-rpc"], "identity": "acme/lab/desk/billing"}
     # dialled over the chain, served elsewhere, sends to no one: on the chain, with no name here
-    assert agents["notes"] == {"id": "notes", "comm": ["slim", "a2a-framing"], "identity": ""}
+    assert agents["notes"] == {"id": "notes", "comm": ["slim", "a2a-rpc"], "identity": ""}
     text = runner.invoke(app, args)
     assert text.exit_code == 0, text.output
-    assert "triage  slim, a2a-framing  acme/lab/desk/triage" in text.output
+    assert "triage  slim, a2a-rpc  acme/lab/desk/triage" in text.output
 
 
 def test_infra_show_refuses_an_agent_named_row_with_no_protocol(

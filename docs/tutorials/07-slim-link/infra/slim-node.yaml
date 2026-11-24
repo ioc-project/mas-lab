@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-# The SLIM node the desk joins, and the A2A framing layer a Flavour may put above it.
+# The SLIM node the desk joins, and the A2A layer a Flavour may put above it.
 # usage is what each row can do: connect (dial agents served there), listen (host agents we run).
 # The row names secret slim; set the value with mas-ctl secrets set slim.
 apiVersion: infra/v1
@@ -10,7 +10,7 @@ spec:
   endpoints:
     desk-node: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk, secret: {secret: slim},
                 usage: [connect, listen]}
-    desk-a2a: {protocol: a2a-framing, usage: [connect, listen]}
+    desk-a2a: {protocol: a2a-rpc, usage: [connect, listen]}
     # A second connection to the same node, under its own identity, for an agent with its own chain.
     desk-node-a2a: {protocol: slim, url: "http://127.0.0.1:46357", identity: acme/lab/desk-a2a,
                     secret: {secret: slim}, usage: [connect, listen]}

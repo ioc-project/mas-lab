@@ -26,9 +26,10 @@ registry and asks the layer class for what it needs.
   When the layer has a shared service, the service checks the params and
   the agent's layer takes only the params its constructor names.
 * When a layer above the transport overrides ``serve`` (a protocol layer such
-  as ``a2a-framing``), the handle gives each agent's stack the session turn as the top
-  of its inbound chain (``Stack.serve``). With no such layer the transport calls
-  the turn itself.
+  as ``a2a-rpc``) and the agent has a turn, the handle gives that stack the
+  session turn as the top of its inbound chain (``Stack.serve``). A connect-only
+  link has no turn: the protocol layer starts no inbound server. With no such
+  layer the transport calls the turn itself.
 * A transport that cannot serve an agent from this process sets the
   ``ChainMember.LISTEN_REFUSAL`` class attribute to the reason; ``listen_refusal`` reads it.
 """
@@ -193,13 +194,6 @@ def _agent_turn(run_turn: RunTurnFn | None, agent_id: str) -> RunTurnFn | None:
     return turn
 
 
-def _no_turn(agent_id: str) -> Any:
-    async def refuse(_envelope: Any) -> Any:
-        raise StackError(f"agent {agent_id!r} has no turn to serve this request")
-
-    return refuse
-
-
 class StackHandle:
     """The session's instance of one stack.
 
@@ -282,11 +276,13 @@ class StackHandle:
                 raise StackError(f"stack {self.name!r}: layer {layer['type']!r}: {exc}") from exc
         comm = StackAgentComm(built, registry=self._registry)
         comm.fabric_id = self.fabric_id
-        if comm.wraps_inbound:
+        if comm.wraps_inbound and turn is not None:
             # A layer above the transport decodes what arrives (a protocol layer), so the
             # transport hands each request to the chain and the session turn sits on top.
+            # A connect-only link has no turn: do not serve, so the protocol layer starts
+            # no inbound server and the transport keeps its own reader.
             try:
-                comm.serve(turn_handler(turn, key) if turn is not None else _no_turn(key))
+                comm.serve(turn_handler(turn, key))
             except StackError as exc:
                 raise StackError(f"stack {self.name!r}: {exc}") from exc
         comm.start()

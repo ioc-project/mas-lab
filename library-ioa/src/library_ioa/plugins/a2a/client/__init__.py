@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
 from a2a.helpers import new_text_message
-from a2a.types import Role, SendMessageRequest, StreamResponse, TaskState
+from a2a.types import Role, SendMessageRequest, TaskState
 from google.protobuf.json_format import MessageToDict
 from mas.runtime.aio import LoopCache
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
@@ -24,8 +25,14 @@ _FAILED_STATES = {
 
 
 def _kind(response: Any) -> str:
-    """Which payload a stream response carries; ``""`` for anything that is not a ``StreamResponse``."""
-    return response.WhichOneof("payload") or "" if isinstance(response, StreamResponse) else ""
+    """Which payload a stream response carries; ``""`` when the object has no payload oneof."""
+    which = getattr(response, "WhichOneof", None)
+    if not callable(which):
+        return ""
+    try:
+        return which("payload") or ""
+    except (TypeError, ValueError):
+        return ""
 
 
 _JSONRPC_FALLBACK = re.compile(r"^JSON-RPC Error (-?\d+):")
@@ -49,6 +56,9 @@ def peer_error(exc: BaseException) -> AgentCommError:
     if isinstance(exc, AgentCardResolutionError):
         status = f": HTTP {exc.status_code}" if isinstance(exc.status_code, int) else ""
         return AgentCommError(f"remote A2A agent card could not be read{status}")
+    rpc = _rpc_error_in_chain(exc)
+    if rpc is not None:
+        return rpc
     if isinstance(exc, A2AClientError):
         cause = exc.__cause__
         if isinstance(cause, httpx.HTTPError):
@@ -64,6 +74,40 @@ def peer_error(exc: BaseException) -> AgentCommError:
         shown = f"{reason} ({code})" if code is not None else reason
         return AgentCommError(f"remote A2A peer answered an error: {shown}")
     return AgentCommError(f"remote A2A call failed: {safe_exception_text(exc)}")
+
+
+def _rpc_error(exc: BaseException) -> AgentCommError | None:
+    """A slimrpc ``RpcError`` as a closed reason: the peer's message never goes in the text.
+
+    ``UNAVAILABLE`` / ``CANCELLED`` mean the node or the session is gone (a later send reconnects).
+    ``DEADLINE_EXCEEDED`` is a timeout. Any other code is an answer from a live peer.
+    """
+    try:
+        from slim_bindings import RpcCode, RpcError
+    except ImportError:
+        return None
+    if not isinstance(exc, RpcError):
+        return None
+    code = getattr(exc, "code", None)
+    if code == RpcCode.DEADLINE_EXCEEDED:
+        return AgentCommError("remote A2A peer timed out")
+    if code in {RpcCode.UNAVAILABLE, RpcCode.CANCELLED}:
+        return AgentCommError("remote A2A call failed")
+    name = getattr(code, "name", None) or "UNKNOWN"
+    return AgentCommError(f"remote A2A peer answered an error: {name}")
+
+
+def _rpc_error_in_chain(exc: BaseException) -> AgentCommError | None:
+    """The first slimrpc ``RpcError`` on ``exc`` or its cause chain."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        found = _rpc_error(current)
+        if found is not None:
+            return found
+        current = current.__cause__ if current.__cause__ is not None else current.__context__
+    return None
 
 
 def raise_if_failed(responses: list[Any]) -> None:
@@ -102,7 +146,7 @@ def closing_text(responses: list[Any]) -> str:
     return streamed if streamed and (bare_task or kind not in {"task", "message"}) else ""
 
 
-_SDK_NAMES = frozenset({"A2ACardResolver", "ClientConfig", "create_client"})
+_SDK_NAMES = frozenset({"A2ACardResolver", "ClientCallContext", "ClientConfig", "create_client"})
 
 
 def __getattr__(name: str) -> Any:
@@ -214,9 +258,10 @@ class A2AClient:
         *,
         context_id: str = "",
         metadata: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
-        call_context = self._call_context()
+        call_context = self._call_context(headers)
         state = getattr(call_context, "state", None)
         try:
             payload = await self._send_once(
@@ -232,19 +277,22 @@ class A2AClient:
         self._finish_call(state, None)
         return payload
 
-    def _call_context(self) -> Any:
-        """The SDK call context that carries this call's identity to the transport interceptor."""
+    def _call_context(self, headers: Mapping[str, str] | None = None) -> Any:
+        """The SDK call context of one send.
+
+        It carries this call's headers on the request (the httpx client is shared by concurrent sends, so it never
+        holds them) and, when transport hooks are on, the call's identity for the transport interceptor.
+        """
         from mas.runtime.transport.emit import protocol_config
 
         cfg = protocol_config("a2a")
+        context = _sdk("ClientCallContext")(service_parameters=dict(headers)) if headers else None
         if not (cfg.hooks or cfg.propagate_metadata):
-            return None
-        from a2a.client.client import ClientCallContext
-
+            return context
         from library_ioa.plugins.a2a.hooks import current_identity, peer_label, start_call_state
 
         source, target, session_id = current_identity()
-        context = ClientCallContext()
+        context = context or _sdk("ClientCallContext")()
         start_call_state(
             context.state,
             key="",
@@ -318,9 +366,13 @@ class A2AClient:
         *,
         context_id: str = "",
         metadata: dict[str, str] | None = None,
+        headers: Mapping[str, str] | None = None,
         stream: bool = False,
     ) -> dict[str, Any]:
-        return await self._sdk_send_message(message, context_id=context_id, metadata=metadata, stream=stream)
+        """Send one message; ``headers`` go on this call's HTTP request only, over the constructor's."""
+        return await self._sdk_send_message(
+            message, context_id=context_id, metadata=metadata, headers=headers, stream=stream
+        )
 
 
 class _Connection:

@@ -232,7 +232,54 @@ def flavour_spec_of(flavour: Any) -> dict[str, Any]:
     return spec if isinstance(spec, dict) else flavour
 
 
-def _layer(name: str, rows: dict[str, Any], where: str) -> dict[str, Any]:
+def _protocol_parts(protocol: str, name: str) -> list[str]:
+    """The layer ids one protocol string stands for, top first as written.
+
+    A string that is already a registered plugin (name or shortcut) is not split: a tagged extra
+    on the same plugin stays one layer. Otherwise ``top+...+bottom`` is the chain.
+    """
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    if registry.entries_named(protocol, "agent_comm") or registry.entries_named(protocol, "layer"):
+        return [protocol]
+    parts = [part.strip() for part in protocol.split("+")]
+    if not all(parts):
+        raise BindError(f"Application {name!r}: protocol {protocol!r} has an empty part; write top+...+bottom")
+    return parts
+
+
+def _above_name(part: str) -> str:
+    """The layer a part above the bottom names: id, shortcut, or a layer's ``plus_name``."""
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    for entry in registry.entries_named(part, "layer"):
+        return str(entry.urn).rsplit(".", 1)[-1]
+    for entry in registry.entries_of_type("layer"):
+        if str((entry.attributes or {}).get("plus_name") or "") == part:
+            return str(entry.urn).rsplit(".", 1)[-1]
+    return part
+
+
+def _owned_row_params(layer_id: str) -> tuple[str, ...]:
+    """Keys of the plus-row that this layer above the bottom takes (``row_params`` on the plugin)."""
+    from mas.runtime.registry import get_registry
+
+    registry = get_registry()
+    for entry in registry.entries_named(layer_id, "layer"):
+        raw = (entry.attributes or {}).get("row_params") or ()
+        return tuple(str(item) for item in raw)
+    return ()
+
+
+def _row_layers(name: str, rows: dict[str, Any], where: str) -> list[dict[str, Any]]:
+    """The layers one row stands for, bottom first.
+
+    ``protocol: top+bottom`` is two layers read top first, so the chain is ``[bottom, top]``. The row's other
+    fields are the bottom layer's params, as for a one-layer row, except keys a layer above lists as
+    ``row_params``. A part above the bottom names a layer.
+    """
     from mas.ctl.infra.resolve import application_endpoint_usage
 
     row = rows.get(name)
@@ -241,12 +288,30 @@ def _layer(name: str, rows: dict[str, Any], where: str) -> dict[str, Any]:
     protocol = str(row.get("protocol") or "").strip()
     if not protocol:
         raise BindError(f"Application {name!r}: a row in {where} needs protocol, the layer it is")
+    parts = _protocol_parts(protocol, name)
     try:
         capability = sorted(application_endpoint_usage(row))
     except ValueError as exc:
         raise BindError(f"Application {name!r}: {exc}") from None
     params = {key: value for key, value in row.items() if key not in {"protocol", "usage", "expose"}}
-    return {"row": name, "type": protocol, "params": params, "usage": capability}
+    bottom_first = list(reversed(parts))
+    names = [bottom_first[0], *(_above_name(part) for part in bottom_first[1:])]
+    owned: dict[str, dict[str, Any]] = {}
+    taken: set[str] = set()
+    for layer in names[1:]:
+        keys = _owned_row_params(layer)
+        owned[layer] = {key: params[key] for key in keys if key in params}
+        taken.update(owned[layer])
+    bottom_params = {key: value for key, value in params.items() if key not in taken}
+    return [
+        {
+            "row": name,
+            "type": layer,
+            "params": bottom_params if index == 0 else owned.get(layer, {}),
+            "usage": capability,
+        }
+        for index, layer in enumerate(names)
+    ]
 
 
 _PLACEHOLDER = re.compile(r"\{([^{}]*)\}")
@@ -315,7 +380,7 @@ def _planned_chains(
                     f"Application {name!r}: {where} names a row that is also an agent of this session; "
                     "name an infra row by the endpoint it is"
                 )
-        chain = [_layer(name, rows, where) for name in names]
+        chain = [layer for name in names for layer in _row_layers(name, rows, where)]
         try:
             classes = layer_classes(chain)
         except StackError as exc:

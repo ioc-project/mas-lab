@@ -7,4 +7,4 @@ kind: Application
 metadata: {name: agent-hub}
 spec:
   endpoints:
-    agent-hub: {protocol: http, url: "https://agents.example.test/a2a/{agent}", usage: connect}
+    agent-hub: {protocol: a2a, url: "https://agents.example.test/a2a/{agent}", usage: connect}

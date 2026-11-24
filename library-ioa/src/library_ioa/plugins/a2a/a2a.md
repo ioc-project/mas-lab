@@ -14,7 +14,9 @@
 
 Sends each delegation as an A2A `SendMessage` to the server at `url`
 (`headers`, `timeout` are its other params) through the A2A SDK client,
-and returns the agent's reply. It honours the `task` intent only.
+and returns the agent's reply. It honours the `task` intent only. The per-send
+`headers` (`traceparent`, `tracestate`, `baggage`) go on that call's HTTP request,
+merged over the row's static `headers`; a framing header (`host`, `content-length`, ...) raises.
 
 A SecretRef header goes only to the origin (scheme, host, port) of `url`, over
 https unless the host is loopback. The agent card names the interface urls the
@@ -23,9 +25,8 @@ origins. List an origin the card may name in `allowed_origins` to send the
 header there too.
 
 `a2a` is this link, a transport, so it is only the bottom of a chain. The layer
-that frames A2A over another transport is a different id,
-[`a2a-framing`](a2a-framing.md), whose requests are MAS Lab's own JSON-RPC and
-not this SDK client. A link like this one reaches
+that runs A2A over a SLIM node is a different id,
+[`a2a-rpc`](a2a-rpc.md): the same SDK on the `slimrpc` binding. A link like this one reaches
 one agent at its own url and shares nothing across agents (it is
 no `ChainMember`, so `is_direct_link` holds), so a chain of that one row is the released direct path,
 the same as an agent-keyed row: ctl writes it as the agent's row, and

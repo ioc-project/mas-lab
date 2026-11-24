@@ -1,34 +1,26 @@
 # Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 # SPDX-License-Identifier: Apache-2.0
-"""A2AAgentComm accepts headers and does not put them on HTTP."""
+"""A2AAgentComm: intents, probe, and per-call headers on the wire."""
 
 from __future__ import annotations
 
+import asyncio
+import json
+import socket
+import time
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock, Mock
 
 import pytest
 from library_ioa.plugins.a2a.agent_comm import A2AAgentComm
-from mas.runtime.boundary.agentcomm.protocol import AgentCommContract, AgentCommError, SendContext
-
-
-async def test_a2a_agent_comm_accepts_headers_and_drops_them() -> None:
-    client = Mock()
-    client.asend_message = AsyncMock(return_value={"status": "completed", "result": "remote response"})
-    plugin = A2AAgentComm.__new__(A2AAgentComm)
-    plugin._client = client
-
-    assert isinstance(plugin, AgentCommContract)
-    assert (await plugin.asend("worker", "task", headers={"traceparent": "00-aa-bb-01"})) == "remote response"
-    assert (
-        await plugin.asend("worker", "task", context=SendContext(headers={"k": "v"}, sender="evil"))
-    ) == "remote response"
-    assert await plugin.asend("worker", "task", headers={"baggage": "k=v"}) == "remote response"
-    client.asend_message.assert_called_with(
-        "task",
-        context_id="",
-        metadata={"mas.correlation_id": "0", "mas.caller_call_id": ""},
-    )
-    assert client.asend_message.call_count == 3
+from library_ioa.plugins.a2a.exposure import A2AExposure
+from library_ioa.plugins.webserver import UvicornWebServer
+from mas.library.standard.lib.comm.headers import bound_headers
+from mas.library.standard.plugins.system_tools.send import SendTool
+from mas.runtime.boundary.agentcomm.protocol import AgentCommError, SendContext
+from mas.runtime.boundary.agentcomm.routing import AgentCommRoute
+from mas.runtime.engine.tool_dispatch import aexecute_engine_tool
 
 
 async def test_a2a_refuses_inform_and_ask() -> None:
@@ -43,8 +35,6 @@ async def test_a2a_refuses_inform_and_ask() -> None:
 
 
 async def test_an_a2a_link_probe_fetches_the_card_afresh_and_forgets_the_connection_on_failure() -> None:
-    from unittest.mock import AsyncMock, Mock
-
     client = Mock()
     client.aget_agent_card = AsyncMock(return_value={"name": "remote"})
     plugin = A2AAgentComm.__new__(A2AAgentComm)
@@ -149,3 +139,180 @@ async def test_call_context_carries_identity_only_when_hooks_are_on() -> None:
         assert card["name"] == "peer"
     finally:
         emit.reset()
+
+
+class _Recorder:
+    """ASGI wrapper that records the headers and JSON body of every POST the peer receives."""
+
+    def __init__(self, app: Any, seen: list[tuple[dict[str, str], str]]) -> None:
+        self._app = app
+        self._seen = seen
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or scope["method"] != "POST":
+            await self._app(scope, receive, send)
+            return
+        body = b""
+        more = True
+        while more:
+            event = await receive()
+            body += event.get("body", b"")
+            more = event.get("more_body", False)
+        headers = {k.decode().lower(): v.decode() for k, v in scope["headers"]}
+        self._seen.append((headers, body.decode()))
+        sent = False
+
+        async def replay() -> Any:
+            nonlocal sent
+            if sent:
+                return await receive()
+            sent = True
+            return {"type": "http.request", "body": body, "more_body": False}
+
+        await self._app(scope, replay, send)
+
+
+class _RecordingExposure(A2AExposure):
+    seen: list[tuple[dict[str, str], str]]
+
+    def build_app(self, manifest: dict[str, Any], handler: Any) -> Any:
+        return _Recorder(super().build_app(manifest, handler), self.seen)
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def _wait(port: int) -> None:
+    deadline = time.monotonic() + 5
+    while True:
+        try:
+            socket.create_connection(("127.0.0.1", port), timeout=0.2).close()
+            return
+        except OSError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
+@pytest.fixture
+def peer() -> Any:
+    port = _free_port()
+    url = f"http://127.0.0.1:{port}"
+    exposure = _RecordingExposure(
+        endpoint={"protocol": "a2a", "usage": "deploy", "url": url}, webserver=UvicornWebServer()
+    )
+    exposure.seen = []
+
+    def handler(prompt: str, **_: Any) -> dict[str, str]:
+        time.sleep(0.2)  # long enough for concurrent sends to overlap
+        return {"text": f"peer:{prompt}"}
+
+    handle = exposure.serve_background({"metadata": {"name": "peer"}, "spec": {"description": "peer"}}, handler)
+    try:
+        _wait(port)
+        yield url, exposure.seen
+    finally:
+        handle.close()
+
+
+def _post_for(seen: list[tuple[dict[str, str], str]], text: str) -> dict[str, str]:
+    (headers,) = [h for h, body in seen if text in body and "SendMessage" in json.dumps(json.loads(body))]
+    return headers
+
+
+async def test_per_call_headers_reach_the_peer_on_the_json_rpc_post(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, headers={"x-static": "s"}, timeout=10)
+    try:
+        trace = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        assert await comm.asend("peer", "hello", headers={"TraceParent": trace, "baggage": "k=v"}) == "peer:hello"
+    finally:
+        comm.stop()
+    got = _post_for(seen, "hello")
+    assert got["traceparent"] == trace
+    assert got["baggage"] == "k=v"
+    assert got["x-static"] == "s"
+
+
+async def test_concurrent_sends_keep_their_own_headers(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, timeout=10)
+    try:
+        await asyncio.gather(
+            comm.asend("peer", "first", headers={"traceparent": "00-" + "1" * 32 + "-" + "1" * 16 + "-01"}),
+            comm.asend("peer", "second", headers={"traceparent": "00-" + "2" * 32 + "-" + "2" * 16 + "-01"}),
+            comm.asend("peer", "third"),
+        )
+    finally:
+        comm.stop()
+    assert _post_for(seen, "first")["traceparent"].startswith("00-" + "1" * 32)
+    assert _post_for(seen, "second")["traceparent"].startswith("00-" + "2" * 32)
+    assert "traceparent" not in _post_for(seen, "third")
+
+
+async def test_a_framing_header_raises_and_nothing_is_sent(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, timeout=10)
+    try:
+        for name in ("Host", "content-length", "Transfer-Encoding"):
+            with pytest.raises(AgentCommError, match="itself"):
+                await comm.asend("peer", "nope", headers={name: "x"})
+    finally:
+        comm.stop()
+    assert seen == []
+
+
+async def test_without_call_headers_only_the_static_ones_go_out(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, headers={"x-static": "s"}, timeout=10)
+    try:
+        assert await comm.asend("peer", "plain") == "peer:plain"
+    finally:
+        comm.stop()
+    got = _post_for(seen, "plain")
+    assert got["x-static"] == "s"
+    assert not {"traceparent", "tracestate", "baggage"} & set(got)
+
+
+async def test_ambient_hop_headers_reach_the_peer_when_asend_omits_headers(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, timeout=10)
+    trace = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    try:
+        with bound_headers({"traceparent": trace, "baggage": "k=v", "tracestate": "vendor=1"}):
+            assert await comm.asend("peer", "ambient") == "peer:ambient"
+    finally:
+        comm.stop()
+    got = _post_for(seen, "ambient")
+    assert got["traceparent"] == trace
+    assert got["baggage"] == "k=v"
+    assert got["tracestate"] == "vendor=1"
+
+
+async def test_delegate_to_carries_ambient_hop_headers_on_the_json_rpc_post(peer: Any) -> None:
+    url, seen = peer
+    comm = A2AAgentComm(url=url, timeout=10)
+    try:
+        tool = SendTool(comm=comm, allowed_peers=["peer"])
+        ctx = SimpleNamespace(
+            agent_id="planner",
+            manifest=None,
+            agent_comm=comm,
+            agent_comm_routes={"peer": AgentCommRoute("peer", "a2a", comm)},
+            delegation_peer_descriptions=None,
+            send_peer_descriptions=None,
+        )
+        trace = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+        with bound_headers({"traceparent": trace, "baggage": "k=v"}):
+            result = await aexecute_engine_tool(
+                "delegate_to_peer", engine_contracts=[tool], ctx=ctx, arguments={"task": "hello"}
+            )
+        assert result == "peer:hello"
+    finally:
+        comm.stop()
+    got = _post_for(seen, "hello")
+    assert got["traceparent"] == trace
+    assert got["baggage"] == "k=v"

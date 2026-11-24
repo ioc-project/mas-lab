@@ -5,12 +5,10 @@
 from __future__ import annotations
 
 import ast
-import json
 import logging
 from pathlib import Path
 
 import pytest
-from library_ioa.plugins.a2a.layer import decode_response
 from library_ioa.utils import translate_mcp_error
 from mas.library.standard.lib.comm.text import MAX_ERROR_TEXT
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
@@ -24,41 +22,28 @@ def _assert_clean(text: str) -> None:
     assert len(text) <= MAX_ERROR_TEXT + 80  # the fixed words around the quoted text
 
 
-def test_a2a_error_object_from_a_peer_is_its_code_only() -> None:
-    # kills: a peer's JSON-RPC error message (which may echo the caller's credential) copied into the error
-    raw = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": HOSTILE}})
-    with pytest.raises(AgentCommError) as raised:
-        decode_response(raw)
-    assert str(raised.value) == "A2A error -32000"
-
-
-def test_a2a_error_code_that_is_not_a_number_cannot_smuggle_text() -> None:
-    raw = json.dumps({"jsonrpc": "2.0", "id": 1, "error": {"code": HOSTILE, "message": "m"}})
-    with pytest.raises(AgentCommError) as raised:
-        decode_response(raw)
-    assert str(raised.value) == "A2A error"
-
-
-def test_failed_remote_task_status_text_is_not_carried() -> None:
+@pytest.mark.parametrize(
+    ("state", "word"),
+    [("TASK_STATE_FAILED", "failed"), ("TASK_STATE_REJECTED", "rejected"), ("TASK_STATE_CANCELED", "canceled")],
+)
+def test_failed_remote_task_status_text_is_not_carried(state: str, word: str) -> None:
     # kills: the failed-task status text of a peer copied into the error unbounded
-    raw = json.dumps(
+    from a2a.types import StreamResponse
+    from google.protobuf.json_format import ParseDict
+    from library_ioa.plugins.a2a.layer import reply_text
+
+    response = ParseDict(
         {
-            "jsonrpc": "2.0",
-            "id": 1,
-            "result": {
-                "task": {
-                    "id": "t",
-                    "status": {
-                        "state": "TASK_STATE_FAILED",
-                        "message": {"role": "ROLE_AGENT", "parts": [{"text": HOSTILE}]},
-                    },
-                }
-            },
-        }
+            "task": {
+                "id": "t",
+                "status": {"state": state, "message": {"role": "ROLE_AGENT", "parts": [{"text": HOSTILE}]}},
+            }
+        },
+        StreamResponse(),
     )
     with pytest.raises(AgentCommError) as raised:
-        decode_response(raw)
-    assert str(raised.value) == "remote A2A task failed"
+        reply_text([response])
+    assert str(raised.value) == f"remote A2A task {word}"
 
 
 def test_mcp_error_result_is_cleaned() -> None:

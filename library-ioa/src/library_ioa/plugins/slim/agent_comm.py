@@ -66,7 +66,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
     value: the row holds a SecretRef; the service reveals it at start. One event
     loop is shared; each agent opens its own node connection.
 
-    Names and signatures from the slim-bindings 2.2.0 wheel:
+    Names and signatures from the slim-bindings 3.x wheel:
     ``new_insecure_client_config(endpoint) -> ClientConfig``,
     ``new_secure_client_config(endpoint) -> ClientConfig``,
     ``Service.connect_async(config) -> int``, ``Service.disconnect(conn_id)``,
@@ -145,9 +145,11 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         self._target_locks: dict[str, asyncio.Lock] = {}
         self._stop_deferred = False
         self._listening = False
+        self._inbound_claimed = False
         self._read_errors = 0
         self._need_reconnect = False
         self._reconnect_lock: asyncio.Lock | None = None
+        self._app_listeners: list[Callable[[], Awaitable[None] | None]] = []
 
     def __repr__(self) -> str:
         return f"SlimAgentComm(name={self.name!r}, endpoint={self.endpoint!r})"
@@ -157,7 +159,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         return datetime.timedelta(seconds=self.timeout_s)
 
     @property
-    def _send_timeout(self) -> float:
+    def send_timeout_s(self) -> float:
         """The longest one send may take: the peer's reply, plus the routes and the session before it."""
         return self.reply_timeout_s + self.timeout_s * 4
 
@@ -169,6 +171,49 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
 
     def bind(self, lower: object) -> None:
         del lower
+
+    @property
+    def actor(self) -> Any:
+        """The connection actor: the SLIM event loop every call into the bindings must run on."""
+        return self._actor
+
+    @property
+    def ready(self) -> bool:
+        """True once the link holds a node connection (its app is up)."""
+        return self._app is not None
+
+    async def aensure(self) -> None:
+        """Wait for a live node connection, reconnecting first if the link was marked dead (on the actor's loop)."""
+        await self._aensure()
+
+    def claim_inbound(self) -> None:
+        """Hand this app's inbound sessions to a layer above (A2A over slimrpc).
+
+        The link then runs no reader of its own: two readers on one app would split the sessions.
+        Call before ``start``.
+        """
+        self._inbound_claimed = True
+
+    def on_app(self, callback: Callable[[], Awaitable[None] | None]) -> None:
+        """Run ``callback`` after this link's app is up (first start and every reconnect)."""
+        if callback not in self._app_listeners:
+            self._app_listeners.append(callback)
+
+    def mark_dead(self) -> None:
+        """The next ``_aensure`` drops this app and opens a new node connection."""
+        self._need_reconnect = True
+
+    def rpc_endpoint(self) -> tuple[Any, Any, Any]:
+        """``(slim_bindings, app, connection id)`` of the started link, for a layer that speaks RPC on it."""
+        if self._app is None or self._sb is None:
+            raise AgentCommError("slim link is not started")
+        return self._sb, self._app, self._conn_id
+
+    def rpc_name(self, agent_id: str = "") -> str:
+        """The three-part ``org/ns/name`` an RPC peer is reached at: this agent's, or ``agent_id``'s."""
+        if agent_id:
+            parse_name(agent_id)  # a name part is letters, digits, '.', '_' and '-': nothing else reaches a node name
+        return "/".join(slim_app_triple(instance_name(self.service, agent_id) if agent_id else self.name))
 
     def serve(self, handler: Callable[[Any], Any]) -> Callable[[Any], Any]:
         """Hand every inbound request to ``handler`` (a stack's inbound chain) instead of the turn.
@@ -247,6 +292,10 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
         self._service = service
         self._conn_id = conn_id
         self._app = app
+        for callback in list(self._app_listeners):
+            result = callback()
+            if asyncio.iscoroutine(result):
+                await result
         self._start_listen_thread()
         await asyncio.sleep(0)
 
@@ -323,7 +372,7 @@ class SlimAgentComm(SlimInbound, ChainMember, AgentCommContract):
                 headers=headers,
                 context=context,
             ),
-            timeout=self._send_timeout,
+            timeout=self.send_timeout_s,
         )
 
     async def _asend_impl(

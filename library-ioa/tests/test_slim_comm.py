@@ -1090,30 +1090,6 @@ async def test_real_node_frame_crosses(slim_url: str) -> None:
 
 
 @pytest.mark.slim
-async def test_real_node_a2a_layer_over_slim(slim_url: str) -> None:
-    """``[slim, a2a]`` on the real node: an A2A request crosses, the answer comes back, a failed turn is an error."""
-
-    async def run_turn(agent_id: str, task: str, *rest: object) -> str:
-        if task == "boom":
-            raise RuntimeError("turn failed")
-        return f"{agent_id}:{task}:{rest[-1]}"
-
-    slim = {
-        "type": "slim",
-        "params": {"url": slim_url, "identity": "acme/lab/a2a", "secret": _SECRET, "timeout_s": 5.0},
-    }
-    handle = StackHandle("a2a-real", [slim, {"type": "a2a-framing"}], run_turn)
-    try:
-        a = handle.link("a")
-        handle.link("b")
-        assert (await a.asend("b", "héllo ✓", context_id="ctx-real")) == "b:héllo ✓:ctx-real"
-        with pytest.raises(AgentCommError, match="remote A2A task failed"):
-            await a.asend("b", "boom")
-    finally:
-        handle.close()
-
-
-@pytest.mark.slim
 async def test_real_node_two_stacks_in_one_process(slim_url: str) -> None:
 
     async def run_turn(agent_id: str, task: str, *_args: object) -> str:

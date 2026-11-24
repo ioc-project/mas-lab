@@ -19,7 +19,7 @@ from mas.library.standard.lib.comm.capabilities import (
     declared_capabilities,
     merge_capabilities,
 )
-from mas.library.standard.lib.comm.headers import get_headers
+from mas.library.standard.lib.comm.headers import bound_headers, get_headers
 from mas.library.standard.plugins.agentcomm.layer import BoundLayer
 from mas.library.standard.plugins.agentcomm.local import LocalAgentComm
 from mas.library.standard.plugins.agentcomm.stack import StackAgentComm
@@ -270,6 +270,27 @@ async def test_stack_bind_asend_fallback_and_capability_attr() -> None:
     layer = BoundLayer()
     layer.bind(NoCaps())
     assert layer.capabilities() == capability_set()
+
+
+async def test_stack_send_merges_ambient_hop_headers_before_the_child_stamp() -> None:
+    seen: list[dict[str, str]] = []
+
+    class Capture(BoundLayer):
+        async def asend(self, target: str, task: str, **kwargs: object) -> str:
+            headers = kwargs.get("headers")
+            seen.append(dict(headers) if isinstance(headers, dict) else {})
+            return await super().asend(target, task, **kwargs)
+
+    links = make_unicast_mesh()
+    stack = StackAgentComm(layers=[links[0], Capture()])
+    parent = "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01"
+    with bound_headers({"traceparent": parent, "baggage": "k=v", "tracestate": "vendor=1"}):
+        assert (await stack.asend("b", "x")) == "ack:x"
+    got = seen[-1]
+    assert got["baggage"] == "k=v"
+    assert got["tracestate"] == "vendor=1"
+    assert got["traceparent"].startswith("00-0af7651916cd43dd8448eb211c80319c-")
+    assert got["traceparent"] != parent
 
 
 async def test_send_context_sender_comes_from_the_link() -> None:
