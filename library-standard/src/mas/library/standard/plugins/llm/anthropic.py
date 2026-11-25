@@ -20,6 +20,7 @@ from mas.library.standard.plugins.llm.http_protocol import (
     normalize_usage,
     sampling_value,
 )
+from mas.library.standard.plugins.llm.media import anthropic_text, anthropic_user_content
 from mas.library.standard.plugins.llm.structured import schema_from_format
 from mas.library.standard.plugins.llm.thinking import (
     AnthropicThinking,
@@ -27,6 +28,7 @@ from mas.library.standard.plugins.llm.thinking import (
     loop_replayable,
     thinking_off,
 )
+from mas.runtime.contracts.content_types import MediaStore
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
@@ -83,7 +85,9 @@ class AnthropicLLMProvider(HttpLlmProtocol):
         thinking = anthropic_thinking(model, reasoning, max_tokens=limit)
         if thinking.active and not loop_replayable(messages, _THINKING_KEY):
             thinking = AnthropicThinking(effort=thinking.effort, always_on=thinking.always_on)
-        system, mapped = _messages(messages, replay=thinking.always_on or not thinking_off(reasoning))
+        system, mapped = _messages(
+            messages, replay=thinking.always_on or not thinking_off(reasoning), media_store=self.media_store
+        )
         payload: dict[str, Any] = {"model": model, "messages": mapped, "max_tokens": limit}
         if system:
             payload["system"] = system
@@ -103,7 +107,7 @@ class AnthropicLLMProvider(HttpLlmProtocol):
             fmt = sampled.get("response_format", response_format)
         else:
             fmt = response_format
-        extra = merge_extra_body(getattr(self, "extra_body", None), extra_body)
+        extra = merge_extra_body(self.extra_body, extra_body)
         if extra:
             payload.update(extra)
         payload.pop("response_format", None)
@@ -203,20 +207,12 @@ class AnthropicLLMProvider(HttpLlmProtocol):
         return acc.message(reasoning)
 
 
-def _text_of(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = [
-            str(part.get("text") or "")
-            for part in content
-            if isinstance(part, dict) and part.get("type") in {None, "text"}
-        ]
-        return "".join(parts)
-    return "" if content is None else str(content)
-
-
-def _messages(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[str, list[dict[str, Any]]]:
+def _messages(
+    messages: list[dict[str, Any]],
+    *,
+    replay: bool = True,
+    media_store: MediaStore | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     system_parts: list[str] = []
     out: list[dict[str, Any]] = []
     pending_tools: list[dict[str, Any]] = []
@@ -230,7 +226,7 @@ def _messages(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[s
     for raw in messages:
         role = str(raw.get("role") or "")
         if role == "system":
-            text = _text_of(raw.get("content"))
+            text = anthropic_text(raw.get("content"))
             if text:
                 system_parts.append(text)
             continue
@@ -238,7 +234,7 @@ def _messages(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[s
             result: dict[str, Any] = {
                 "type": "tool_result",
                 "tool_use_id": str(raw.get("tool_call_id") or raw.get("id") or ""),
-                "content": _text_of(raw.get("content")),
+                "content": anthropic_text(raw.get("content")),
             }
             if raw.get("is_error"):
                 result["is_error"] = True
@@ -251,7 +247,7 @@ def _messages(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[s
             state = raw.get("provider_state")
             if replay and isinstance(state, dict) and isinstance(state.get(_THINKING_KEY), list):
                 blocks.extend(dict(b) for b in state[_THINKING_KEY] if isinstance(b, dict))
-            text = _text_of(raw.get("content"))
+            text = anthropic_text(raw.get("content"))
             if text.strip():
                 blocks.append({"type": "text", "text": text})
             for call in raw.get("tool_calls") or []:
@@ -273,9 +269,12 @@ def _messages(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[s
             if blocks:
                 out.append({"role": "assistant", "content": blocks})
             continue
-        text = _text_of(raw.get("content"))
-        if text.strip():
-            out.append({"role": "user", "content": text})
+        mapped = anthropic_user_content(raw.get("content"), media_store, layer="anthropic")
+        if isinstance(mapped, str):
+            if mapped.strip():
+                out.append({"role": "user", "content": mapped})
+        elif mapped:
+            out.append({"role": "user", "content": mapped})
     flush_tools()
     return "\n".join(system_parts), out
 

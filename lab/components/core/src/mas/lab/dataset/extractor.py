@@ -235,10 +235,14 @@ def _llm_output_text(event: dict[str, Any]) -> str:
     """
     text = event.get("output")
     if text:
-        return text if isinstance(text, str) else str(text)
+        from mas.runtime.contracts.content_types import text_of
+
+        return text if isinstance(text, str) else text_of(text)
     response = event.get("response") or {}
     if isinstance(response, dict):
-        return str(response.get("content") or "")
+        from mas.runtime.contracts.content_types import text_of
+
+        return text_of(response.get("content"))
     return str(response)
 
 
@@ -287,9 +291,12 @@ def _find_session_output(events: list[dict]) -> str:
         if ev.get("kind") == "user_response":
             content = ev.get("content", "")
             if isinstance(content, dict):
-                content = content.get("content", str(content))
-            if content:
-                output = str(content)
+                content = content.get("content", "")
+            from mas.runtime.contracts.content_types import text_of
+
+            rendered = text_of(content, media="placeholder")
+            if rendered:
+                output = rendered
     if output:
         return output
     # Fallback: entry agent has is_entry_agent=True in execution_end context.
@@ -311,7 +318,6 @@ def _first_user_message(messages: list[dict]) -> str:
 
 
 def _msg_content(msg: dict) -> str:
-    content = msg.get("content", "")
-    if isinstance(content, list):
-        return " ".join(p.get("text", "") for p in content if isinstance(p, dict) and "text" in p)
-    return str(content)
+    from mas.runtime.contracts.content_types import text_of
+
+    return text_of(msg.get("content"), media="placeholder")

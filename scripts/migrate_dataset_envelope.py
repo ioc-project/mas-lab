@@ -2,6 +2,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """One-shot migration: flat dataset items → inputs/expectations envelope."""
+
 from __future__ import annotations
 
 import sys
@@ -36,6 +37,8 @@ def _flatten_role_list(value):
     if all(isinstance(m, str) for m in value):
         return (value[0] if len(value) == 1 else value), []
     if not all(isinstance(m, dict) and "content" in m for m in value):
+        return value, []
+    if any(isinstance(message.get("content"), list) for message in value):
         return value, []
     users: list[str] = []
     hitls: list[str] = []
@@ -75,8 +78,7 @@ def _generic_tool_fixtures(value, item_id):
         if isinstance(pointer, str) or (isinstance(pointer, dict) and set(pointer) <= {"ref", "id"}):
             return pointer
     raise ValueError(
-        f"item {item_id!r}: tool_fixtures keys {sorted(value)} are not generic; "
-        "use a path, {ref: path}, or by_tool"
+        f"item {item_id!r}: tool_fixtures keys {sorted(value)} are not generic; use a path, {{ref: path}}, or by_tool"
     )
 
 
@@ -114,11 +116,15 @@ def _migrate_item(item: dict) -> dict:
         if not isinstance(turn, dict):
             continue
         role = str(turn.get("role") or "user")
-        content = str(turn.get("content") or "")
+        content = turn.get("content")
+        if isinstance(content, list):
+            stored = content
+        else:
+            stored = str(content or "")
         if role == "hitl":
-            hitl.append(content)
-        elif role == "user" and content:
-            extra_users.append(content)
+            hitl.append(stored)
+        elif role == "user" and stored:
+            extra_users.append(stored)
     if extra_users:
         inputs["user"] = [str(item["prompt"]), *extra_users]
     if hitl:
@@ -168,8 +174,7 @@ def _migrate_items(items: list) -> list:
 
 
 COPYRIGHT_HEADER = (
-    "#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates\n"
-    "#  SPDX-License-Identifier: Apache-2.0\n"
+    "#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates\n#  SPDX-License-Identifier: Apache-2.0\n"
 )
 
 
@@ -201,9 +206,7 @@ def _dump_yaml(path: Path, data: dict, original_text: str, *, add_header: bool =
     lost = _body_comment_lines(original_text)
     if lost:
         raise ValueError(f"{path}: comments on lines {lost} would be lost; migrate this file by hand")
-    body = yaml.dump(
-        data, allow_unicode=True, default_flow_style=False, sort_keys=False, width=120
-    )
+    body = yaml.dump(data, allow_unicode=True, default_flow_style=False, sort_keys=False, width=120)
     header = _leading_comments(original_text)
     if add_header and "SPDX-License-Identifier" not in header:
         header = COPYRIGHT_HEADER + "\n" + header

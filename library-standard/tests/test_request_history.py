@@ -42,6 +42,7 @@ def _ctx(**fields: Any) -> SimpleNamespace:
         committed_messages=fields.pop("committed_messages", []),
         turn_history=fields.pop("turn_history", []),
         last_user_text=fields.pop("last_user_text", ""),
+        last_user_content=fields.pop("last_user_content", None),
         injected_context=[],
         memory_seeds=[],
         working_memory=None,

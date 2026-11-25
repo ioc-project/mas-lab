@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import pytest
+from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.llm_live import LiveLlmEngine
 from mas.runtime.schema.egress import InvokeEngineIo
 
@@ -69,7 +70,7 @@ async def test_achat_completion_stream_emits_llm_delta_and_assembles():
         use_cache=False,
         model="stub",
         stream=True,
-        ctx=type("C", (), {"observability": _Obs()})(),
+        ctx=AutoCtxAssembler(observability=_Obs()),
     )
     ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "ab"
@@ -95,7 +96,7 @@ async def test_ainvoke_uses_stream_iterator_even_when_spec_stream_is_false() -> 
         use_cache=False,
         model="stub",
         stream=False,
-        ctx=type("C", (), {"session_id": "s1", "observability": None})(),
+        ctx=AutoCtxAssembler(session_id="s1"),
     )
     ret = await engine.ainvoke(InvokeEngineIo(correlation_id=1, op="LLM_CALL"))
     assert ret.text == "x"

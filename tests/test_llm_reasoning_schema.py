@@ -102,3 +102,43 @@ def test_catalog_yaml_matches_schema() -> None:
     schema = yaml.safe_load((root / "docs/schemas/runtime/llm-model-catalog.schema.yaml").read_text())
     data = yaml.safe_load((root / "runtime/src/mas/runtime/spec/llm-model-catalog.yaml").read_text())
     jsonschema.Draft7Validator(schema).validate(data)
+
+
+def _catalog_schema():
+    root = Path(__file__).resolve().parents[1]
+    return yaml.safe_load((root / "docs/schemas/runtime/llm-model-catalog.schema.yaml").read_text())
+
+
+def _minimal_catalog(models: dict) -> dict:
+    return {
+        "apiVersion": "mas/v1",
+        "kind": "LlmModelCatalog",
+        "metadata": {"name": "t", "version": "1"},
+        "spec": {"models": models},
+    }
+
+
+def test_catalog_schema_accepts_modalities() -> None:
+    pytest.importorskip("jsonschema")
+    import jsonschema
+
+    data = _minimal_catalog({"toy": {"modalities": {"input": ["text", "image", "pdf"], "output": ["text"]}}})
+    jsonschema.Draft7Validator(_catalog_schema()).validate(data)
+
+
+def test_catalog_schema_rejects_unknown_modality_name() -> None:
+    pytest.importorskip("jsonschema")
+    import jsonschema
+
+    data = _minimal_catalog({"toy": {"modalities": {"input": ["text", "smell"], "output": ["text"]}}})
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft7Validator(_catalog_schema()).validate(data)
+
+
+def test_catalog_schema_rejects_modalities_wrong_shape() -> None:
+    pytest.importorskip("jsonschema")
+    import jsonschema
+
+    data = _minimal_catalog({"toy": {"modalities": "text"}})
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft7Validator(_catalog_schema()).validate(data)

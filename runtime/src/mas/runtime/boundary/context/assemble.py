@@ -38,7 +38,9 @@ def _archive_request_meta(ctx: Any, messages: list[dict[str, Any]]) -> dict[str,
     view = getattr(store, "view_id", "") if isinstance(store, ConversationChunkStore) else ""
     prefix = ""
     if messages and messages[0].get("role") == "system":
-        prefix = str(messages[0].get("content") or "")
+        from mas.runtime.contracts.content_types import text_of
+
+        prefix = text_of(messages[0].get("content") or "")
     prefix_hash = hashlib.sha256(prefix.encode()).hexdigest()[:16] if prefix else ""
     reused = bool(prefix_hash) and prefix_hash == getattr(ctx, "last_system_prefix_hash", None)
     try:

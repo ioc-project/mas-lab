@@ -62,6 +62,7 @@ class ModelInfo:
     defaults: dict[str, Any] = field(default_factory=dict)
     settings: dict[str, ModelSetting] = field(default_factory=dict)
     pricing: dict[str, Any] = field(default_factory=dict)
+    modalities: dict[str, tuple[str, ...]] | None = None
 
     def setting(self, name: str) -> ModelSetting | None:
         return self.settings.get(name)
@@ -102,6 +103,18 @@ class ModelCatalog:
                 return self.models[candidate]
         return None
 
+    def accepts_modality(self, model: str | None, modality: str, direction: str = "input") -> bool:
+        """Whether a model accepts ``modality`` on ``direction`` (input or output).
+
+        Unknown models and known models with no ``modalities`` field return True:
+        the catalog does not filter them. A listed field is membership in that list.
+        """
+        info = self.get(model)
+        if info is None or info.modalities is None:
+            return True
+        accepted = info.modalities.get(direction) or ()
+        return modality in accepted
+
 
 _REGION_PREFIX = re.compile(r"^(?:us|eu|apac|jp|au|ca|global|us-gov)\.")
 _VERSION_SUFFIX = re.compile(r"(?:-v\d+(?::\d+)?|@\d{8}|-\d{8})$")
@@ -115,6 +128,19 @@ def _base_model_id(name: str) -> str:
     """
     base = _REGION_PREFIX.sub("", name.split("/")[-1])
     return _VERSION_SUFFIX.sub("", base)
+
+
+def _parse_modalities(raw: Any) -> dict[str, tuple[str, ...]] | None:
+    if not isinstance(raw, dict):
+        return None
+    parsed: dict[str, tuple[str, ...]] = {}
+    for direction in ("input", "output"):
+        values = raw.get(direction)
+        if isinstance(values, list):
+            parsed[direction] = tuple(str(item) for item in values)
+        else:
+            parsed[direction] = ()
+    return parsed
 
 
 def _parse_setting(raw: Any) -> ModelSetting:
@@ -162,6 +188,7 @@ def load_model_catalog(path: Path | None = None) -> ModelCatalog:
                 defaults=dict(raw.get("defaults") or {}),
                 settings=settings,
                 pricing=dict(raw.get("pricing") or {}),
+                modalities=_parse_modalities(raw["modalities"]) if "modalities" in raw else None,
             )
             models[info.name] = info
             alias_index[info.name] = info.name

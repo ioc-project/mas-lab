@@ -24,7 +24,6 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from mas.runtime.contracts.context_contract import ContextContract, ContextPart
 from mas.library.standard.plugins.memory._citations import (
     CitationFormatter,
     create_citation_formatter,
@@ -42,6 +41,8 @@ from mas.library.standard.plugins.memory._retrievers import (
     HybridRetriever,
     Retriever,
 )
+from mas.runtime.contracts.context_contract import ContextContract, ContextPart
+
 from .memory_provider_plugin import MemoryProviderPlugin
 
 logger = logging.getLogger(__name__)
@@ -64,8 +65,9 @@ __all__ = [
 ]
 
 
-def _chunk_text(text: str, chunk_tokens: int = DEFAULT_CHUNK_TOKENS,
-                overlap_tokens: int = DEFAULT_CHUNK_OVERLAP) -> List[Dict[str, Any]]:
+def _chunk_text(
+    text: str, chunk_tokens: int = DEFAULT_CHUNK_TOKENS, overlap_tokens: int = DEFAULT_CHUNK_OVERLAP
+) -> List[Dict[str, Any]]:
     """Split text into overlapping chunks (unchanged utility function)."""
     chunk_chars = chunk_tokens * 4
     overlap_chars = overlap_tokens * 4
@@ -73,15 +75,17 @@ def _chunk_text(text: str, chunk_tokens: int = DEFAULT_CHUNK_TOKENS,
 
     chunks = []
     for i in range(0, max(1, len(text)), step):
-        segment = text[i:i + chunk_chars]
+        segment = text[i : i + chunk_chars]
         if not segment.strip():
             continue
-        chunks.append({
-            "text": segment,
-            "char_start": i,
-            "char_end": i + len(segment),
-            "token_estimate": len(segment) // 4,
-        })
+        chunks.append(
+            {
+                "text": segment,
+                "char_start": i,
+                "char_end": i + len(segment),
+                "token_estimate": len(segment) // 4,
+            }
+        )
         if i + chunk_chars >= len(text):
             break
     return chunks
@@ -299,8 +303,16 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
             self._conn.execute(
                 "INSERT INTO chunks (id, doc_id, text, embedding, char_start, char_end, "
                 "token_estimate, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (chunk_id, doc_id, chunk["text"], emb_json,
-                 chunk["char_start"], chunk["char_end"], chunk["token_estimate"], now),
+                (
+                    chunk_id,
+                    doc_id,
+                    chunk["text"],
+                    emb_json,
+                    chunk["char_start"],
+                    chunk["char_end"],
+                    chunk["token_estimate"],
+                    now,
+                ),
             )
 
         self._conn.commit()
@@ -308,12 +320,12 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
         logger.debug("Indexed document %s (%d chunks) from source=%s", doc_id, len(chunks), source)
         return doc_id
 
-    def index_session_transcript(
-        self, agent_id: str, session_id: str, messages: List[Dict[str, Any]]
-    ) -> str:
+    def index_session_transcript(self, agent_id: str, session_id: str, messages: List[Dict[str, Any]]) -> str:
         """Index session transcript as a single document."""
+        from mas.runtime.contracts.content_types import text_of
+
         text = "\n".join(
-            f"[{m.get('role', '?')}]: {m.get('content', '')}" for m in messages
+            f"[{m.get('role', '?')}]: {text_of(m.get('content', ''), media='placeholder')}" for m in messages
         )
         return self.index_document(
             source=f"session:{agent_id}/{session_id}",
@@ -419,10 +431,12 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
 
         if isinstance(content, dict):
             content = json.dumps(content)
+        else:
+            from mas.runtime.contracts.content_types import text_of
 
-        doc_id = self.index_document(
-            source=source, content=str(content), metadata=metadata, doc_id=doc_id
-        )
+            content = text_of(content)
+
+        doc_id = self.index_document(source=source, content=str(content), metadata=metadata, doc_id=doc_id)
         return {"status": "ok", "key": doc_id, "version": 1}
 
     # ------------------------------------------------------------------
@@ -436,7 +450,9 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
         user_msg = None
         for msg in reversed(messages):
             if msg.get("role") == "user":
-                self._pending_query = msg.get("content", "")
+                from mas.runtime.contracts.content_types import text_of
+
+                self._pending_query = text_of(msg.get("content", ""))
                 user_msg = msg
                 break
 
@@ -454,12 +470,15 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
             if results:
                 snippets = [r["text"] for r in results if r.get("score", 0) >= 0.5]
                 if snippets:
-                    prefix = "\n".join(f"- {s}" for s in snippets)
-                    user_msg["content"] = (
+                    prefix = (
                         f"[Relevant memories — apply these before answering]\n"
-                        f"{prefix}\n\n"
-                        f"{self._pending_query}"
+                        f"{chr(10).join(f'- {s}' for s in snippets)}\n\n"
                     )
+                    current = user_msg.get("content")
+                    if isinstance(current, list):
+                        user_msg["content"] = [{"type": "text", "text": prefix}] + list(current)
+                    else:
+                        user_msg["content"] = prefix + str(self._pending_query)
                     logger.debug(
                         "SemanticMemory: injected %d memories into user message",
                         len(snippets),
@@ -471,9 +490,8 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
         if not self._context_inject:
             return []
         query = (
-            (request.query if request is not None and getattr(request, "query", None) else None)
-            or self._pending_query
-        )
+            request.query if request is not None and getattr(request, "query", None) else None
+        ) or self._pending_query
         if not query:
             return []
 
@@ -491,11 +509,7 @@ class SemanticMemoryPlugin(MemoryProviderPlugin, ContextContract):
 
         # Propagate created_at from search results so the MCE can compute
         # OC metric C4 (Stale Memory Utilization Rate) from the event stream.
-        created_ats = [
-            r["chunk"]["created_at"]
-            for r in results
-            if r.get("chunk", {}).get("created_at") is not None
-        ]
+        created_ats = [r["chunk"]["created_at"] for r in results if r.get("chunk", {}).get("created_at") is not None]
 
         return [
             ContextPart.memory(

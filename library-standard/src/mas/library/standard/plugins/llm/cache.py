@@ -131,7 +131,9 @@ class CacheLLMProvider:
             }
             persist_cache(self.cache_path, self._cache)
             return
-        text = str(message.get("content") or "").strip()
+        from mas.runtime.contracts.content_types import text_of
+
+        text = text_of(message.get("content")).strip()
         if not text:
             return
         self._cache[cache_key] = {

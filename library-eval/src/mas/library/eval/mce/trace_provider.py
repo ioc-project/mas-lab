@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """MCE DataProvider backed by a mas-lab events.jsonl trace file."""
+
 from __future__ import annotations
 
 import json
@@ -119,17 +120,10 @@ class MASTraceProvider:
                 if agent:
                     return str(agent)
         # Primary — current format: parented to mas_call_start
-        mas_call_ids: set = {
-            e.get("call_id")
-            for e in events
-            if e.get("kind") == "mas_call_start" and e.get("call_id")
-        }
+        mas_call_ids: set = {e.get("call_id") for e in events if e.get("kind") == "mas_call_start" and e.get("call_id")}
         if mas_call_ids:
             for e in events:
-                if (
-                    e.get("kind") == "execution_start"
-                    and e.get("parent_call_id") in mas_call_ids
-                ):
+                if e.get("kind") == "execution_start" and e.get("parent_call_id") in mas_call_ids:
                     agent = e.get("agent_id")
                     if agent:
                         return str(agent)
@@ -173,17 +167,10 @@ class MASTraceProvider:
                     return str(inp)
 
         # Pass 3 — entry-agent execution_start parented to mas_call_start (current format)
-        mas_call_ids: set = {
-            e.get("call_id")
-            for e in events
-            if e.get("kind") == "mas_call_start" and e.get("call_id")
-        }
+        mas_call_ids: set = {e.get("call_id") for e in events if e.get("kind") == "mas_call_start" and e.get("call_id")}
         if mas_call_ids:
             for e in events:
-                if (
-                    e.get("kind") == "execution_start"
-                    and e.get("parent_call_id") in mas_call_ids
-                ):
+                if e.get("kind") == "execution_start" and e.get("parent_call_id") in mas_call_ids:
                     inp = e.get("input")
                     if inp:
                         return str(inp)
@@ -243,10 +230,7 @@ class MASTraceProvider:
             # Some runs miss execution_end.output but have llm_call_end.response.content.
             if kind == "llm_call_end":
                 return _as_text(
-                    event.get("response")
-                    or payload.get("response")
-                    or event.get("output")
-                    or payload.get("output")
+                    event.get("response") or payload.get("response") or event.get("output") or payload.get("output")
                 )
 
             return ""
@@ -276,9 +260,7 @@ class MASTraceProvider:
         root_agent: str | None = None
         # Collect mas_call_start IDs for current-format detection.
         _mas_call_ids: set = {
-            e.get("call_id")
-            for e in events
-            if e.get("kind") == "mas_call_start" and e.get("call_id")
+            e.get("call_id") for e in events if e.get("kind") == "mas_call_start" and e.get("call_id")
         }
         for e in events:
             parent = e.get("parent_call_id")
@@ -314,27 +296,25 @@ class MASTraceProvider:
         Returns dicts with ``toolName``, ``toolArguments``, ``toolOutput``,
         ``executionId`` — the names expected by :class:`ToolUtilizationAccuracy`.
         """
-        starts = {
-            e["call_id"]: e
-            for e in events
-            if e.get("kind") == "tool_call_start" and "call_id" in e
-        }
-        ends = {
-            e["call_id"]: e
-            for e in events
-            if e.get("kind") == "tool_call_end" and "call_id" in e
-        }
+        starts = {e["call_id"]: e for e in events if e.get("kind") == "tool_call_start" and "call_id" in e}
+        ends = {e["call_id"]: e for e in events if e.get("kind") == "tool_call_end" and "call_id" in e}
         spans: list[dict] = []
         for call_id, start in starts.items():
             end = ends.get(call_id, {})
             args = start.get("arguments")
             result = end.get("result")
-            spans.append({
-                "executionId":   call_id,
-                "toolName":      start.get("tool_name") or "",
-                "toolArguments": json.dumps(args) if isinstance(args, (dict, list)) else (str(args) if args else ""),
-                "toolOutput":    json.dumps(result) if isinstance(result, (dict, list)) else (str(result) if result else ""),
-            })
+            spans.append(
+                {
+                    "executionId": call_id,
+                    "toolName": start.get("tool_name") or "",
+                    "toolArguments": json.dumps(args)
+                    if isinstance(args, (dict, list))
+                    else (str(args) if args else ""),
+                    "toolOutput": json.dumps(result)
+                    if isinstance(result, (dict, list))
+                    else (str(result) if result else ""),
+                }
+            )
         return spans
 
     def _build_conversation(self, events: list[dict]) -> str:
@@ -356,5 +336,7 @@ class MASTraceProvider:
                     lines.append(f"[{agent}] RESPONSE {str(output)[:500]}")
                 case "user_response":
                     content = e.get("content") or e.get("payload", {}).get("content", "")
-                    lines.append(f"[{agent}] RESPONSE {str(content)[:500]}")
+                    from mas.runtime.contracts.content_types import text_of
+
+                    lines.append(f"[{agent}] RESPONSE {text_of(content, media='placeholder')[:500]}")
         return "\n".join(lines)

@@ -24,12 +24,14 @@ from mas.library.standard.plugins.llm.http_protocol import (
     normalize_usage,
     sampling_value,
 )
+from mas.library.standard.plugins.llm.media import bedrock_text, bedrock_user_blocks
 from mas.library.standard.plugins.llm.thinking import (
     AnthropicThinking,
     anthropic_thinking,
     loop_replayable,
     thinking_off,
 )
+from mas.runtime.contracts.content_types import MediaStore
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
@@ -79,7 +81,9 @@ class BedrockLLMProvider(HttpLlmProtocol):
         thinking = _thinking(model, reasoning, cap)
         if thinking.active and not loop_replayable(messages, _REASONING_KEY):
             thinking = AnthropicThinking(effort=thinking.effort, always_on=thinking.always_on)
-        system, mapped = _messages(messages, replay=thinking.always_on or not thinking_off(reasoning))
+        system, mapped = _messages(
+            messages, replay=thinking.always_on or not thinking_off(reasoning), media_store=self.media_store
+        )
         inference: dict[str, Any] = {}
         value = None if thinking.constrains else sampling_value(sampling, model, "temperature")
         if value is not None:
@@ -107,7 +111,7 @@ class BedrockLLMProvider(HttpLlmProtocol):
             if choice and not (thinking.constrains and ("tool" in choice or "any" in choice)):
                 config["toolChoice"] = choice
             payload["toolConfig"] = config
-        extra = merge_extra_body(getattr(self, "extra_body", None), extra_body)
+        extra = merge_extra_body(self.extra_body, extra_body)
         if extra:
             payload.update(extra)
         payload.pop("response_format", None)
@@ -202,7 +206,9 @@ class BedrockLLMProvider(HttpLlmProtocol):
         )
         resp.raise_for_status()
         message = self._message_from_completion(resp.json(), reasoning)
-        text = str(message.get("content") or "")
+        from mas.runtime.contracts.content_types import text_of
+
+        text = text_of(message.get("content"))
         if text and callable(on_stream_chunk):
             try:
                 on_stream_chunk(text)
@@ -253,22 +259,11 @@ def _add_cache_points(payload: dict[str, Any], places: tuple[bool, bool, int], t
             marked += 1
 
 
-def _text_of(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict) and item.get("text"):
-                parts.append(str(item["text"]))
-        return "".join(parts)
-    return "" if content is None else str(content)
-
-
 def _messages(
-    messages: list[dict[str, Any]], *, replay: bool = True
+    messages: list[dict[str, Any]],
+    *,
+    replay: bool = True,
+    media_store: MediaStore | None = None,
 ) -> tuple[list[dict[str, str]], list[dict[str, Any]]]:
     system: list[dict[str, str]] = []
     out: list[dict[str, Any]] = []
@@ -292,14 +287,14 @@ def _messages(
     for raw in messages:
         role = str(raw.get("role") or "")
         if role == "system":
-            text = _text_of(raw.get("content"))
+            text = bedrock_text(raw.get("content"))
             if text:
                 system.append({"text": text})
             continue
         if role == "tool":
             result: dict[str, Any] = {
                 "toolUseId": str(raw.get("tool_call_id") or raw.get("id") or ""),
-                "content": [{"text": _text_of(raw.get("content")).strip() or "(no output)"}],
+                "content": [{"text": bedrock_text(raw.get("content")).strip() or "(no output)"}],
             }
             if raw.get("is_error"):
                 result["status"] = "error"
@@ -311,7 +306,7 @@ def _messages(
             state = raw.get("provider_state")
             if replay and isinstance(state, dict) and isinstance(state.get(_REASONING_KEY), list):
                 blocks.extend(dict(b) for b in state[_REASONING_KEY] if isinstance(b, dict))
-            text = _text_of(raw.get("content"))
+            text = bedrock_text(raw.get("content"))
             if text:
                 blocks.append({"text": text})
             for call in raw.get("tool_calls") or []:
@@ -333,7 +328,7 @@ def _messages(
                 )
             add("assistant", blocks)
             continue
-        add("user", [{"text": _text_of(raw.get("content"))}])
+        add("user", bedrock_user_blocks(raw.get("content"), media_store, layer="bedrock"))
     flush_tools()
     return system, out
 

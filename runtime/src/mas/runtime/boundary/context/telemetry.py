@@ -25,7 +25,9 @@ def _token_estimate(text: str) -> int:
 def _message_source(msg: dict[str, Any], *, index: int, layer: str) -> str:
     role = str(msg.get("role") or "?")
     if role == "system":
-        if str(msg.get("content") or "").startswith("[Conversation summary —"):
+        from mas.runtime.contracts.content_types import text_of
+
+        if text_of(msg.get("content") or "").startswith("[Conversation summary —"):
             return "conversation/summarized"
         return "context/system"
     if role == "tool":
@@ -48,7 +50,9 @@ def segments_from_messages(
     segments: list[dict[str, Any]] = []
     for idx, msg in enumerate(messages):
         role = str(msg.get("role") or "?")
-        content = msg.get("content") or ""
+        from mas.runtime.contracts.content_types import text_of
+
+        content = text_of(msg.get("content") or "", media="placeholder")
         if role == "assistant" and msg.get("tool_calls"):
             calls = msg.get("tool_calls") or []
             names = []
@@ -63,8 +67,8 @@ def segments_from_messages(
                 "source": _message_source(msg, index=idx, layer=layer),
                 "section_id": f"{layer}/{idx}/{role}",
                 "index": idx,
-                "tokens": _token_estimate(str(content)),
-                "content_preview": _preview(str(content)),
+                "tokens": _token_estimate(content),
+                "content_preview": _preview(content),
                 "tool_call_id": msg.get("tool_call_id") or "",
                 "retained": True,
             }

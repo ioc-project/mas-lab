@@ -217,6 +217,7 @@ nav:
       - Runtime:
           - Manifest fields: manifests/runtime.md
           - Context management: references/context-management.md
+          - Multimodal content: references/multimodal.md
           - Reliability: references/reliability.md
           - Hardening: references/hardening.md
           - Secrets: references/secrets.md

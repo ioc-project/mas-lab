@@ -26,6 +26,11 @@ def _estimate_tokens_lists(*parts: list[dict[str, Any]]) -> int:
             content = m.get("content", "")
             if isinstance(content, str):
                 char_total += len(content)
+            else:
+                from mas.runtime.contracts.content_types import MEDIA_PART_TOKEN_ESTIMATE, media_parts, text_chars
+
+                char_total += text_chars(content)
+                char_total += MEDIA_PART_TOKEN_ESTIMATE * 4 * len(media_parts(content))
             for call in m.get("tool_calls") or []:
                 fn = call.get("function") or {}
                 char_total += len(str(fn.get("name", ""))) + len(str(fn.get("arguments", "")))

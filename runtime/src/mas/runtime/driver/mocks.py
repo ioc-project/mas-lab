@@ -24,6 +24,7 @@ class AutoCtxAssembler:
     injected_context: list[str] = field(default_factory=list)
     memory_seeds: list[tuple[str, str]] = field(default_factory=list)
     last_user_text: str = ""
+    last_user_content: Any = None
     turn_index: int = 0
     turn_history: list[tuple[str, str]] = field(default_factory=list)
     committed_messages: list[dict[str, Any]] = field(default_factory=list)
@@ -65,6 +66,8 @@ class AutoCtxAssembler:
     layer_control: Any | None = None
     # The running spec (copied from the agent spec at start, then revised); set by the session manager.
     current_spec: dict[str, Any] | None = None
+    on_stream_chunk: Any = None
+    _baseline_injected_context: list[str] | None = None
 
     def capture_baseline(self) -> None:
         """Snapshot manifest-derived system context for /reset."""
@@ -72,7 +75,7 @@ class AutoCtxAssembler:
 
     def reset_conversation(self) -> None:
         """Clear turn history and working memory; restore baseline system prompt."""
-        baseline = getattr(self, "_baseline_injected_context", None)
+        baseline = self._baseline_injected_context
         if baseline is not None:
             self.injected_context = list(baseline)
         self.turn_history.clear()
@@ -80,6 +83,7 @@ class AutoCtxAssembler:
         self.conversation_chunks = ConversationChunkStore()
         self.working_memory.clear()
         self.last_user_text = ""
+        self.last_user_content = None
         self.turn_index = 0
         self.runtime_params = {}
         from mas.runtime.boundary.context.telemetry import record_context_mutation
@@ -91,7 +95,7 @@ class AutoCtxAssembler:
             wm_count=0,
         )
 
-    def note_user_input(self, text: str) -> None:
+    def note_user_input(self, text: str, content: Any = None) -> None:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
         record_context_mutation(
@@ -102,6 +106,7 @@ class AutoCtxAssembler:
             committed_count=len(self.committed_messages),
         )
         self.last_user_text = text
+        self.last_user_content = content
         self.turn_index += 1
         self.working_memory.clear()
         record_context_mutation(
@@ -115,8 +120,9 @@ class AutoCtxAssembler:
         from mas.runtime.boundary.context.telemetry import record_context_mutation
 
         committed_before = len(self.committed_messages)
-        if self.last_user_text:
-            self.committed_messages.append({"role": "user", "content": self.last_user_text})
+        if self.last_user_text or self.last_user_content is not None:
+            user_content = self.last_user_text if self.last_user_content is None else self.last_user_content
+            self.committed_messages.append({"role": "user", "content": user_content})
             self.turn_history.append((self.last_user_text, text))
             # A turn can now be finalized more than once (HITL pause, then
             # resume — see SessionController._finalize_turn): once the user
@@ -125,11 +131,14 @@ class AutoCtxAssembler:
             # tool loop too, since note_agent_response only ever runs at
             # turn end/pause, never between a turn's own internal LLM calls.
             self.last_user_text = ""
+            self.last_user_content = None
         if self.working_memory.messages:
             self.committed_messages.extend(self.working_memory.messages)
         if text.strip():
             last = self.committed_messages[-1] if self.committed_messages else {}
-            if not (last.get("role") == "assistant" and str(last.get("content") or "").strip() == text.strip()):
+            from mas.runtime.contracts.content_types import text_of
+
+            if not (last.get("role") == "assistant" and text_of(last.get("content")).strip() == text.strip()):
                 self.committed_messages.append({"role": "assistant", "content": text})
         turn_messages = list(self.committed_messages[committed_before:])
         if turn_messages:

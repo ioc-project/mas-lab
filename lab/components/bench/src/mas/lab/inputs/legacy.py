@@ -47,17 +47,21 @@ def legacy_item_to_envelope(item: Dict[str, Any], *, where: str = "dataset item"
         prompt = ""
     inputs: Dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
     inputs["user"] = prompt
-    hitl: List[str] = []
-    extra_users: List[str] = []
+    hitl: List[Any] = []
+    extra_users: List[Any] = []
     for turn in item.get("turns") or []:
         if not isinstance(turn, dict):
             continue
         role = str(turn.get("role") or "user")
-        content = str(turn.get("content") or "")
+        content = turn.get("content")
+        if isinstance(content, list):
+            stored: Any = content
+        else:
+            stored = str(content or "")
         if role == "hitl":
-            hitl.append(content)
-        elif role == "user" and content:
-            extra_users.append(content)
+            hitl.append(stored)
+        elif role == "user" and stored:
+            extra_users.append(stored)
     if extra_users:
         inputs["user"] = [prompt if isinstance(prompt, str) else str(prompt), *extra_users]
     if hitl:

@@ -480,6 +480,7 @@ def llm_providers_from_manifest(
     reasoning_effort: str | None = None,
     reasoning: dict[str, Any] | None = None,
     retry_overlay: dict[str, Any] | None = None,
+    media_store: Any = None,
 ) -> Any:
     """Instantiate protocol plugins from ``spec.models[]`` + infra, like tools.
 
@@ -500,6 +501,8 @@ def llm_providers_from_manifest(
             raise ValueError("spec.models entry is missing kind")
         payload = dict(spec)
         payload["stream"] = stream
+        if media_store is not None:
+            payload["media_store"] = media_store
         if reasoning is not None:
             payload.setdefault("reasoning", reasoning)
         if reasoning_effort:
@@ -579,6 +582,7 @@ def llm_provider_from_infra(
     cache_raise_on_miss: bool = False,
     manifest: dict[str, Any] | None = None,
     retry_overlay: dict[str, Any] | None = None,
+    media_store: Any = None,
 ) -> Any:
     """Build the routed protocol provider, optionally wrapping it with cache."""
     inner = llm_providers_from_manifest(
@@ -589,6 +593,7 @@ def llm_provider_from_infra(
         reasoning_effort=reasoning_effort,
         reasoning=reasoning,
         retry_overlay=retry_overlay,
+        media_store=media_store,
     )
     if not wrap_cache:
         return inner

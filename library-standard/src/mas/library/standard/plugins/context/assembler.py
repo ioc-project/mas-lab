@@ -340,7 +340,7 @@ class ContextAssemblerPlugin(BasePlugin):
         for line in system_context_lines(ctx):
             if str(line).strip():
                 system_parts.append(str(line).strip())
-        for key, content in getattr(ctx, "memory_seeds", []) or []:
+        for key, content in ctx.memory_seeds or []:
             system_parts.append(f"[memory:{key}] {content}")
         inject_context_plugins(ctx, system_parts, part_usage=part_usage)
         if system_parts:
@@ -348,15 +348,18 @@ class ContextAssemblerPlugin(BasePlugin):
 
         past = request_history(ctx, manifest=manifest)
 
-        last_user_text = str(getattr(ctx, "last_user_text", "") or "")
-        store = getattr(ctx, "working_memory", None)
+        last_user_text = str(ctx.last_user_text or "")
+        last_user_content = ctx.last_user_content
+        if last_user_content is None:
+            last_user_content = last_user_text
+        store = ctx.working_memory
         wm_messages: List[Dict[str, Any]] = []
         if isinstance(store, WorkingMemoryStore) and store.messages:
             wm_messages = bounded_working_memory_tail(store.messages, working_memory_slice_limit(manifest))
 
         fixed_context_tokens = (
             estimate_tokens(messages)
-            + estimate_tokens([{"role": "user", "content": last_user_text}])
+            + estimate_tokens([{"role": "user", "content": last_user_content}])
             + estimate_tokens(wm_messages)
             + estimate_tool_tokens(tools)
         )
@@ -381,8 +384,8 @@ class ContextAssemblerPlugin(BasePlugin):
             if part.get("section_id") and (part.get("pin_policy") == PIN_NEVER or part.get("pinned"))
         }
         messages.extend(drop_prefix_duplicates(managed, pinned_ids))
-        if last_user_text:
-            messages.append({"role": "user", "content": last_user_text})
+        if last_user_text or last_user_content:
+            messages.append({"role": "user", "content": last_user_content})
 
         if not messages and not wm_messages:
             messages.append({"role": "user", "content": "Hello"})
@@ -441,7 +444,9 @@ class ContextAssemblerPlugin(BasePlugin):
         # Step 2: context part injection — idempotency check
         if not self._always_reassemble:
             sys_msg = next((m for m in messages if m.get("role") == "system"), None)
-            if sys_msg and _ASSEMBLY_MARKER in sys_msg.get("content", ""):
+            from mas.runtime.contracts.content_types import text_of
+
+            if sys_msg and _ASSEMBLY_MARKER in text_of(sys_msg.get("content", "")):
                 return hook_data
 
         registry = getattr(self, "registry", None)
@@ -644,7 +649,6 @@ class ContextAssemblerPlugin(BasePlugin):
 
         current = messages[last_user_idx].get("content", "")
 
-        # Handle multimodal content — use merge_content from content_types
         if isinstance(current, list):
             from mas.runtime.contracts.content_types import ContentPart as CP
 
@@ -654,10 +658,7 @@ class ContextAssemblerPlugin(BasePlugin):
                 current = [p.to_dict() if isinstance(p, CP) else p for p in new_parts]
             if append_parts:
                 suffix_text = "\n\n".join(p.content for p in append_parts)
-                if isinstance(current, list):
-                    current = list(current) + [{"type": "text", "text": suffix_text}]
-                else:
-                    current = current + "\n\n" + suffix_text
+                current = list(current) + [{"type": "text", "text": suffix_text}]
         else:
             if prepend_parts:
                 prefix = "\n\n".join(p.content for p in prepend_parts) + "\n\n"

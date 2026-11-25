@@ -138,13 +138,15 @@ def _xml_named_tool_calls(content: str, known_names: set[str]) -> tuple[list[dic
 
 
 def recover_tool_calls_from_content(
-    content: str | None,
+    content: Any,
     *,
     known_tool_names: set[str] | None = None,
     tool_schemas: dict[str, _ParamSchema] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     """Recover structured tool calls from message content, plus the leftover text."""
-    raw = str(content or "")
+    from mas.runtime.contracts.content_types import text_of
+
+    raw = text_of(content)
     cleaned = strip_channel_markup(raw)
     blocks = _TEXT_TOOL_CALL_BLOCK_RE.findall(raw)
     variables = _collect_text_variables(cleaned)

@@ -471,10 +471,9 @@ def _format_context_assembly_diff(messages: list[dict]) -> str:
     added_parts = 0
     for message in messages:
         role = str(message.get("role") or "?").strip().lower()
-        content = message.get("content") or ""
-        if isinstance(content, list):
-            content = " ".join(part.get("text", "") for part in content if isinstance(part, dict))
-        content = str(content).strip()
+        from mas.runtime.contracts.content_types import text_of
+
+        content = text_of(message.get("content"), media="placeholder").strip()
         if not content:
             continue
 

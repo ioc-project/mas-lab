@@ -44,12 +44,9 @@ def render_assembled_messages(messages: Any) -> str:
         if not isinstance(msg, dict):
             continue
         role = str(msg.get("role") or "?").strip().lower()
-        content = msg.get("content") or ""
-        if isinstance(content, list):
-            content = " ".join(
-                str(part.get("text", "")) for part in content if isinstance(part, dict)
-            )
-        content = str(content).strip()
+        from mas.runtime.contracts.content_types import text_of
+
+        content = text_of(msg.get("content"), media="placeholder").strip()
         if content:
             lines.append(f"{role}: {content}")
     return "\n".join(lines)

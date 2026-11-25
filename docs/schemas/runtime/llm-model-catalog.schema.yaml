@@ -101,6 +101,23 @@ definitions:
         items:
           type: string
           enum: [chat_completions, responses, ollama, vllm, anthropic, gemini]
+      modalities:
+        type: object
+        additionalProperties: false
+        description: >
+          Input and output modalities this model accepts (text, image, audio,
+          video, pdf). Omitted means unknown: the catalog does not filter.
+        properties:
+          input:
+            type: array
+            items:
+              type: string
+              enum: [text, image, audio, video, pdf]
+          output:
+            type: array
+            items:
+              type: string
+              enum: [text, image, audio, video, pdf]
       pricing:
         type: object
         description: USD price per million tokens, used for cost estimates.

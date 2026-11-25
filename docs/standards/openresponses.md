@@ -38,7 +38,13 @@ Pass `--infra-ref standard:openresponses` and set the key. The layer is
 stateless: it sends `store: false` and the whole history on every call, so the
 agent's working memory stays the single source of truth. A reasoning item's
 `encrypted_content` is kept in `provider_state` and replayed with its tool
-call. The field mapping is in [LLM providers](../manifests/llm-providers.md).
+call.
+
+A user message with media becomes one input item whose `content` lists
+`input_text`, `input_image` (`image_url`: a data URL of the stored bytes) and
+`input_file` (`filename`, `file_data` as a data URL) in order. Assistant and
+system roles stay text. See [multimodal.md](../references/multimodal.md).
+The field mapping is in [LLM providers](../manifests/llm-providers.md).
 
 ## Dependencies
 

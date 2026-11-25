@@ -1,0 +1,44 @@
+{
+  "_attribution": "Truncated snapshot of https://models.dev/api.json for tests. MIT, Copyright (c) 2025 models.dev. See NOTICE.",
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "models": {
+      "gpt-4o": {
+        "id": "gpt-4o",
+        "canonical_model_id": "openai/gpt-4o",
+        "modalities": {"input": ["text", "image"], "output": ["text"]},
+        "limit": {"context": 128000, "output": 16384},
+        "cost": {"input": 2.5, "output": 10, "cache_read": 1.25}
+      },
+      "alias-source": {
+        "id": "alias-source",
+        "canonical_model_id": "openai/alias-source",
+        "modalities": {"input": ["text", "pdf"], "output": ["text"]},
+        "limit": {"context": 64000, "output": 4096},
+        "cost": {"input": 0.5, "output": 2.0}
+      },
+      "new-open-weights": {
+        "id": "new-open-weights",
+        "open_weights": true,
+        "reasoning": false,
+        "modalities": {"input": ["text"], "output": ["text"]},
+        "limit": {"context": 8192, "output": 1024},
+        "cost": {"input": 0.0, "output": 0.0}
+      }
+    }
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "models": {
+      "claude-haiku-4-5": {
+        "id": "claude-haiku-4-5",
+        "canonical_model_id": "anthropic/claude-haiku-4-5",
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "limit": {"context": 200000, "output": 64000},
+        "cost": {"input": 1, "output": 5, "cache_read": 0.1}
+      }
+    }
+  }
+}

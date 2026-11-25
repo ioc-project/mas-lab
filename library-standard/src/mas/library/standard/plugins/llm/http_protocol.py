@@ -13,6 +13,7 @@ from mas.library.standard.lib.stack.call import LayerLifecycle
 from mas.library.standard.lib.tls import resolve_ssl_verify
 from mas.library.standard.plugins.llm.http import arequest_once
 from mas.library.standard.plugins.llm.structured import apply_structured_result, schema_from_format
+from mas.runtime.contracts.content_types import MediaStore
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, coerce_reasoning_settings
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
 from mas.runtime.reliability.classify import (
@@ -50,7 +51,18 @@ def protocol_http_steps(
         value = proxy.get(key) if proxy.get(key) is not None else raw.get(key)
         if value is not None:
             http_params[key] = value
-    skip = {"inner", "pipeline", "layer", "middleware", "for", "per", "proxy", "api_key"}
+    skip = {
+        "inner",
+        "pipeline",
+        "layer",
+        "middleware",
+        "for",
+        "per",
+        "proxy",
+        "api_key",
+        "media_store",
+        "secret_resolver",
+    }
     protocol_params = {k: v for k, v in raw.items() if k not in skip}
     return [
         {"layer": "http", "for": ["llm"], "params": http_params},
@@ -153,6 +165,11 @@ def cache_ttl(sampling: dict[str, Any] | None, model: str) -> str | None:
     return None
 
 
+def prompt_cache_retention_wire(value: Any) -> str:
+    """``in_memory`` or ``24h`` (``5m`` is the first, ``1h`` the second)."""
+    return "in_memory" if str(value) in {"in_memory", "5m"} else "24h"
+
+
 class HttpLlmProtocol(LayerLifecycle):
     """Shared base of the http protocol layers: key, client, streaming failures, structured result."""
 
@@ -179,6 +196,7 @@ class HttpLlmProtocol(LayerLifecycle):
         extra_body: dict[str, Any] | None = None,
         http_timeout: float | None = None,
         inner: Any = None,
+        media_store: MediaStore | None = None,
         **_: Any,
     ) -> None:
         super().__init__()
@@ -192,6 +210,7 @@ class HttpLlmProtocol(LayerLifecycle):
         self.extra_body = dict(extra_body or {})
         self.http_timeout = http_timeout
         self.inner = inner
+        self.media_store = media_store
         self._aclient: httpx.AsyncClient | None = None
 
     def _coerce_api_key(self, api_key: SecretRef | dict[str, Any] | None) -> SecretRef | None:
@@ -301,6 +320,7 @@ class HttpLlmProtocol(LayerLifecycle):
             extra_body=spec.get("extra") if isinstance(spec.get("extra"), dict) else None,
             http_timeout=timeout,
             inner=spec.get("inner"),
+            media_store=spec.get("media_store"),
         )
 
     async def ainvoke(self, io: Any) -> Any:
@@ -366,6 +386,9 @@ class HttpLlmProtocol(LayerLifecycle):
         raise failure
 
     async def _complete(self, **kwargs: Any) -> dict[str, Any]:
+        from mas.runtime.contracts.content_types import check_messages_modalities
+
+        check_messages_modalities(str(kwargs.get("model") or ""), list(kwargs.get("messages") or []))
         use_stream = self.stream if kwargs.get("stream") is None else bool(kwargs.get("stream"))
         settings = coerce_reasoning_settings(
             kwargs["reasoning"] if kwargs.get("reasoning") is not None else self.reasoning,

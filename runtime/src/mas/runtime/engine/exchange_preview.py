@@ -69,7 +69,7 @@ def format_llm_messages(
         content = msg.get("content")
         if role == "tool":
             call_id = msg.get("tool_call_id") or "?"
-            text = str(content or "").strip()
+            text = _preview_content(content).strip()
             lines.append(f"[tool call_id={call_id}]")
             for part in (text.splitlines() or [text]) if text else ["(empty)"]:
                 lines.append(f"  {part}")
@@ -80,10 +80,7 @@ def format_llm_messages(
                 fn = call.get("function") or {}
                 lines.append(f"  id={call.get('id')} name={fn.get('name')}")
             continue
-        if isinstance(content, list):
-            text = json.dumps(content, ensure_ascii=False)
-        else:
-            text = str(content or "").strip()
+        text = _preview_content(content)
         if not text:
             continue
         if role == "system":
@@ -101,6 +98,27 @@ def format_llm_messages(
     elif tools_note:
         lines.append(f"[tools]  {tools_note}")
     return "\n".join(lines)
+
+
+def _preview_content(content: Any) -> str:
+    """Display view of a message body. A string is unchanged; media parts show sha256."""
+    from mas.runtime.contracts.content_types import text_of
+
+    if isinstance(content, list):
+        pieces: list[str] = []
+        for raw in content:
+            if not isinstance(raw, dict):
+                continue
+            kind = str(raw.get("type") or "text")
+            if kind == "text":
+                piece = str(raw.get("text") or "")
+                if piece:
+                    pieces.append(piece)
+            else:
+                digest = str(raw.get("sha256") or "")
+                pieces.append(f"[{kind} sha256:{digest[:12]}]")
+        return "\n".join(pieces)
+    return text_of(content).strip()
 
 
 def format_tool_invoke(tool_name: str, arguments: dict[str, Any] | None = None) -> str:

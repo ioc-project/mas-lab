@@ -258,6 +258,16 @@ def sanitize_assistant_message(
     content = out.get("content")
     if isinstance(content, str) and content:
         out["content"] = _THINK_BLOCK_RE.sub("", content).strip() or None
+    elif isinstance(content, list):
+        stripped: list[Any] = []
+        for raw in content:
+            if isinstance(raw, dict) and str(raw.get("type") or "text") == "text":
+                text = _THINK_BLOCK_RE.sub("", str(raw.get("text") or "")).strip()
+                if text:
+                    stripped.append({**raw, "text": text})
+            else:
+                stripped.append(raw)
+        out["content"] = stripped or None
     return out
 
 
@@ -289,7 +299,10 @@ def reasoning_text(message_or_delta: dict[str, Any]) -> str:
 
 def think_block_text(content: Any) -> str:
     """The text of the ``<think>`` / ``<thinking>`` blocks inside answer ``content``."""
-    if not isinstance(content, str) or not content:
+    from mas.runtime.contracts.content_types import text_of
+
+    content = content if isinstance(content, str) else text_of(content)
+    if not content:
         return ""
     return "".join(
         _THINK_OPEN_RE.sub("", _THINK_CLOSE_RE.sub("", block.group(0))) for block in _THINK_BLOCK_RE.finditer(content)

@@ -2,8 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 """spec.working_memory.compaction facade over context_manager/CMFactory."""
 
-import json
-
 import pytest
 from mas.library.standard.lib.context.compaction import (
     apply_working_memory_compaction,
@@ -111,10 +109,7 @@ async def test_llm_summarizer_wraps_then_engine_completes():
     )
     assert result == "ok"
     assert seen[0][0]["content"] == SUMMARIZE_INSTRUCTIONS
-    assert json.loads(seen[0][1]["content"]) == [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hello"},
-    ]
+    assert seen[0][1]["content"] == "user: hi\nassistant: hello"
 
 
 async def test_apply_working_memory_compaction_wires_a_real_context_manager():

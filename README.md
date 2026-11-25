@@ -184,4 +184,5 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) and
 ## License
 
 Distributed under the `Apache 2.0` License. See [LICENSE](LICENSE) for more
-information.
+information. Third-party catalog facts from [models.dev](https://models.dev)
+(MIT) are listed in [NOTICE](NOTICE).

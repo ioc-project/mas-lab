@@ -112,7 +112,7 @@ Each item follows `run-input.schema.yaml`.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | yes | Unique identifier within the dataset. Used by coupled experiments, output paths, and the run hash. |
-| `inputs.user` | string, string list, or `{ref:}` | yes | The user prompt. A string is the text, never a path. A list of strings is sequential user messages. `{ref: file}` loads a sibling file. |
+| `inputs.user` | string, string list, `{ref:}`, or `{parts:}` | yes | The user prompt. A string is the text, never a path. A list of strings is sequential user messages. `{ref: file}` loads a sibling file. `{parts:}` is one turn with text and media (see [User turns with media](#user-turns-with-media)). |
 | `inputs.hitl` | string, string list, or `{ref:}` | no | Operator replies after the prompt, in order. |
 | `inputs.memory_seeds` | list, `{ref:}`, or bare path | no | Initial memory state. See [section 4](#4-memory-seeds-the-memory-state-slot). |
 | `inputs.tool_fixtures` | `{ref:}`, bare path, or mapping | no | Mock-tool payloads. See [section 8](#8-tool-fixtures). |
@@ -322,6 +322,29 @@ For sequential user messages (rare), give `user` a list of strings:
 ```
 
 The runner tags messages internally for traces. That tag is not an authoring format.
+
+### User turns with media
+
+A turn with an image or a file is `{parts: [...]}`. `inputs.user` may be that
+mapping (one turn) or a list whose items are strings or `{parts: [...]}`.
+Each part is `{text: "..."}`, `{image: {ref: path}}` (png, jpeg, gif, webp)
+or `{file: {ref: path}}` (pdf). `audio` and `video` keys are accepted by the
+schema and refused at load. Other extensions are refused. `ref` paths resolve
+relative to the dataset file, like other refs.
+
+```yaml
+- id: chart
+  inputs:
+    user:
+      parts:
+        - text: "What is the trend in this chart?"
+        - image: {ref: ./charts/q3.png}
+```
+
+Loading reads the file once for sha256, media type (from the extension) and
+size. Bytes are not embedded in the run input. The run hash changes when the
+file bytes change, not when the path does. A missing file or an unknown
+extension names the item in the error. See [multimodal.md](../references/multimodal.md).
 
 **Memory plus HITL.**
 The runner applies memory seeds before the initial `inputs.user` prompt.

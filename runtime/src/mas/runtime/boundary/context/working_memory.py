@@ -167,7 +167,7 @@ class WorkingMemoryStore:
         self,
         *,
         cid: int,
-        content: str,
+        content: Any,
         extra_messages: Sequence[dict[str, Any]] | None = None,
         ctx: Any = None,
         is_error: bool = False,
@@ -197,7 +197,8 @@ class WorkingMemoryStore:
             from mas.runtime.boundary.context.chunk_meta import take_pending_chunk_meta
 
             chunk = take_pending_chunk_meta(ctx, call_id) or None
-        self.record_tool_result(call_id=call_id, content=str(content), chunk=chunk, is_error=is_error)
+        stored = content if isinstance(content, (str, list)) else ("" if content is None else str(content))
+        self.record_tool_result(call_id=call_id, content=stored, chunk=chunk, is_error=is_error)
         self.mark_synced(cid)
         return call_id
 
@@ -240,7 +241,7 @@ class WorkingMemoryStore:
         self,
         *,
         call_id: str,
-        content: str,
+        content: Any,
         chunk: dict[str, Any] | None = None,
         is_error: bool = False,
     ) -> None:

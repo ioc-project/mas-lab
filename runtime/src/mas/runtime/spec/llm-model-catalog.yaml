@@ -4,7 +4,7 @@ apiVersion: mas/v1
 kind: LlmModelCatalog
 metadata:
   name: standard
-  version: "2026.11.1"
+  version: "2026.11.2"
   description: >
     Curated per-model defaults, maxima, and allowed settings. Not a vendor dump.
     Refresh from the sources below; keep this file versioned in git.
@@ -41,10 +41,13 @@ spec:
     - id: models-dev
       title: models.dev community catalog
       url: https://models.dev
-      reusable: false
+      reusable: true
       note: >
-        Aggregated context windows and provider metadata used by several
-        coding agents. HTTP/JSON, not a Python library we can import.
+        Third-party sync source for context windows, max output, modalities,
+        and pricing (`https://models.dev/api.json`, MIT,
+        Copyright (c) 2025 models.dev). Maintainer tool:
+        scripts/sync_model_catalog.py. Not imported at run time.
+        Required notice: NOTICE at the repository root.
     - id: aider
       title: Aider MODEL_SETTINGS
       url: https://github.com/Aider-AI/aider/blob/main/aider/resources/model-settings.yml
@@ -69,6 +72,13 @@ spec:
       aliases: [openai/gpt-4o, azure/gpt-4o]
       context_window: 128000
       max_output_tokens: 16384
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 2.5
+        output_per_million_tokens: 10
+        cached_input_per_million_tokens: 1.25
       apis: [chat_completions]
       defaults:
         temperature: 0.7
@@ -85,6 +95,13 @@ spec:
       aliases: [openai/gpt-4o-mini, azure/gpt-4o-mini]
       context_window: 128000
       max_output_tokens: 16384
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 0.15
+        output_per_million_tokens: 0.6
+        cached_input_per_million_tokens: 0.075
       apis: [chat_completions]
       defaults:
         temperature: 0.7
@@ -101,6 +118,13 @@ spec:
       aliases: [openai/gpt-5, gpt-5-chat-latest]
       context_window: 400000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 1.25
+        output_per_million_tokens: 10
+        cached_input_per_million_tokens: 0.125
       apis: [chat_completions, responses]
       defaults:
         temperature: 1.0
@@ -119,6 +143,13 @@ spec:
       aliases: [openai/gpt-5-mini]
       context_window: 400000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 0.25
+        output_per_million_tokens: 2
+        cached_input_per_million_tokens: 0.025
       apis: [chat_completions, responses]
       defaults:
         reasoning.effort: low
@@ -135,6 +166,13 @@ spec:
       aliases: [vertex_ai/gemini-2.5-pro, gemini/gemini-2.5-pro]
       context_window: 1048576
       max_output_tokens: 65536
+      modalities:
+        input: [text, image, audio, video, pdf]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 1.25
+        output_per_million_tokens: 10
+        cached_input_per_million_tokens: 0.125
       max_thinking_tokens: 32768
       apis: [chat_completions, gemini]
       defaults:
@@ -154,6 +192,9 @@ spec:
       aliases: [vertex_ai/gemini-2.5-flash]
       context_window: 1048576
       max_output_tokens: 65536
+      modalities:
+        input: [text, image, audio, video, pdf]
+        output: [text]
       max_thinking_tokens: 24576
       apis: [chat_completions, gemini]
       pricing:
@@ -178,6 +219,15 @@ spec:
     # Gemini 3: curated by hand, re-verify against the vendor before relying on it.
     gemini-3-pro-preview:
       aliases: [gemini-3-pro, gemini/gemini-3-pro-preview, vertex_ai/gemini-3-pro-preview]
+      context_window: 1048576
+      max_output_tokens: 65536
+      modalities:
+        input: [text, image, audio, video, pdf]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 2
+        output_per_million_tokens: 12
+        cached_input_per_million_tokens: 0.2
       thinking_mode: level
       apis: [chat_completions, gemini]
       settings:
@@ -193,6 +243,9 @@ spec:
       aliases: [anthropic/claude-opus-5-5, anthropic.claude-opus-5-5, vertex_ai/claude-opus-5-5]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -213,6 +266,9 @@ spec:
       aliases: [anthropic/claude-opus-5, anthropic.claude-opus-5, vertex_ai/claude-opus-5]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -232,6 +288,9 @@ spec:
       aliases: [anthropic/claude-opus-4-8, anthropic.claude-opus-4-8, vertex_ai/claude-opus-4-8]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -251,6 +310,9 @@ spec:
       aliases: [anthropic/claude-opus-4-7, anthropic.claude-opus-4-7, vertex_ai/claude-opus-4-7]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -270,6 +332,9 @@ spec:
       aliases: [anthropic/claude-sonnet-5-5, anthropic.claude-sonnet-5-5, vertex_ai/claude-sonnet-5-5]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -290,6 +355,9 @@ spec:
       aliases: [anthropic/claude-sonnet-5, anthropic.claude-sonnet-5, vertex_ai/claude-sonnet-5]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -309,6 +377,9 @@ spec:
       aliases: [anthropic/claude-haiku-5-5, anthropic.claude-haiku-5-5, vertex_ai/claude-haiku-5-5]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -329,6 +400,9 @@ spec:
       aliases: [anthropic/claude-fable-5-2, anthropic.claude-fable-5-2, vertex_ai/claude-fable-5-2]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: always_on
       apis: [anthropic]
       pricing:
@@ -349,6 +423,9 @@ spec:
       aliases: [anthropic/claude-fable-5-1, anthropic.claude-fable-5-1, vertex_ai/claude-fable-5-1]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: always_on
       apis: [anthropic]
       pricing:
@@ -368,6 +445,9 @@ spec:
       aliases: [anthropic/claude-opus-4-6, anthropic.claude-opus-4-6, vertex_ai/claude-opus-4-6]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -384,6 +464,9 @@ spec:
       aliases: [anthropic/claude-sonnet-4-6, anthropic.claude-sonnet-4-6, vertex_ai/claude-sonnet-4-6]
       context_window: 1000000
       max_output_tokens: 128000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: adaptive
       apis: [anthropic]
       pricing:
@@ -400,6 +483,9 @@ spec:
       aliases: [anthropic/claude-haiku-4-5, anthropic.claude-haiku-4-5, vertex_ai/claude-haiku-4-5]
       context_window: 200000
       max_output_tokens: 64000
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
       thinking_mode: budget
       apis: [anthropic]
       pricing:
@@ -414,8 +500,15 @@ spec:
 
     gemma-4-26b-a4b-it-node1-a100-0:
       aliases: [gemma-4-26b, gemma4, onprem/gemma4]
-      context_window: 131072
-      max_output_tokens: 8192
+      context_window: 262144
+      max_output_tokens: 32768
+      # Image support depends on the served build and is enabled only after it is tested there.
+      modalities:
+        input: [text]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 0
+        output_per_million_tokens: 0
       apis: [chat_completions, vllm]
       defaults:
         temperature: 0.7
@@ -440,7 +533,13 @@ spec:
     gpt-oss:
       aliases: [openai/gpt-oss, gpt-oss-120b]
       context_window: 131072
-      max_output_tokens: 32768
+      max_output_tokens: 131072
+      modalities:
+        input: [text]
+        output: [text]
+      pricing:
+        input_per_million_tokens: 0.09
+        output_per_million_tokens: 0.36
       apis: [chat_completions, vllm]
       defaults:
         think.chat_template_kwargs: true

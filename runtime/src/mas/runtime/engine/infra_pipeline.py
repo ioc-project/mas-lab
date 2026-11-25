@@ -284,7 +284,9 @@ class BidirectionalPipelineEngine(Lifecycle):
             target="LLM_CALL",
         )
         out = chain.backward_reply(ctx, {"content": ret.text})
-        new_text = str(out.get("content") or ret.text)
+        from mas.runtime.contracts.content_types import text_of
+
+        new_text = text_of(out.get("content")) or str(ret.text)
         if new_text == ret.text:
             return ret
         return ret.model_copy(update={"text": new_text})
@@ -446,7 +448,9 @@ def _provider_result_return(io: InvokeEngineIo, payload: dict[str, Any], result:
     try:
         text = json.dumps(result, default=str)
     except TypeError:
-        text = str(result.get("content") or "")
+        from mas.runtime.contracts.content_types import text_of
+
+        text = text_of(result.get("content"))
     usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
     return EngineIoReturn(
         correlation_id=io.correlation_id,

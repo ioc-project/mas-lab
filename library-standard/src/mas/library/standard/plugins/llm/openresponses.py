@@ -22,10 +22,13 @@ from mas.library.standard.plugins.llm.http_protocol import (
     araise_for_status,
     catalog_supports,
     normalize_usage,
+    prompt_cache_retention_wire,
     sampling_value,
 )
+from mas.library.standard.plugins.llm.media import openresponses_text, openresponses_user_parts
 from mas.library.standard.plugins.llm.structured import apply_structured_result, schema_from_format
 from mas.library.standard.plugins.llm.thinking import thinking_off, wants_thinking
+from mas.runtime.contracts.content_types import MediaStore, has_media
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
@@ -68,7 +71,7 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
     ) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         del temperature  # the call's default 0.7 is not a choice; only `sampling` is sent
         url = self.api_base.rstrip("/") + "/responses"
-        instructions, items = _input_items(messages, replay=not thinking_off(reasoning))
+        instructions, items = _input_items(messages, replay=not thinking_off(reasoning), media_store=self.media_store)
         payload: dict[str, Any] = {"model": model, "input": items, "store": False}
         if instructions:
             payload["instructions"] = instructions
@@ -87,7 +90,7 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
                 if sampling.get(name) is not None and catalog_supports(model, name):
                     payload[name] = sampling[name]
         if "prompt_cache_retention" in payload:
-            payload["prompt_cache_retention"] = _retention(payload["prompt_cache_retention"])
+            payload["prompt_cache_retention"] = prompt_cache_retention_wire(payload["prompt_cache_retention"])
         settings = _reasoning(reasoning)
         if settings:
             payload["reasoning"] = settings
@@ -105,7 +108,7 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
         choice = _tool_choice(tool_choice) if mapped_tools else None
         if choice:
             payload["tool_choice"] = choice
-        extra = merge_extra_body(getattr(self, "extra_body", None), extra_body)
+        extra = merge_extra_body(self.extra_body, extra_body)
         if extra:
             payload.update(extra)
         payload.pop("response_format", None)
@@ -180,11 +183,6 @@ class OpenResponsesLLMProvider(HttpLlmProtocol):
         return _message(final, reasoning)
 
 
-def _retention(value: Any) -> str:
-    """``in_memory`` or ``24h`` (``5m`` is the first, ``1h`` the second)."""
-    return "in_memory" if str(value) in {"in_memory", "5m"} else "24h"
-
-
 def _reasoning(reasoning: ReasoningSettings) -> dict[str, Any]:
     """The Open Responses ``reasoning`` object: effort, mode, and a summary when the spec keeps the thoughts."""
     out: dict[str, Any] = {}
@@ -200,25 +198,18 @@ def _reasoning(reasoning: ReasoningSettings) -> dict[str, Any]:
     return out
 
 
-def _text_of(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            str(part.get("text") or "")
-            for part in content
-            if isinstance(part, dict) and part.get("type") in {None, "text", "input_text", "output_text"}
-        )
-    return "" if content is None else str(content)
-
-
-def _input_items(messages: list[dict[str, Any]], *, replay: bool = True) -> tuple[str, list[dict[str, Any]]]:
+def _input_items(
+    messages: list[dict[str, Any]],
+    *,
+    replay: bool = True,
+    media_store: MediaStore | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     """``(instructions, input items)`` for the history: system turns become ``instructions``."""
     system_parts: list[str] = []
     items: list[dict[str, Any]] = []
     for raw in messages:
         role = str(raw.get("role") or "")
-        text = _text_of(raw.get("content"))
+        text = openresponses_text(raw.get("content"))
         if role in {"system", "developer"}:
             if text:
                 system_parts.append(text)
@@ -249,8 +240,10 @@ def _input_items(messages: list[dict[str, Any]], *, replay: bool = True) -> tupl
                         "arguments": str(fn.get("arguments") or "{}"),
                     }
                 )
-        elif text.strip():
-            items.append({"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]})
+        elif has_media(raw.get("content")) or text.strip():
+            parts = openresponses_user_parts(raw.get("content"), media_store)
+            if parts:
+                items.append({"type": "message", "role": "user", "content": parts})
     return "\n".join(system_parts), items
 
 

@@ -442,7 +442,9 @@ class DebugScriptPlugin:
                 for message in messages:
                     role = message.get("role") if isinstance(message, dict) else ""
                     content = message.get("content") if isinstance(message, dict) else message
-                    preview = str(content)[:240]
+                    from mas.runtime.contracts.content_types import text_of
+
+                    preview = text_of(content, media="placeholder")[:240]
                     self._emit(f"    {role}: {preview}")
             q_state = getattr(transition, "q_state", None) or {}
             if q_state:

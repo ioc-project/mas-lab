@@ -64,7 +64,7 @@ class RuntimeInstance(Lifecycle):
         self._exec_id_uses[base] = n
         return f"{base}-exec" if n == 1 else f"{base}-{n}-exec"
 
-    def _begin_user_turn(self, text: str, turn_id: str, parent_call_id: str) -> str | None:
+    def _begin_user_turn(self, text: str, turn_id: str, parent_call_id: str, content: Any = None) -> str | None:
         op = self.driver.observability
         if op is None or self.obs_plugin_set is None:
             return None
@@ -73,6 +73,19 @@ class RuntimeInstance(Lifecycle):
         rec: dict[str, Any] = {"text": text, "call_id": exec_id, "turn_id": turn_id}
         if parent_call_id:
             rec["parent_call_id"] = parent_call_id
+        from mas.runtime.contracts.content_types import media_parts
+
+        listed = media_parts(content)
+        if listed:
+            rec["media"] = [
+                {
+                    "sha256": part.get("sha256"),
+                    "media_type": part.get("media_type"),
+                    "name": part.get("name"),
+                    "bytes": part.get("bytes"),
+                }
+                for part in listed
+            ]
         op.record_session("user_input", **rec)
         return exec_id
 
@@ -95,6 +108,7 @@ class RuntimeInstance(Lifecycle):
         source: str = "",
         sender: str = "",
         intent: str = "",
+        content: Any = None,
     ) -> UserInputReceived:
         kwargs: dict[str, Any] = {
             "user_turn_id": turn_id,
@@ -106,6 +120,8 @@ class RuntimeInstance(Lifecycle):
         }
         if session_id:
             kwargs["session_id"] = session_id
+        if content is not None:
+            kwargs["content"] = content
         return UserInputReceived(**kwargs)
 
     @classmethod
@@ -259,6 +275,7 @@ class RuntimeInstance(Lifecycle):
         source: str = "",
         sender: str = "",
         intent: str = "",
+        content: Any = None,
     ) -> DriverTrace:
         """``session_id`` empty means "no one has one yet" — a genuinely new
         MAS session — and UserInputReceived mints one itself (see its
@@ -267,7 +284,7 @@ class RuntimeInstance(Lifecycle):
         instead of starting a new one; that's the caller's job, not this
         method's — it never mints one, only forwards or omits.
         """
-        exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
+        exec_id = self._begin_user_turn(text, turn_id, parent_call_id, content)
         trace = self.feed(
             self._user_input_event(
                 text,
@@ -277,6 +294,7 @@ class RuntimeInstance(Lifecycle):
                 source=source,
                 sender=sender,
                 intent=intent,
+                content=content,
             )
         )
         self._finish_user_turn(exec_id, trace)
@@ -296,9 +314,10 @@ class RuntimeInstance(Lifecycle):
         source: str = "",
         sender: str = "",
         intent: str = "",
+        content: Any = None,
     ) -> DriverTrace:
         """Async twin of :meth:`run_user_text` — awaits ``driver.afeed``."""
-        exec_id = self._begin_user_turn(text, turn_id, parent_call_id)
+        exec_id = self._begin_user_turn(text, turn_id, parent_call_id, content)
         trace = await self.afeed(
             self._user_input_event(
                 text,
@@ -308,6 +327,7 @@ class RuntimeInstance(Lifecycle):
                 source=source,
                 sender=sender,
                 intent=intent,
+                content=content,
             )
         )
         self._finish_user_turn(exec_id, trace)
