@@ -71,6 +71,9 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- Trip-planner agents pin `model: any` instead of a hosted model id.
+- `model: any` inherits infra `models.defaults.llm`, then `mappings.default`, before workspace `config.yaml`.
+- `mas-ctl run-mas --model ID` remaps every agent for that run.
 - A SLIM create-app failure is `slim binding error` and does not quote the bindings.
 - Keep one append handle per `events.jsonl` and stream log; emit or publish after close raises. See `docs/references/lab-throughput.md`.
 - Serialize a stream event once; `follow_worker` fetches only new log bytes; `reset_channel` restores the previous log. See `docs/references/lab-throughput.md`.

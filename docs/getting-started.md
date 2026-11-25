@@ -53,6 +53,8 @@ mas-lab plot trajectory traces/trip-planner.jsonl \
   --format html -o traces/trip-planner-trajectory.html
 ```
 
+Local Ollama: the same command with `--infra-ref standard:ollama` (no API key; the sample inherits `llama3.2`). `--model qwen2.5:7b-instruct` remaps every agent for that run.
+
 From a source checkout you can pass
 `library-samples/apps/trip-planner/mas.yaml` instead of `samples:…`.
 From Docker, prefix the same commands with

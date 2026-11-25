@@ -35,11 +35,12 @@ Overrides win per key. A workspace can override only `design_pattern` and still 
 
 - Compile records `model: any` when the Agent, MAS or experiment omits a pin.
 - Named `experiment.models` slots fill matching `any` ids first.
+- Infra `models.defaults.llm` (then `models.mappings.default`) fills the remaining `any`.
 - The `defaults.model` in the local `config.yaml` can resolve the remaining `any` at engine time.
 - The package `defaults.yaml` `model` is not used as a substitute. If nothing explicit remains, engine
   construction raises instead of silently running `gpt-4o-mini`.
 
-Pin a model in the Agent or MAS spec, `experiment.models.main`, workspace `config.yaml`, `--model`, or
+Pin a model in the Agent or MAS spec, `experiment.models.main`, infra `models.defaults.llm`, workspace `config.yaml`, `--model`, or
 `MAS_CTL_MODEL`. The value is exposed through `mas.runtime.agent_defaults.default_model()` and
 `resolve_default_model(workspace=None)` for the UI and catalog. `model` is not a registry plugin type.
 

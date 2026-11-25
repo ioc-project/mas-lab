@@ -135,7 +135,8 @@ def resolve_model_name(
 
     Precedence: CLI ``--model`` → last-resort env override → Agent
     ``spec.models[id=main]`` → MAS default → ``experiment.models.main`` /
-    ``experiment.model`` → workspace ``config.yaml`` ``defaults.model``.
+    ``experiment.model`` → infra ``models.defaults.llm`` → infra
+    ``models.mappings.default`` → workspace ``config.yaml`` ``defaults.model``.
     An env override is logged, never silent.
 
     ``model: any`` (or an omitted pin) does **not** fall through to the
@@ -144,6 +145,9 @@ def resolve_model_name(
     ``gpt-4o-mini``.
     """
     llm_proxy = (infra.llm_proxy if infra else {}) or {}
+    mappings = llm_proxy.get("mappings") or {}
+    infra_default = llm_proxy.get("default_model")
+    mapping_default = mappings.get("default")
     from mas.ctl.env import env_model_override
 
     forced = (forced or "").strip()
@@ -164,14 +168,16 @@ def resolve_model_name(
             (declared, "spec.models"),
             (parent_default, "mas.spec.models"),
             (experiment_default, "experiment.model"),
+            (infra_default, "infra.models.defaults.llm"),
+            (mapping_default, "infra.models.mappings.default"),
             (workspace_default, "config.defaults.model"),
         )
         if not raw:
             raise UnresolvedModelError(
                 "No concrete LLM model: spec.models is 'any' or omitted and "
                 "nothing pinned it. Set spec.models[].model, experiment.models.main, "
-                "config.yaml defaults.model, or pass --model / MAS_CTL_MODEL. "
-                "mas-lab will not substitute gpt-4o-mini."
+                "infra models.defaults.llm, config.yaml defaults.model, or pass "
+                "--model / MAS_CTL_MODEL. mas-lab will not substitute gpt-4o-mini."
             )
     leaves = (infra.llm_proxies if infra is not None else None) or {}
     if leaves:
@@ -182,7 +188,6 @@ def resolve_model_name(
 
         leaf = leaf_for_model(raw, leaves, default=llm_proxy)
         return canonical_model_name(raw, leaf)
-    mappings = llm_proxy.get("mappings") or {}
     return str(mappings.get(raw, raw))
 
 

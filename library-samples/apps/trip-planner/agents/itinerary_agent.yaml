@@ -6,7 +6,7 @@ metadata:
   name: itinerary_agent
 spec:
   models:
-    - model: gpt-4o-mini
+    - model: any
       temperature: 0.2
       max_tokens: 1500
   tools:

@@ -175,7 +175,7 @@ _Used by:_ `spec.models[]`
 
 | Field | Type | Required | Default | Description |
 | ------- | ------ | ---------- | --------- | ------------- |
-| `model` | `string` | **yes** | — | LiteLLM-style model string, such as `vertex_ai/gemini-3-pro-preview`. Use `any` to inherit the MAS, experiment, or workspace default model. |
+| `model` | `string` | **yes** | — | LiteLLM-style model string, such as `vertex_ai/gemini-3-pro-preview`. Use `any` to inherit the MAS, experiment, infra, or workspace default model. See [mas.md](mas.md#modelentry). |
 | `id` | `string` | no | `"main"` | Logical model ID within this agent. Use `main` for the primary model. |
 | `kind` | `string` | no | — | Wire-protocol plugin for model calls (`openai`, `anthropic`, `gemini`, `azure`, `bedrock`, `vertex`, `openresponses`, `groq`, …). |
 | `temperature` | `number` [0.0–2.0] | no | `0.7` | Sampling temperature. |

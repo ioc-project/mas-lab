@@ -258,7 +258,7 @@ experiment:
 
 Model slots are named model pins, not `$variables`.
 Keys match Agent and MAS `spec.models[].id`, plus `judge`.
-An agent that says `model: any` inherits the experiment value, then the MAS value, then the local `config.yaml` value.
+An agent that says `model: any` inherits through the [MAS model resolution](mas.md#modelentry) chain (MAS, experiment, infra `models.defaults.llm`, workspace `config.yaml`).
 
 Scalar `experiment.model` is shorthand for `models.main`. If both are set, `models.main` wins.
 

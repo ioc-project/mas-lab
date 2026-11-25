@@ -74,8 +74,9 @@ properties:
           Shorthand for models.main. Experiment default LLM (LiteLLM id, or
           `any`). Agents/MAS that omit spec.models or set model: any inherit
           this. `any` (and omitted) means this experiment does not pin a
-          provider id — inherit the application spec.models, then local
-          config.yaml defaults.model. models.main wins when both are set.
+          provider id — inherit the application spec.models, then infra
+          models.defaults.llm, then local config.yaml defaults.model.
+          models.main wins when both are set.
           See docs/manifests/summarization.md.
 
       models:

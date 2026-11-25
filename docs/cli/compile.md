@@ -115,10 +115,10 @@ Relative tool and skill refs are not rewritten. Library scheme refs such as `sam
 
 Omitted plugin slots are filled from the same accessors the runtime uses (`defaults.yaml`).
 
-The model is not baked in. An omitted Agent or MAS model compiles to `any`. At run time the model resolves in this order: CLI, Agent, MAS, `experiment.models.main` or `experiment.model`, local `config.yaml` `defaults.model`, then the package `defaults.yaml`.
+The model is not baked in. An omitted Agent or MAS model compiles to `any`. At run time the model follows the [MAS model resolution](../manifests/mas.md#modelentry) chain (CLI, Agent, MAS, experiment, infra `models.defaults.llm`, workspace `config.yaml`). The package `defaults.yaml` model is not used.
 
 - `spec.design_pattern`: package default `react`. The string `design_pattern: cot` equals `{type: cot}`. Compile fills `params.max_cot_pass: 1` and `parallel: true`. It omits `max_steps` unless the agent or an overlay sets it.
-- `spec.models[0]`: `model: any` when omitted. At run time it inherits from the MAS or `experiment.models.main`, then local `config.yaml`.
+- `spec.models[0]`: `model: any` when omitted. At run time it inherits from the MAS, experiment, infra, then local `config.yaml`.
 - MAS `spec.models[0]`: the same `any` sentinel when the MAS omits a default.
 - `spec.context_manager`: `summarising`, `keep_turns` 10, `hysteresis_ratio` 0.1, `summarizer: llm`, safety margin 0.1.
 - `spec.assembler`: package default `assembler`. Compile fills `emit_segments: true` and `always_reassemble: false`.

@@ -307,6 +307,7 @@ mas-ctl run-mas mas.yaml -q "Plan a trip from Celestia to Verdantia" --trace
 | `--auto-hitl` / `--no-auto-hitl` | auto-hitl on | Auto-resolve human-in-the-loop (HITL) gates in batch mode. `--no-auto-hitl` uses the OperatorConsole. |
 | `--single-turn` | off | Exit after the first reply. |
 | `--no-validate` | off | Skip manifest validation. |
+| `--model ID` | `spec.models`, infra `models.defaults.llm`, `MAS_CTL_MODEL`, or `MAS_LLM_MODEL` | Force the engine model for every agent in this run. |
 
 `run-mas` also takes the `--trace*` and `--events*` flags above.
 
