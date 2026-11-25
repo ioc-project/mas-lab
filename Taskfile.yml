@@ -240,6 +240,7 @@ tasks:
           tests/test_ci_gate_parity.py \
           tests/test_no_raw_threads.py \
           tests/test_docker_smoke.py \
+          tests/test_dependency_watch.py \
           -q --tb=line --durations=20
 
   verify-coverage:

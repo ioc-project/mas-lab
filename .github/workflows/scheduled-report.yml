@@ -1,0 +1,45 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Tracks a failing scheduled run in one issue per workflow, and closes it when a later scheduled run passes.
+# These runs install the latest dependencies without the lock, so a failure is usually a new upstream release.
+# (docker-check-report.yml does the same for the Docker check, under its own issue title.)
+name: Scheduled report
+
+on:
+  workflow_run:
+    workflows: ["Python matrix", "Weekly", "Dependency watch"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  report:
+    name: Report a scheduled run
+    if: github.event.workflow_run.event == 'schedule' && contains(fromJSON('["failure", "success"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # One open issue per failing streak, not one per run.
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+        run: |
+          title="Scheduled run of $WORKFLOW is failing"
+          number=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" \
+            --json number,title --jq "[.[] | select(.title == \"$title\")][0].number // empty")
+          if [ "$CONCLUSION" = "failure" ]; then
+            body="The scheduled run failed: $RUN_URL"
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+            else
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+            fi
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "The scheduled run passes again: $RUN_URL"
+          fi

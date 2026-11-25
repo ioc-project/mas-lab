@@ -1,0 +1,36 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Weekly: one issue per direct dependency that has a newer minor or major release than uv.lock, so the code is
+# adapted before a release breaks it. scripts/dependency_watch.py opens, updates and closes the issues.
+# Whether the latest releases already break the suites is the job of python-matrix.yml (it installs without
+# the lock); a failure there is reported by scheduled-report.yml.
+name: Dependency watch
+
+on:
+  schedule:
+    - cron: "37 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: Dependency issues
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+      - name: Compare the lock with PyPI and update the issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --no-project --python 3.14 --with packaging python3 scripts/dependency_watch.py --issues
