@@ -881,6 +881,7 @@ async def _execute_batch(
                                             "experiment_model_slots": getattr(exp, "model_slots", None),
                                             "workspace_root": str(experiment_yaml.parent),
                                             "controls": list(loaded.controls or ()),
+                                            "overrides": list(loaded.run_overrides or ()),
                                         },
                                         "extra",
                                     ),
@@ -1006,6 +1007,7 @@ async def _execute_batch(
                                 loaded=list(loaded.controls or ()),
                                 control_path=_ctl_path,
                             ),
+                            "overrides": list(loaded.run_overrides or ()),
                         },
                     )
                     try:

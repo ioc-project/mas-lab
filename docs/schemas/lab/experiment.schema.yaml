@@ -94,6 +94,17 @@ properties:
         type: string
         description: "Default infra bundle name for service/codec pipeline steps."
 
+      overrides:
+        type: array
+        items:
+          type: string
+        description: >
+          PATH=VALUE assignments that every run of every scenario applies, in the grammar of
+          `mas-ctl run-mas --override`. A path starts with `.mas`, `.agent` or `.infra`, for example
+          `.mas.agent[worker].spec.models[0].extra.cache.no-cache=true` or
+          `.infra.spec.models.defaults.llm=qwen2.5:7b-instruct`. They apply before the scenario's own
+          overlays. `mas-lab benchmark run --override` with such a path adds to this list.
+
       environment:
         $ref: "urn:mas-lab:fragments:environment:v1"
         description: "Experiment-level fixtures, clock, timers and triggers."
