@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""mas-ctl secrets — init, set, list, import-env. Never prints a value."""
+"""mas-ctl secrets — init, set, list, import-env, migrate. Never prints a value."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 import click
 from mas.ctl.secrets.inspect import list_secret_refs
+from mas.ctl.secrets.migrate import migrate_file
 from mas.ctl.secrets.store import build_resolver, secret_store_kind, secrets_dir_from_workspace
 from mas.ctl.secrets.write import import_env_file, init_secrets_dir, write_file_secret
 from mas.ctl.workspace.config import WorkspaceConfig
@@ -125,3 +126,33 @@ def import_env_cmd(ctx: click.Context, env_file: str) -> None:
         click.echo(ref)
     for name in skipped:
         click.echo(f"skipped {name} (not a known secret variable)")
+
+
+@secrets_group.command("migrate")
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option("--write", is_flag=True, help="Rewrite the files (a .bak copy is kept). Without it, only report.")
+@click.pass_context
+def migrate_cmd(ctx: click.Context, files: tuple[str, ...], write: bool) -> None:
+    """Rewrite removed ``*_env`` keys and ``env:`` strings into SecretRefs and plain values.
+
+    Reports what it would change; with --write it rewrites each file and keeps a .bak copy. It never reads a
+    variable: it prints the ``mas-ctl secrets set`` command for each secret, which you run yourself.
+    """
+    _kind, directory = _store(ctx)
+    secrets: dict[str, str] = {}
+    pending = 0
+    for name in files:
+        path = Path(name).expanduser()
+        result = migrate_file(path, write=write)
+        verb = "rewrote" if write else "would rewrite"
+        click.echo(f"{path}: {verb} {result.changed} line(s)" if result.changed else f"{path}: nothing to change")
+        for line in result.left:
+            click.echo(f"  needs a person: {line}")
+        pending += len(result.left)
+        secrets.update(result.secrets)
+    if secrets:
+        click.echo(f"\nStore each secret once (file store: {directory}):")
+        for secret, variable in sorted(secrets.items()):
+            click.echo(f'  printf %s "${variable}" | mas-ctl secrets set {secret}')
+    if pending:
+        raise click.ClickException(f"{pending} line(s) need a person")

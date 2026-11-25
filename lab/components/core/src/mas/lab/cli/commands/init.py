@@ -99,6 +99,57 @@ def _existing_infra_defaults(infra: dict[str, Any]) -> dict[str, str]:
     }
 
 
+def _files_with_removed_forms(config_path: Path, cfg: dict[str, Any], infra_dir: Path, infra_name: str) -> list[Path]:
+    """The existing config and infra files that still use a removed ``env:`` or ``*_env`` form."""
+    from mas.ctl.secrets.migrate import has_old_forms
+
+    candidates = [config_path, infra_dir / f"{infra_name}.yaml"]
+    for key in ("infra_refs", "default_infra"):
+        value = cfg.get(key)
+        for ref in value if isinstance(value, list) else [value]:
+            if isinstance(ref, str) and ref:
+                candidates.append(Path(ref).expanduser())
+    seen: list[Path] = []
+    for path in candidates:
+        path = path.resolve() if path.is_file() else path
+        if path.is_file() and path not in seen and has_old_forms(path.read_text(encoding="utf-8")):
+            seen.append(path)
+    return seen
+
+
+def _offer_migration(stale: list[Path], *, yes: bool) -> bool:
+    """Say which files use removed forms and, on a yes, rewrite them (a .bak copy is kept). False if declined."""
+    from mas.ctl.secrets.migrate import migrate_file
+
+    click.echo(
+        "Your config uses the old env: / *_env form for an API key:\n"
+        + "".join(f"  {path}\n" for path in stale)
+        + "\nWhy it changed\n"
+        "  A key in the shell environment reaches child processes, logs and traces, and lab workers cannot\n"
+        "  read it.\n"
+        "\nHow keys are stored now\n"
+        "  In a private file store: one file per secret, readable only by you (directory 0700, files 0400),\n"
+        "  in <workspace>/.mas/secrets, or the `secrets.dir` of your config.yaml. A config names the secret\n"
+        "  and never holds the value: `api_key_env: OPENAI_API_KEY` becomes `api_key: {secret: openai}`.\n"
+        "\nWhat to do\n"
+        "  1. Rewrite the files above (a .bak copy is kept): the question below.\n"
+        "  2. Store the key once (the command is printed after the rewrite).\n",
+        err=True,
+    )
+    if not yes and not click.confirm("Rewrite these files now (a .bak copy is kept)?", default=True):
+        click.echo("Not rewritten. Later: mas-ctl secrets migrate --write FILE", err=True)
+        return False
+    secrets: dict[str, str] = {}
+    for path in stale:
+        result = migrate_file(path, write=True)
+        secrets.update(result.secrets)
+        for line in result.left:
+            click.echo(f"  {path}: needs a person: {line}", err=True)
+    for secret, variable in sorted(secrets.items()):
+        click.echo(f'\nThen store the key once:  printf %s "${variable}" | mas-ctl secrets set {secret}\n', err=True)
+    return True
+
+
 def _render_config_yaml(*, infra_name: str | None, local: bool = False) -> str:
     rendered = _load_template("config.yaml")
     if infra_name:
@@ -179,6 +230,14 @@ def init_cmd(yes: bool, local_config: bool, quiet: bool) -> None:
     existing_infra_name = _existing_infra_name(existing_cfg) or _DEFAULT_INFRA_NAME
     existing_infra = _read_existing_infra(existing_infra_name, infra_dir)
     existing_infra_vals = _existing_infra_defaults(existing_infra)
+
+    stale = _files_with_removed_forms(config_path, existing_cfg, infra_dir, existing_infra_name)
+    if stale:
+        if not _offer_migration(stale, yes=yes):
+            raise click.exceptions.Exit(1)
+        existing_cfg = _read_existing_config(config_path)
+        existing_infra = _read_existing_infra(existing_infra_name, infra_dir)
+        existing_infra_vals = _existing_infra_defaults(existing_infra)
 
     create_infra = True
     if not yes:

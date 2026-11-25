@@ -158,11 +158,15 @@ def removed_key_problem(key: Any, value: Any) -> str | None:
     """What is wrong with the mapping entry ``key: value`` when it uses a removed form (a ``*_env`` key,
     an ``env:`` string), else ``None``. The text names the key, never the value."""
     if str(key).endswith("_env"):
-        return f"{key} is removed; set a SecretRef instead ({{secret: {{name: NAME, key: value}}}})"
+        return (
+            f"{key} is removed; set a SecretRef instead ({{secret: {{name: NAME, key: value}}}}); "
+            "`mas-ctl secrets migrate FILE` rewrites a file"
+        )
     if isinstance(value, str) and value.startswith("env:"):
         return (
             "env: prefix is removed; write a SecretRef "
-            "({secret: NAME}) for a secret, or a plain overlay value for a host."
+            "({secret: NAME}) for a secret, or a plain overlay value for a host; "
+            "`mas-ctl secrets migrate FILE` rewrites a file."
         )
     return None
 

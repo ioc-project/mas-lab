@@ -126,6 +126,7 @@ mas-ctl [--secrets-dir DIR] secrets COMMAND …
 | `secrets set NAME [--key K]` | Write a secret. On a terminal the value is prompted for and hidden; otherwise it is read from stdin. It is never an argument. `--key` names one entry of a keyed secret (default `value`). |
 | `secrets list` | List file-store names with key and whether each one reads (`present`, `missing` or the refusal reason). The env store cannot be listed. |
 | `secrets import-env FILE` | Import the known provider variables of a dotenv file (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `HF_TOKEN`, ...) and `MAS_SECRET_*` names into the file store; other variables are skipped and listed by name. It writes one secret per known variable. It does not export to the process. |
+| `secrets migrate [--write] FILE...` | Rewrite the removed forms of YAML files: `api_key_env: NAME` (also `secret_env`, `password_env`, `embed_api_key_env`) becomes `api_key: {secret: <name>}`, and `env:NAME\|default` becomes the default. Without `--write` it only reports; with it, each file is rewritten and a `.bak` copy is kept. A variable that is not a secret, or an `env:NAME` with no default, is listed and the command exits non-zero. It never reads a variable: it prints the `mas-ctl secrets set` command for each secret. `mas-lab init` offers the same rewrite for the files its config points at. |
 
 ```bash
 echo KEY | mas-ctl secrets set openai
