@@ -58,15 +58,16 @@ class MasRuntimePyKernelBackend:
                         agent_patches=patches,
                         mas_config=mas_config,
                     )
-                    # Make MAS topology available inside per-agent spec for
-                    # runtime design-pattern plugins that are deterministic and
-                    # infer participant routing from workflow/agency metadata.
+                    # The runtime reads an agent's own next hops (`spec.communication.peers`), not the MAS
+                    # workflow, so a design pattern that sends (deterministic_parallel, ...) finds its peers.
                     if isinstance(mas_config, dict):
                         mas_spec = mas_config.get("spec") if isinstance(mas_config.get("spec"), dict) else mas_config
                         if isinstance(mas_spec, dict):
                             wf = mas_spec.get("workflow")
                             if isinstance(wf, dict):
-                                agent_manifest.setdefault("spec", {})["workflow"] = dict(wf)
+                                from mas.ctl.manifest.mas_agent_merge import compile_agent_spec
+
+                                compile_agent_spec(agent_manifest, wf, agent_id=agent_id)
                             agency = mas_spec.get("agency")
                             if isinstance(agency, dict) and isinstance(agency.get("agents"), list):
                                 agent_manifest.setdefault("spec", {})["agency"] = {
