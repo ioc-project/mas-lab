@@ -13,7 +13,7 @@ spec:
             \ and their corresponding average travel\n      times. Present your findings\
             \ clearly.
   models:
-    - model: azure/gpt-4o
+    - model: any
       temperature: 0.2
       max_tokens: 1500
   tools:

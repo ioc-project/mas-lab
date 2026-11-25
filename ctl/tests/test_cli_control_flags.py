@@ -39,6 +39,8 @@ def test_the_control_flag_exists_on_every_session_command(command: str) -> None:
     if command in {"chat", "tui", "serve", "run-mas"}:
         assert "--events / --no-events" in out
         assert "--events-format [" in out
+    if command in {"chat", "tui", "run-mas"}:
+        assert "--model" in out
 
 
 def test_no_control_dir_is_listed_on_chat_and_serve() -> None:

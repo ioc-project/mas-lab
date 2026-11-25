@@ -261,7 +261,7 @@ spec:
 |-----|---------|
 | `models.mappings` | Logical name → provider model id. The resolver follows chains (`default → mini → gpt-4o-mini`); a cycle is an error |
 | `models.allowed` | Model ids this leaf serves (`available` on `LLMLocal`). With one leaf the list is informational. With several leaves it is the claim list the router uses |
-| `models.defaults.llm` / `.embed` | Default chat and embedding model ids |
+| `models.defaults.llm` / `.embed` | Default chat and embedding model ids. `defaults.llm` fills Agent/MAS `model: any` after the experiment pin and before workspace `config.yaml` |
 | `models.generation` | Output-token, context-window, and pricing policy; see [LLM output-token policy](#llm-output-token-policy) |
 
 Other `spec` fields:

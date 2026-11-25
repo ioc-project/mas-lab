@@ -26,7 +26,7 @@ spec:
             \ response (e.g. 'CF-train', 'VL', 'LF').\n      The concierge-agent needs these\
             \ exact IDs to look up fares correctly.
   models:
-    - model: azure/gpt-4o
+    - model: any
       temperature: 0.3
       max_tokens: 2000
   design_pattern:

@@ -19,7 +19,7 @@ spec:
             \ as well as attraction entry\n      prices. When you have gathered sufficient\
             \ information, provide a clear overview\n      of the prices for each itinerary.
   models:
-    - model: azure/gpt-4o
+    - model: any
       temperature: 0.2
       max_tokens: 2000
   tools:

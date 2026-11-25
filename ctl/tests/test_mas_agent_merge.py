@@ -764,6 +764,42 @@ def test_create_agent_runtime_applies_mas_overlay_context(monkeypatch, tmp_path:
     assert instance.driver.kernel.config.agent_id == "moderator"
 
 
+def test_create_agent_runtime_honours_bind_model_override(monkeypatch, tmp_path: Path):
+    from mas.ctl.compose.backends.mas_runtime_py import MasRuntimePyKernelBackend
+    from mas.ctl.compose.models import AgentBindSlice, ComposedApplication, EffectiveBindManifest
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from mas.runtime.engine.leaf import leaf_engine
+    from secret_fakes import bound_secrets
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    agent_yaml = tmp_path / "agents" / "moderator.yaml"
+    agent_yaml.parent.mkdir(parents=True)
+    agent_yaml.write_text(
+        "apiVersion: mas/v1\nkind: Agent\nmetadata: {name: moderator}\n"
+        "spec:\n  description: x\n  models:\n    - model: any\n  context: {role: x}\n",
+        encoding="utf-8",
+    )
+    bind = EffectiveBindManifest(
+        mas_id="trip",
+        spec_revision="",
+        runtime_id="mas-runtime-py",
+        deployment_name="local-inproc",
+        agents=[AgentBindSlice(agent_id="moderator", manifest_path=str(agent_yaml))],
+        composed_application=ComposedApplication(mas_id="trip", config={"metadata": {"name": "trip"}}),
+        mas_base_dir=tmp_path,
+        model_override="qwen2.5:7b-instruct",
+    )
+    with bound_secrets({}):
+        instance = MasRuntimePyKernelBackend(resolved_infra=infra).create_agent_runtime(bind, "moderator")
+    assert leaf_engine(instance.driver.engine).model == "qwen2.5:7b-instruct"
+
+
 def _send_plugin_engine(*, wire_first: bool):
     """A live engine whose manifest tools grant the ``send`` plugin, wired in either order."""
     from mas.ctl.manifest.mas_agent_merge import wire_entry_engine_delegation

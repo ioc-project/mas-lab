@@ -59,6 +59,11 @@ from mas.ctl.executor.run_mas import execute_run_mas
 )
 @click.option("--single-turn", is_flag=True)
 @click.option("--no-validate", is_flag=True)
+@click.option(
+    "--model",
+    default=None,
+    help="Override spec.models for every agent in this run",
+)
 @observability_options
 @trace_options
 @click.pass_context
@@ -82,6 +87,7 @@ def run_mas_cmd(
     auto_hitl: bool,
     single_turn: bool,
     no_validate: bool,
+    model: str | None,
     events,
     events_file,
     events_stdout,
@@ -164,6 +170,7 @@ def run_mas_cmd(
             events_format=events_format,
             transport_observability=transport_observability,
             flavour_spec=flavour_spec,
+            model_override=model,
             **trace.as_session_kwargs(),
         )
     raise SystemExit(rc)

@@ -244,7 +244,7 @@ A MAS agent is not `.agent`:
 
 Walking the MAS YAML (`.mas.spec.agency.agents[id=planner].spec.tools`) still works when that row already has an inline `spec`. The usual tutorial row is `{id: planner, ref: agents/planner.yaml}` and has no `spec`, so that YAML walk fails with `path segment 'spec' does not exist`. Use `.mas.agent[planner].…` instead.
 
-You cannot select a model through `.mas.spec`. Use `--model`, or the experiment's `models:` slots.
+You cannot select a model through `.mas.spec`. Use `--model` (on `chat`, `tui`, and `run-mas`), the experiment's `models:` slots, or `--override '.infra.spec.models.defaults.llm=…'` when agents pin `model: any`.
 
 Resolved infra exposes its ordered layer chain as `spec.pipeline`, including each entry's `layer`, `for`, and typed `params`:
 

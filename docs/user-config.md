@@ -149,11 +149,12 @@ Middleware (the LLM cache, pacing, and similar steps) resolves via workspace
 `middleware`, `--middleware`, or user `default_pipeline` when the workspace
 lists none — the same rule as `default_infra`.
 
-Model override for a single `mas-ctl chat` / `mas-ctl tui` run (overrides manifest
-`spec.models`): `--model ID`, e.g. `gpt-4o-mini` on direct OpenAI, or a
-provider-prefixed id (e.g. `azure/gpt-4o-mini`) through an OpenAI-compatible
-proxy gateway. For MAS runs and benchmarks, declare models in the manifest or
-pin them in the experiment (`model:` / `models:`).
+Model override for a single `mas-ctl chat`, `mas-ctl tui`, or `mas-ctl run-mas`
+run (overrides every agent's `spec.models`): `--model ID`, e.g. `gpt-4o-mini`
+on direct OpenAI, `llama3.2` on `standard:ollama`, or a provider-prefixed id
+through an OpenAI-compatible proxy. For benchmarks, pin models in the
+experiment (`model:` / `models:`). An infra-only remap is
+`--override '.infra.spec.models.defaults.llm=qwen2.5:7b-instruct'`.
 
 ### Data paths
 

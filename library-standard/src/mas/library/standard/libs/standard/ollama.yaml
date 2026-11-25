@@ -29,6 +29,5 @@ spec:
       - codellama
       - phi3
       - qwen2.5
-
-  defaults:
-    llm: llama3.2
+    defaults:
+      llm: llama3.2

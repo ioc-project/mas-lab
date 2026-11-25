@@ -29,7 +29,7 @@ spec:
       clear final answer with the full itinerary.
   models:
     - id: main
-      model: gpt-4o-mini
+      model: any
       temperature: 0.3
       max_tokens: 2000
   design_pattern:

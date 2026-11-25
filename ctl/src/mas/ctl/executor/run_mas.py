@@ -156,6 +156,7 @@ def execute_run_mas(
     trace_summary: bool = False,
     trace_color: bool = False,
     flavour_spec: dict | None = None,
+    model_override: str | None = None,
 ) -> int:
     """Compose → materialize → SessionController on entry agent.
 
@@ -219,6 +220,7 @@ def execute_run_mas(
         )
     result.bind.hitl_mode = "auto" if (auto_hitl and not interactive) else "block"
     result.bind.obs_config = obs_config
+    result.bind.model_override = model_override
     from mas.ctl.session.params_sidecar import params_from_mas_config
 
     runtime_params = params_from_mas_config(result.mas_config)

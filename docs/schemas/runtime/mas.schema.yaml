@@ -94,8 +94,8 @@ properties:
           MAS default model(s). Agents that omit spec.models or set
           model: any inherit the primary entry (id: main). `any` means
           this MAS does not pin a provider id — inherit experiment.models.main
-          / experiment.model, then local config.yaml defaults.model. Same shape
-          as Agent spec.models[].
+          / experiment.model, then infra models.defaults.llm, then local
+          config.yaml defaults.model. Same shape as Agent spec.models[].
         default: []
         items:
           type: object

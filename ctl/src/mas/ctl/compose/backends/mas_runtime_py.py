@@ -90,6 +90,7 @@ class MasRuntimePyKernelBackend:
                 resolved_infra=self._infra or ResolvedInfra(),
                 parent_default_model=parent_model,
                 experiment_default_model=bind.experiment_default_model,
+                model_override=bind.model_override,
                 experiment_model_slots=bind.experiment_model_slots,
                 parent_spec=mas_config if isinstance(mas_config, dict) else None,
                 hitl_contract=hitl_contract_for_mode(bind.hitl_mode),

@@ -20,7 +20,7 @@ spec:
             \ a clear overview of relevant\n      transport schedules and attractions for\
             \ each city on the itinerary.
   models:
-    - model: azure/gpt-4o
+    - model: any
       temperature: 0.2
       max_tokens: 1500
   tools:

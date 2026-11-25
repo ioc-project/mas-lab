@@ -78,7 +78,7 @@ No fields are required; an empty `spec: {}` is valid.
 
 | Field | Type | Default | Description |
 | ------- | ------ | --------- | ------------- |
-| `models` | `ModelEntry[]` | `[]` | Default model slots inherited by agents; `model: any` resolves through experiment and workspace defaults. See [`ModelEntry`](#modelentry). |
+| `models` | `ModelEntry[]` | `[]` | Default model slots inherited by agents; `model: any` resolves through experiment, infra, and workspace defaults. See [`ModelEntry`](#modelentry). |
 | `agency` | object | — | Participants and delegation targets. See [`Agency`](#agency). |
 | `agents` | array | `[]` | Short-form agent references or inline Agent definitions. Same effect as `agency.agents` on a base manifest. In a MAS overlay, `spec.patch.agents` accepts per-agent patches or `$op` collection operations. |
 | `workflow` | object | — | Entry point and delegation graph. See [`Workflow`](#workflow). |
@@ -142,7 +142,8 @@ Model resolution runs in this order:
 
 1. An agent that omits `spec.models`, or sets `model: any`, inherits the MAS primary entry (`id: main`).
 2. A MAS `model: any` falls back to the experiment's `models.main` or `model`.
-3. Then workspace `config.yaml` `defaults.model` applies.
+3. Then infra `models.defaults.llm`, then `models.mappings.default`.
+4. Then workspace `config.yaml` `defaults.model`. The package `defaults.yaml` model is not used.
 
 ---
 

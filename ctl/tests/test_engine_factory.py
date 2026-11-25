@@ -395,6 +395,134 @@ def test_resolve_model_name_unclaimed_with_several_leaves_is_error(monkeypatch):
         resolve_model_name({"spec": {"models": [{"model": "gpt-4o"}]}}, infra)
 
 
+@pytest.mark.no_secrets
+def test_build_engine_ollama_needs_no_openai_key(monkeypatch, tmp_path):
+    """standard:ollama starts with an empty secret store and no OPENAI_API_KEY (#190)."""
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from secret_fakes import bound_secrets
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    with bound_secrets({}):
+        sel = build_engine(
+            AutoCtxAssembler(),
+            {"spec": {"models": [{"model": "llama3.2"}]}},
+            infra,
+            anchor=tmp_path,
+        )
+    assert sel.mode == "live"
+    assert sel.engine.model == "llama3.2"
+    assert "11434" in str(sel.engine.api_base)
+
+
+@pytest.mark.no_secrets
+def test_build_engine_ollama_any_uses_infra_default_llm(monkeypatch, tmp_path):
+    """model: any on standard:ollama is llama3.2 from infra defaults.llm (#191)."""
+    from mas.ctl.infra.resolve import resolve_infra_refs
+    from mas.ctl.workspace.config import UserConfig, WorkspaceConfig
+    from secret_fakes import bound_secrets
+
+    monkeypatch.setattr(WorkspaceConfig, "load", lambda *a, **k: WorkspaceConfig({}))
+    monkeypatch.setattr(UserConfig, "load", lambda *a, **k: UserConfig({}))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    with bound_secrets({}):
+        sel = build_engine(
+            AutoCtxAssembler(),
+            {"spec": {"models": [{"model": "any"}]}},
+            infra,
+            anchor=tmp_path,
+        )
+    assert sel.engine.model == "llama3.2"
+
+
+def test_resolve_model_name_any_uses_infra_default_llm(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    assert resolve_model_name({"spec": {"models": [{"model": "any"}]}}, infra) == "llama3.2"
+
+
+def test_trip_planner_moderator_on_ollama_is_llama32(monkeypatch, tmp_path):
+    import yaml
+    from mas.ctl.infra.resolve import resolve_infra_refs
+
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    path = Path(__file__).resolve().parents[2] / "library-samples/apps/trip-planner/agents/moderator.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    assert resolve_model_name(doc, infra) == "llama3.2"
+
+
+def test_resolve_model_name_infra_default_beats_workspace(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    assert (
+        resolve_model_name(
+            {"spec": {"models": [{"model": "any"}]}},
+            infra,
+            workspace_default="gpt-local",
+        )
+        == "llama3.2"
+    )
+
+
+def test_resolve_model_name_experiment_beats_infra_default(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(["standard:ollama"], anchor=tmp_path)
+    assert (
+        resolve_model_name(
+            {"spec": {"models": [{"model": "any"}]}},
+            infra,
+            experiment_default="mistral",
+            workspace_default="gpt-local",
+        )
+        == "mistral"
+    )
+
+
+def test_resolve_model_name_any_uses_overridden_infra_default_llm(monkeypatch, tmp_path):
+    from mas.ctl.infra.resolve import resolve_infra_refs
+
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = resolve_infra_refs(
+        ["standard:ollama"],
+        anchor=tmp_path,
+        overrides=('.infra.spec.models.defaults.llm="qwen2.5:7b-instruct"',),
+    )
+    assert resolve_model_name({"spec": {"models": [{"model": "any"}]}}, infra) == "qwen2.5:7b-instruct"
+
+
+def test_resolve_model_name_any_uses_mappings_default_when_no_infra_llm(monkeypatch):
+    monkeypatch.delenv("MAS_CTL_MODEL", raising=False)
+    monkeypatch.delenv("MAS_LLM_MODEL", raising=False)
+    infra = ResolvedInfra(
+        refs=[],
+        llm_proxy={
+            "api_base": "https://api.openai.com/v1",
+            "mappings": {"default": "gpt-4o-mini"},
+        },
+    )
+    assert resolve_model_name({"spec": {"models": [{"model": "any"}]}}, infra) == "gpt-4o-mini"
+
+
 def test_resolve_sampling_param_falls_back_to_deprecated_spec_llm(caplog):
     manifest = {"spec": {"llm": {"temperature": 0.2, "max_tokens": 4096}}}
     with caplog.at_level(logging.WARNING):
