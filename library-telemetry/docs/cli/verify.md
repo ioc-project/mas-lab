@@ -23,8 +23,9 @@ Run structural, JSON-schema, and SpanSpec checks on a spans file. Same `verify_o
 | Flag | Meaning |
 |------|------|
 | `SPANS_FILE` | Positional argument. |
-| `--fail`, `--no-fail` | Exit with code 1 if any check fails. |
-| `--json-output` | Print report as JSON. |
+| `--level` | — |
+| `--spanspec` | — |
+| `--fail` | — |
 
 ## PIPELINE
 

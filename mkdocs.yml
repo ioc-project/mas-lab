@@ -240,6 +240,14 @@ nav:
           - Package docs: references/runtime.md
       - Lab:
           - Experiment: manifests/experiment.md
+          - Scenario generators: manifests/scenario-generator.md
+          - Schedulers: manifests/scheduler.md
+          - Executors: manifests/executor.md
+          - Retriers: manifests/retrier.md
+          - Analyzers: manifests/analyzer.md
+          - Run runs in CI: manifests/ci-sharding.md
+          - Completeness: manifests/completeness.md
+          - Pipeline assembly: manifests/pipeline-assembly.md
           - Lab run throughput: references/lab-throughput.md
           - Environment: manifests/environment.md
           - Dataset: manifests/dataset.md

@@ -33,6 +33,7 @@ Execute an experiment YAML.
 | `--limit-scenarios` | Limit to first N scenarios. |
 | `--scenario-id` | Run only the scenario with this ID. |
 | `--dataset-item` | Run only the dataset item with this ID. |
+| `--run-plan` | Run only the runs a run-plan file names (see `mas-lab benchmark runs plan`); a CI shard. |
 | `--sample-scenarios` | Randomly sample N scenarios. |
 | `--single-run` | Run exactly 1 scenario for quick pipeline testing. |
 | `-o`, `--output-dir` | Output directory for benchmark results. |
@@ -42,7 +43,7 @@ Execute an experiment YAML.
 | `--flavour` | Runtime flavour name resolved to <experiment_dir>/flavours/<name>.yaml. Defaults to experiment's default_flavour, then 'local'. |
 | `--control` | Attach a kind: Control file (observability set and governance set) to the session, the way a Flavour spec.control row does. REF is a path, pkg://… or a library ref. SELECTOR is $all (default), $entry, $not-entry, $delegates, agent ids, or the same agent path as --override (.mas.agent[id] / .mas.agent[*]). |
 | `--infra` | Infra bundle name resolved to <experiment_dir>/infra/<name>.yaml. Selects which infrastructure services (OTel collector, storage, …) are provisioned by service_start / service_stop pipeline steps. Defaults to experiment's default_infra (opt-in, no default). |
-| `--strategy` | Execution ordering (overrides YAML schedule.ordering). coverage (default): breadth-first — every condition gets one run before any gets a second run, maximising coverage after partial execution. depth: depth-first — complete all runs for each condition before moving on. |
+| `--scheduler` | Registered scheduler id; overrides YAML schedule.plugin. |
 | `--set` | Override a pipeline step config key from the CLI. Format: STEP_TYPE.key=value (e.g. --set export_otel.destination=mock). Value is auto-coerced: 'true'/'false' → bool, integers → int. Can be repeated for multiple overrides. |
 | `--pipeline` | Attach a pipeline YAML after experiment hooks (same order as repeated flags). Format: run:post:kg:pipelines/native-to-kg.yaml or run:kg:pipelines/native-to-kg.yaml (phase defaults to post). Levels: run, item, scenario, experiment (deprecated aliases: test = item, application = experiment). |
 | `-x`, `--experiment-overlay` | Apply an experiment overlay before running. Overlays deep-merge into experiment.yaml (RFC 7386 merge patch): mappings merge, but lists (run.post, experiment.post, …) are REPLACED, so an overlay that sets a hook list must carry the full desired list. Multiple -x flags are applied in order. Paths are resolved relative to experiment.yaml's directory. |

@@ -84,9 +84,11 @@ experiment:
   # ------------------------------------------------------------------
   schedule:
     parallel_scenarios: 4
-    timeout: 300
     pause_between_runs: 1.0
-    ordering: coverage
+    plugin: coverage
+  executor:
+    plugin: native
+    timeout: 300
   bench_emulation:
     infra:
       llm: live

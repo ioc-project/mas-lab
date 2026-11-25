@@ -166,7 +166,7 @@ dataset:
 run:
   n_runs: 3
 schedule:
-  ordering: coverage            # breadth-first across all conditions
+  plugin: coverage              # breadth-first across all conditions
 ```
 
 Older names call the MAS binding "application" and an item a "test". `application:` is still current.

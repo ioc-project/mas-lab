@@ -192,7 +192,7 @@ def test_schedule_overlay_merge(tmp_path: Path) -> None:
     base = {
         "experiment": {
             "name": "my-exp",
-            "schedule": {"parallel_scenarios": 2, "ordering": "coverage"},
+            "schedule": {"parallel_scenarios": 2, "plugin": "coverage"},
             "bench_emulation": {"runtime": {"cache": "disabled"}},
             "run": {"n_runs": 3},
         }
@@ -200,4 +200,4 @@ def test_schedule_overlay_merge(tmp_path: Path) -> None:
     result = apply_experiment_overlays(base, [overlay])
     assert result["experiment"]["bench_emulation"]["runtime"]["cache"] == "content-addressed"
     assert result["experiment"]["schedule"]["parallel_scenarios"] == 8
-    assert result["experiment"]["schedule"]["ordering"] == "coverage"
+    assert result["experiment"]["schedule"]["plugin"] == "coverage"

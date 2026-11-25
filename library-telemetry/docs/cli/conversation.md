@@ -21,7 +21,11 @@ shows LLM replies only. `--width` clips each line (`0` = no clip).
 
 ## OPTIONS
 
-See `mas-lab telemetry conversation --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_FILE` | Positional argument. |
+| `--no-tools` | Show LLM replies only. |
+| `--width` | Clip each line (0 = no clip). |
 
 ## SEE ALSO
 

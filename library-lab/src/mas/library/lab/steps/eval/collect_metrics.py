@@ -182,6 +182,11 @@ class CollectMetricsStep(PipelineStep):
             writer.writeheader()
 
             for run_dir in run_dirs:
+                from mas.lab.benchmark.execution.completeness import run_dir_is_complete
+
+                result_path = run_dir / "result.json"
+                if result_path.is_file() and not run_dir_is_complete(run_dir):
+                    continue
                 identity = _parse_identity(run_dir, output_dir, id_spec)
                 item_id = identity.get("item_id", "")
 

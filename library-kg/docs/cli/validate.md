@@ -20,7 +20,16 @@ Validate `kg.json` (structural + optional SHACL).
 
 ## OPTIONS
 
-See `mas-lab kg validate --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `KG_PATH` | Positional argument. |
+| `--ontology-path` | — |
+| `--strict` | — |
+| `--warning-verbosity` | Control warning detail level in validate output. |
+| `--enable-extension-layer` | Enable optional extension-layer validation checks. |
+| `--list-checks` | List available checks and show which ones run by default. |
+| `--check` | Run only this check. Repeat to run a subset. |
+| `--skip-check` | Disable one default check. Repeat to skip multiple checks. |
 
 ## PIPELINE
 

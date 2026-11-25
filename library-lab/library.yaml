@@ -33,6 +33,11 @@ types:
   - codec
   - design_pattern
   - artifact
+  - scenario_generator
+  - scheduler
+  - executor
+  - retrier
+  - analyzer
 
 plugins:
   - type: step
@@ -240,6 +245,41 @@ plugins:
     attributes:
       worker_safe: true
   - type: step
+    name: schedule_experiment
+    module: mas.library.lab.steps.control.schedule_experiment
+    class: ScheduleExperimentStep
+    attributes:
+      worker_safe: true
+      stage_mode: batch
+  - type: step
+    name: await_batch
+    module: mas.library.lab.steps.control.await_batch
+    class: AwaitBatchStep
+    attributes:
+      worker_safe: true
+      stage_mode: batch
+  - type: step
+    name: next_runs
+    module: mas.library.lab.steps.control.next_runs
+    class: NextRunsStep
+    attributes:
+      worker_safe: true
+      stage_mode: batch
+  - type: step
+    name: propose_prompts
+    module: mas.library.lab.steps.control.propose_prompts
+    class: ProposePromptsStep
+    attributes:
+      worker_safe: true
+      stage_mode: batch
+  - type: step
+    name: inject_experiment
+    module: mas.library.lab.steps.control.inject_experiment
+    class: InjectExperimentStep
+    attributes:
+      worker_safe: true
+      stage_mode: batch
+  - type: step
     name: processor
     module: mas.library.lab.steps.data.processor
     class: ProcessorStep
@@ -413,6 +453,51 @@ plugins:
     urn: mas.dp.deterministic_verifier
     module: mas.library.lab.plugins.design_patterns.verifier
     class: DeterministicVerifierPlugin
+
+  - type: scenario_generator
+    name: cartesian
+    module: mas.library.lab.plugins.scenario_generators.cartesian
+    class: CartesianGenerator
+  - type: scenario_generator
+    name: coupled
+    module: mas.library.lab.plugins.scenario_generators.coupled
+    class: CoupledGenerator
+  - type: scenario_generator
+    name: one_factor
+    module: mas.library.lab.plugins.scenario_generators.one_factor
+    class: OneFactorGenerator
+  - type: scenario_generator
+    name: factorial
+    module: mas.library.lab.plugins.scenario_generators.factorial
+    class: FactorialGenerator
+
+  - type: scheduler
+    name: coverage
+    module: mas.library.lab.plugins.schedulers.coverage
+    class: CoverageScheduler
+  - type: scheduler
+    name: depth
+    module: mas.library.lab.plugins.schedulers.depth
+    class: DepthScheduler
+  - type: scheduler
+    name: as_generated
+    module: mas.library.lab.plugins.schedulers.as_generated
+    class: AsGeneratedScheduler
+
+  - type: executor
+    name: native
+    module: mas.library.lab.plugins.executors.native
+    class: NativeExecutor
+
+  - type: retrier
+    name: native
+    module: mas.library.lab.plugins.retriers.native
+    class: NativeRetrier
+
+  - type: analyzer
+    name: native
+    module: mas.library.lab.plugins.analyzers.native
+    class: NativeAnalyzer
 
   - type: artifact
     name: dataframe

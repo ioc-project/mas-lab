@@ -251,7 +251,7 @@ experiment:
   schedule:
     parallel_scenarios: 4
     timeout: 300
-    ordering: coverage
+    plugin: coverage
 ```
 
 ### Model slots (`models` / `model`)
@@ -474,19 +474,22 @@ The former `experiment.execution` block is split into three concerns:
 
 The schema `$id` stays `experiment/v1`.
 An `execution:` mapping still loads for one release, with an `experiment.execution` deprecation warning.
-The loader maps its keys onto `schedule`, `design`, `bench_emulation` (from `execution.emulation` and `execution.faults`), and `replay`.
+The loader maps its keys onto `schedule`, `design`, `executor`, `bench_emulation` (from `execution.emulation` and `execution.faults`), and `replay`.
 It uses `execution.n_runs` only when `run.n_runs` is absent.
 
 Rule of thumb:
 
-- If changing a field changes the label or meaning of a result cell, it is **design**.
-- If it only changes how fast or how safely the same cells are collected, it is **schedule**.
+- If changing a field changes the label or meaning of a result run, it is **design**.
+- If it only changes how fast or how safely the same runs are collected, it is **schedule** or **executor**.
 - If it changes live-versus-recorded behaviour but stays fixed across the study, it is **bench emulation**.
 
 | Concern | Question | In analysis design? | YAML home |
 | --- | --- | --- | --- |
 | **Design** | What conditions are we comparing? | **Yes** | `scenarios[]`, `design`, `dataset`, `evaluation`, `run.n_runs`, `checkpoints` |
-| **Schedule** | How do we walk the matrix? | **No** | `schedule` (`ordering`, `parallel_scenarios`, `timeout`, `max_attempts`, `runner`, ...) |
+| **Schedule** | In what order, and how many at once? | **No** | `schedule` (`plugin`, `parallel_scenarios`, `pause_between_runs`) |
+| **Executor** | How is a run run once? | **No** | `executor` (`plugin`, `timeout`, `worker_processes`, `runner`) |
+| **Retry** | Does a failed run run again? | **No** | `retry` (`plugin`, `params.max_attempts`, `params.backoff_s`) |
+| **Analyzer** | Who reads the results tree? | **No** | `analyzer` (`plugin`, `params`) |
 | **Bench emulation** | Mock, replay, or trace-cache posture? | Only if it is an intentional factor | `bench_emulation` |
 | **Deployment wiring** | Which LLM bundle or runtime profile? | **No** (unless a declared factor) | Workspace `infra_refs` / `runtime_refs`, `--infra-ref` / `--runtime-ref` |
 
@@ -499,38 +502,43 @@ For offline LLM turns, use [llm_cache replay](llm-cache.md) through workspace `i
 ```yaml
 experiment:
   design:
-    mode: cartesian          # cartesian | coupled | one_factor
+    plugin: cartesian        # registered scenario_generator id
     max_executions: 200      # fail if the planned grid is larger
+    params: {}               # plugin attributes
 ```
 
-The three modes pick cells from the grid of scenarios x dataset items.
-`run.n_runs` always replicates each cell.
-They are not a general factorial language.
-Missing or unknown keys fail. They do not fall back to cartesian.
+`plugin` names a registered `scenario_generator`. Omit it and `cartesian` is used.
+`run.n_runs` always replicates each run.
+Missing or unknown plugin ids fail at config load with the registered list.
+Params are validated by the plugin before any run. They are not a second cartesian language in the JSON schema.
 
-| Mode | Cells | Required keys |
+| Plugin | Runs | Params |
 | --- | --- | --- |
 | `cartesian` | every scenario x every item | none |
 | `coupled` | listed `(scenario, items)` pairs | `couplings: [{scenario: <id>, items: [<item id>, ...]}]` |
 | `one_factor` | sweep one of those two axes; hold the other | `vary` (`axis` + `values`); optional `pin_scenarios` / `pin_items` (omit to keep every scenario or item) |
+| `factorial` | product of named factors, selecting among declared scenario ids | `factors: {name: [values, ...]}`; optional `exclude` (scenario ids or factor maps) |
 
-`max_executions` is optional. It fails the plan when scenarios x items x `n_runs` exceeds it.
-`couplings` is allowed only with `coupled`.
-`vary`, `pin_scenarios`, and `pin_items` are allowed only with `one_factor`.
+`max_executions` is a core key on `design`. It fails the plan when the generator's grid exceeds it.
+Builtin generators take the old `couplings` / `vary` / `pin_*` keys as `params`.
+`design.mode` and those keys at the top of `design` still load for one release, with an `experiment.design.mode` deprecation warning, and are rewritten to `plugin` + `params`. Giving both spellings is an error.
+
+Write a generator: [scenario-generator.md](scenario-generator.md).
 
 ```yaml
 experiment:
   design:
-    mode: one_factor
-    pin_scenarios: [baseline]
-    vary:
-      axis: item             # scenario | item
-      values: [item-1, item-2]
+    plugin: one_factor
+    params:
+      pin_scenarios: [baseline]
+      vary:
+        axis: item             # scenario | item
+        values: [item-1, item-2]
 ```
 
 Other study axes stay outside this enum:
 
-- **Overlay or infra as a factor**: one `scenarios[]` row per column (`overlays.logic` / `control` / `infra`). Hold infra constant with workspace `infra_refs` and `bench_emulation`, not a per-cell cache flip.
+- **Overlay or infra as a factor**: one `scenarios[]` row per column (`overlays.logic` / `control` / `infra`). Hold infra constant with workspace `infra_refs` and `bench_emulation`, not a per-run cache flip.
 - **Model as a factor**: two experiments with different `models.main`, or two scenarios whose overlays patch the model. `experiment.models` pins the model for the whole study.
 - **Starting state**: `experiment.checkpoints` is crossed after the plan. It is always cartesian on that axis today.
 - **Smoke tests, not a pin**: `dataset.limit` and `design.max_executions`.
@@ -542,38 +550,91 @@ Replication is design, not a retry knob. Set it with `run.n_runs` only.
 ```yaml
 experiment:
   schedule:
+    plugin: coverage         # registered scheduler id; omit for the generator default
+    params: {}
     parallel_scenarios: 4
-    timeout: 300
     pause_between_runs: 1.0
-    ordering: coverage       # coverage | depth  (legacy alias: strategy)
-    max_attempts: 3          # re-issue a failed slot (independent of n_runs)
-    retry_backoff_s: 2.0     # delay before the first re-issue; doubles each time
+```
+
+`plugin` names a registered `scheduler`. Omit it and the generator's `default_scheduler` is used (`coverage` for cartesian, `as_generated` for coupled and one_factor).
+
+| Plugin | Order |
+| --- | --- |
+| `coverage` | one run of every run before any second run (run-major) |
+| `depth` | finish all `n_runs` of a run first (scenario-major) |
+| `as_generated` | keep the generator's run order |
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `plugin` | generator default | Registered scheduler id. |
+| `params` | `{}` | Scheduler attributes, validated at config load. |
+| `parallel_scenarios` | `4` | Max concurrent MAS runs. |
+| `pause_between_runs` | `1.0` | Sleep between runs, seconds. |
+
+`schedule.ordering` and `schedule.strategy` still load for one release, with an `experiment.schedule.ordering` deprecation warning, and are rewritten to `schedule.plugin`. Giving both spellings is an error.
+
+`--scheduler` on `mas-lab benchmark run` overrides `schedule.plugin`.
+
+Write a scheduler: [scheduler.md](scheduler.md).
+
+### `executor`
+
+```yaml
+experiment:
+  executor:
+    plugin: native           # registered executor id; omit for native
+    params: {}
+    timeout: 300
     runner: native           # optional override of inferred adapter
     reset_state: false
     worker_processes: 1      # 1 = threads in this process
 ```
 
+`plugin` names a registered `executor`. The batch host still owns cache hits, resume, and `result.json`. The plugin runs one MAS invoke once; retry is the `retry` block. `runner` is the application runner id, not the executor plugin id.
+
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `parallel_scenarios` | `4` | Max concurrent MAS runs. |
-| `timeout` | `300` | Per-run timeout, seconds. |
-| `pause_between_runs` | `1.0` | Sleep between runs, seconds. |
-| `ordering` | `coverage` | `coverage`: one run of every cell before any second run (breadth-first). `depth`: finish all `n_runs` of a cell first. `strategy` is a deprecated alias. |
-| `max_attempts` | `3` | Tries per failed scenario x item x run, including the first. `1` disables re-issue. |
-| `retry_backoff_s` | `2.0` | Base delay before the first re-issue; doubles on each later one. |
+| `plugin` | `native` | Registered executor id. |
+| `params` | `{}` | Executor attributes, validated at config load. `native` accepts none. |
+| `timeout` | `300` | Per-run timeout, seconds (worker pool). |
 | `runner` | `native` | Lab runner (adapter) id from the `mas.lab.runners` entry point group. When omitted, inferred from the application's `spec.framework.default_adapter` (MAS) or `spec.framework_adapter` (agent). |
 | `reset_state` | `false` | Reset emulation and runtime state between runs. |
 | `worker_processes` | `1` | Process workers for MAS runs. `1` keeps today's threads. The batch refuses a count above the machine's cores when it starts (the file itself parses anywhere). With more than 1, every pipeline step must declare `worker_safe` (shipped library steps declare it; a test reads their sources for process patches). Workers start with `spawn` and rebuild their own run context from a plain job. |
 | `worker_max_runs` | (off) | Recycle each worker after this many runs. Omit to keep the worker for the batch. |
 
-`--strategy` on `mas-lab benchmark run` overrides `schedule.ordering`.
+Timeout, workers, and runner still load from `schedule` for one release, with an `experiment.schedule.executor` deprecation warning, and are rewritten onto `executor`. Giving the same host key on both blocks is an error.
+
+### `retry`
+
+```yaml
+experiment:
+  retry:
+    plugin: native           # registered retrier id; omit for native
+    params:
+      max_attempts: 3        # total tries across rounds, the first included; 1 disables retry
+      backoff_s: 2.0         # delay before the first re-issue; doubles each time
+```
+
+A retrier decides whether a failed run runs again. `max_attempts` / `retry_backoff_s` on the old `execution` / `schedule` blocks load into `retry.params` with a deprecation warning. Write a retrier: [retrier.md](retrier.md). Run rounds in CI: [ci-sharding.md](ci-sharding.md).
+
+### `analyzer`
+
+```yaml
+experiment:
+  analyzer:
+    plugin: native           # registered analyzer id; omit for native (a completeness summary)
+```
+
+An analyzer reads a results tree and never runs a run. Write one: [analyzer.md](analyzer.md).
+
+Write an executor: [executor.md](executor.md).
 
 How wall time scales with `parallel_scenarios` and `worker_processes`: [Lab run throughput](../references/lab-throughput.md).
 
 ### `bench_emulation`
 
 `bench_emulation` sets the study-wide trace-cache and pipeline-executor posture.
-Hold it constant across cells unless it is a declared factor.
+Hold it constant across runs unless it is a declared factor.
 
 ```yaml
 experiment:
@@ -657,8 +718,8 @@ The loader rejects the removed keys `pipeline_bind`, `pipeline`, `plots`, `flavo
 - **A bare list under `overlays`.** `overlays` must be a mapping with `logic`, `control`, and `infra`. Use `[]` for an empty stack.
 - **A `pipelines:` key.** It does not exist. Attach steps with `pre:` / `post:` on a level.
 - **Both `model` and `models.main`.** `models.main` wins. Set one.
-- **`couplings` with `cartesian`.** `couplings` is valid only with `mode: coupled`. `vary`, `pin_scenarios`, and `pin_items` are valid only with `one_factor`.
-- **Treating `n_runs` as a retry count.** It replicates each cell for variance. Use `schedule.max_attempts` to retry a failed run.
+- **`couplings` with `cartesian`.** `couplings` is a `coupled` param. `vary`, `pin_scenarios`, and `pin_items` are `one_factor` params.
+- **Treating `n_runs` as a retry count.** It replicates each run for variance. Use `retry.params.max_attempts` to retry a failed run.
 - **Expecting `output_schema` to run by itself.** Add a `validate_outputs` step.
 - **Confusing the two caches.** `bench_emulation.runtime.cache` is the lab trace cache. It is not the `RuntimeEngine` LLM response cache.
 - **A reduced copy of a dataset for smoke runs.** Use `dataset.limit`.
@@ -672,6 +733,7 @@ The loader rejects the removed keys `pipeline_bind`, `pipeline`, `plots`, `flavo
 ## See also
 
 - [lab.md](lab.md)
+- [scenario-generator.md](scenario-generator.md), [scheduler.md](scheduler.md), [executor.md](executor.md)
 - [dataset.md](dataset.md), [environment.md](environment.md), [overlay.md](overlay.md), [flavour.md](flavour.md)
 - [pipeline.md](pipeline.md)
 - [Tutorial 15](../tutorials/15-world-events-and-fixtures/README.md): experiment fixtures, per-item triggers

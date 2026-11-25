@@ -157,13 +157,15 @@ def write_schedule_overlay(
     schedule: dict[str, Any] = {
         "parallel_scenarios": parallel,
         "pause_between_runs": 0,
-        "max_attempts": 1,
-        "retry_backoff_s": 0,
-        "worker_processes": worker_processes,
     }
+    executor: dict[str, Any] = {"worker_processes": worker_processes}
     if timeout is not None:
-        schedule["timeout"] = timeout
-    spec: dict[str, Any] = {"schedule": schedule}
+        executor["timeout"] = timeout
+    spec: dict[str, Any] = {
+        "schedule": schedule,
+        "executor": executor,
+        "retry": {"params": {"max_attempts": 1, "backoff_s": 0}},
+    }
     if limit is not None:
         spec["dataset"] = {"limit": limit}
     if extra:

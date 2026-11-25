@@ -340,6 +340,20 @@ without new model calls.
 See the [paper page](../paper/index.md), the [CLI overrides](../cli/overrides.md) and
 [User configuration](../user-config.md) for output locations.
 
+## Companion labs (offline cuts)
+
+`labs/factorial-halving.lab`
+cuts a 2×2 factorial space after one scored round. `next_runs` with
+`successive_halving` keeps `small-short` and `small-long`. It runs from a
+fixture, with no model calls.
+
+A prompt sweep that proposes a new user prompt and injects it as the next
+experiment design uses `propose_prompts` and `inject_experiment` (see
+[pipeline assembly](../manifests/pipeline-assembly.md)). The sample lab
+for that loop ships outside this repository.
+
+See [completeness](../manifests/completeness.md).
+
 ## Labs from any folder
 
 A lab does not have to live in this repository, for example one downloaded from

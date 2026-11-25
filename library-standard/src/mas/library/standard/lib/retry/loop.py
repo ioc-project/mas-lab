@@ -17,6 +17,24 @@ T = TypeVar("T")
 Classify = Callable[[BaseException], ClassifiedFailure]
 
 
+def _stamp_retry_metadata(result: T, *, attempts: int, last: ClassifiedFailure | None) -> T:
+    """Copy extra retries onto an EngineIoReturn so events can record them."""
+    extra = max(0, attempts - 1)
+    if extra <= 0:
+        return result
+    from mas.runtime.schema.ingress import EngineIoReturn
+
+    if not isinstance(result, EngineIoReturn):
+        return result
+    update: dict[str, Any] = {"retry_attempts": max(int(result.retry_attempts or 0), extra)}
+    if last is not None:
+        if not result.failure_class:
+            update["failure_class"] = last.failure_class.value
+        if not result.failure_code:
+            update["failure_code"] = last.code
+    return result.model_copy(update=update)
+
+
 def _sleep_for(policy: RetryPolicy, attempt: int, classified: ClassifiedFailure) -> tuple[float, float | None]:
     """Seconds to wait before the next try, and the server hint when it was used."""
     delay = policy.delay_for(attempt)
@@ -94,7 +112,7 @@ def call_with_retry(
             if breaker is not None and target:
                 breaker.record_success(target)
             log_recovered(target=target, attempts=attempt + 1)
-            return result
+            return _stamp_retry_metadata(result, attempts=attempt + 1, last=last)
         except CircuitOpenError:
             raise
         except Exception as exc:
@@ -151,7 +169,7 @@ async def acall_with_retry(
             if breaker is not None and target:
                 breaker.record_success(target)
             log_recovered(target=target, attempts=attempt + 1)
-            return result
+            return _stamp_retry_metadata(result, attempts=attempt + 1, last=last)
         except CircuitOpenError:
             raise
         except Exception as exc:

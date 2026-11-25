@@ -6,13 +6,13 @@
 
 How `mas-lab benchmark run` spends wall time as `schedule.parallel_scenarios` grows.
 
-A **run** is one execution of the agent or MAS for a given scenario, item, and repeat index. `schedule.parallel_scenarios` is how many runs may be in flight at once. Default `schedule.worker_processes` is 1: each in-flight run is a thread in the batch process. `N>1` runs each of those in a spawn child.
+A **run** is one execution of the agent or MAS for a given scenario, item, and repeat index. `schedule.parallel_scenarios` is how many runs may be in flight at once. Default `executor.worker_processes` is 1: each in-flight run is a thread in the batch process. `N>1` runs each of those in a spawn child.
 
 ## Persistent append handles
 
 `JsonlFileEmitter` and the lab stream log (`LogChannel`) each keep one handle per file. A line is on disk before `emit` / `publish_sync` returns (the emitter writes each whole line unbuffered in append mode, so two emitters or threads on one path never interleave a line; the stream log handle is line-buffered and flushed), so a reader tailing the file during a run still sees it. `JsonlFileEmitter` truncates the file once, when it is created, as it always did. The emitter handle closes from the run's observability shutdown; an `emit` after `close` raises. A stream handle closes in `seal_sync`, and a stream that never seals closes at batch end; a `publish` after that `close` raises.
 
-Before this, each native event opened `traces/events.jsonl` for append, wrote one line, and closed it, and the stream log did the same. Threads overlap that wait, so scaling flattens while the process is waiting on `open`. After the handles stay open, process workers (`schedule.worker_processes`) help CPU-heavy runs more than wait-heavy ones.
+Before this, each native event opened `traces/events.jsonl` for append, wrote one line, and closed it, and the stream log did the same. Threads overlap that wait, so scaling flattens while the process is waiting on `open`. After the handles stay open, process workers (`executor.worker_processes`) help CPU-heavy runs more than wait-heavy ones.
 
 ## Per-batch caches
 
@@ -28,16 +28,16 @@ Each `MCPClientWrapper` starts its own `mcp-loop` thread.
 
 ## Process workers
 
-`schedule.worker_processes` (default `1`) is how many child processes run the MAS. `1` is today's threads in the batch process. `N>1` starts `N` workers with the `spawn` start method (not `fork`: the daemon already has threads and sockets). Each worker keeps one `BatchCache` for the batch and rebuilds each run context from a plain job. A job is `(scenario, item, run)` plus paths and YAML trees; nothing pickles a `RunContext` or a plugin, and a job value that is not plain JSON (a non-string key, a set, bytes, a datetime, a plugin object) is refused with an error naming where it sits. The parent publishes `run.started` before the job and seals the stream after it; every event a worker emitted for a job reaches the parent before that job's result is returned. If those events are not delivered in time, the job is one error row (`worker events not delivered`). A second job with the same `job_id` while the first is in flight is one error row (`duplicate job_id`).
+`executor.worker_processes` (default `1`) is how many child processes run the MAS. `1` is today's threads in the batch process. `N>1` starts `N` workers with the `spawn` start method (not `fork`: the daemon already has threads and sockets). Each worker keeps one `BatchCache` for the batch and rebuilds each run context from a plain job. A job is `(scenario, item, run)` plus paths and YAML trees; nothing pickles a `RunContext` or a plugin, and a job value that is not plain JSON (a non-string key, a set, bytes, a datetime, a plugin object) is refused with an error naming where it sits. The parent publishes `run.started` before the job and seals the stream after it; every event a worker emitted for a job reaches the parent before that job's result is returned. If those events are not delivered in time, the job is one error row (`worker events not delivered`). A second job with the same `job_id` while the first is in flight is one error row (`duplicate job_id`).
 
 Services stay in the parent on the ports the experiment already named. Workers only connect. The parent writes `results.csv` in plan order, not completion order. A worker that dies marks its in-flight run as an error (retryable per `max_attempts`) and is replaced; the rest of the batch continues.
 
-How the worker count is checked: the schedule parse only checks that `worker_processes` is an integer of at least 1, so an experiment loads on any machine. A batch that starts with more workers than the machine has cores is refused with a message naming both numbers.
+How the worker count is checked: the executor parse only checks that `worker_processes` is an integer of at least 1, so an experiment loads on any machine. A batch that starts with more workers than the machine has cores is refused with a message naming both numbers.
 
 Lifetime of a worker:
 
-- `schedule.worker_max_runs` (omit to keep a worker for the batch): the parent retires a worker when it has taken that many jobs, before it goes back to the free queue, so the next job never reaches a worker that is about to leave.
-- `schedule.timeout` starts when a worker is leased. Waiting for a free worker does not count against it.
+- `executor.worker_max_runs` (omit to keep a worker for the batch): the parent retires a worker when it has taken that many jobs, before it goes back to the free queue, so the next job never reaches a worker that is about to leave.
+- `executor.timeout` starts when a worker is leased. Waiting for a free worker does not count against it.
 - A worker polls its parent (once a second while idle) and exits when the parent is gone, so a parent killed without cleanup does not leave workers behind.
 - The pool is created right before the first run is dispatched and is closed on every path out of the batch.
 
@@ -58,7 +58,7 @@ Importing the runtime, the lab CLI, and the default A2A plugin does not import `
 
 ## Schedule knobs that affect wall time only
 
-`schedule.parallel_scenarios`, `schedule.worker_processes`, `pause_between_runs`, `timeout`, `max_attempts` and `retry_backoff_s` never change what a run means. See [Experiment: schedule](../manifests/experiment.md#schedule).
+`schedule.parallel_scenarios`, `executor.worker_processes`, `pause_between_runs`, `timeout`, `retry.params.max_attempts` and `retry.params.backoff_s` never change what a run means. See [Experiment: schedule](../manifests/experiment.md#schedule) and [executor](../manifests/experiment.md#executor).
 
 ## See also
 

@@ -20,6 +20,7 @@ from .pipeline import pipeline_group
 from .publish_hf import publish_hf_cmd
 from .rename import rename_cmd
 from .run import run_cmd
+from .runs import runs_group
 from .show import show_cmd
 from .step import step_group
 from .step_info import step_info_cmd
@@ -48,6 +49,7 @@ group.add_command(clean_cmd)
 group.add_command(step_info_cmd)
 group.add_command(step_group)
 group.add_command(pipeline_group)
+group.add_command(runs_group)
 group.add_command(daemon_group)
 
 __all__ = [
@@ -69,5 +71,6 @@ __all__ = [
     "step_info_cmd",
     "step_group",
     "pipeline_group",
+    "runs_group",
     "daemon_group",
 ]

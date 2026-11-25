@@ -87,6 +87,11 @@ class PipelineStepSpec:
     ``realtime:`` picks the mode. ``true`` folds as records arrive.
     ``false`` waits until every input has arrived. Omitted: class default."""
 
+    mode: Optional[str] = None
+    """Stage mode: ``batch`` (complete runs only), ``live`` (events as they
+    come), or ``mixed`` (live fold, completeness gate before batch persist).
+    Omitted: inferred from ``realtime:`` / whether the class folds."""
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "PipelineStepSpec":
         # Parse in/out — accept scalar or list
@@ -104,6 +109,12 @@ class PipelineStepSpec:
         if raw_realtime is not None and not isinstance(raw_realtime, bool):
             raise ValueError(f"step {step_label}: realtime must be true or false, got {raw_realtime!r}")
         realtime = raw_realtime
+        raw_mode = data.get("mode")
+        mode = None
+        if raw_mode is not None:
+            from mas.lab.benchmark.execution.completeness import normalize_stage_mode
+
+            mode = normalize_stage_mode(str(raw_mode), realtime=realtime, folds=False)
         return cls(
             type=data["type"],
             name=data.get("name"),
@@ -121,6 +132,7 @@ class PipelineStepSpec:
             refresh=str(data.get("refresh") or ""),
             batch=dict(data.get("batch") or {}),
             realtime=realtime,
+            mode=mode,
         )
 
 

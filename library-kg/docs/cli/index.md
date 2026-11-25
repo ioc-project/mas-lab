@@ -33,6 +33,10 @@ the same step functions as the pipeline YAML under `library-kg/pipelines/`.
 
 Site index: [docs/cli/mas-lab.md](../../../docs/cli/mas-lab.md).
 
+## OPTIONS
+
+This command takes no extra flags. See `--help` for inherited group options.
+
 ## SEE ALSO
 
 [normalization.md](../normalization.md), [neo4j.md](../neo4j.md),

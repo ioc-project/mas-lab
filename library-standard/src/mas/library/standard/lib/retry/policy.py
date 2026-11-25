@@ -108,6 +108,7 @@ class RetryPolicy:
             raise _binding_error(f"{field_name} must be an object")
         allowed = {
             "max_attempts",
+            "retries",
             "backoff_s",
             "backoff_multiplier",
             "jitter",
@@ -120,7 +121,15 @@ class RetryPolicy:
         unknown = set(raw) - allowed
         if unknown:
             raise _binding_error(f"{field_name}: unknown field {sorted(unknown)[0]!r}")
-        max_attempts = raw.get("max_attempts", base.max_attempts)
+        if "retries" in raw and "max_attempts" in raw:
+            raise _binding_error(f"{field_name}: set retries or max_attempts, not both")
+        if "retries" in raw:
+            retries = raw["retries"]
+            if not isinstance(retries, int) or isinstance(retries, bool) or retries < 0:
+                raise _binding_error(f"{field_name}.retries must be an integer >= 0")
+            max_attempts = retries + 1
+        else:
+            max_attempts = raw.get("max_attempts", base.max_attempts)
         if not isinstance(max_attempts, int) or isinstance(max_attempts, bool) or max_attempts < 1:
             raise _binding_error(f"{field_name}.max_attempts must be an integer >= 1")
         backoff_s = raw.get("backoff_s", base.backoff_s)

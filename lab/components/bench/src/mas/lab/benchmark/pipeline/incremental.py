@@ -45,12 +45,16 @@ def declared_callable(step: object, name: str):
 def folds_batches(step: object) -> bool:
     """True when the step class implements ``on_batch`` (live or sealed fold).
 
-    YAML ``realtime: false`` does not fold: the step draws once from its
-    inputs when the pipeline seals.
+    YAML ``mode: batch`` or ``realtime: false`` does not fold: the step
+    draws once from its inputs when the pipeline seals. ``mode: live``
+    and ``mode: mixed`` fold when the class implements ``on_batch``.
     """
     from mas.lab.benchmark.pipeline.core import PipelineStep
 
-    if isinstance(step, PipelineStep) and step.realtime is False:
+    mode = str(getattr(step, "mode", "") or "").strip().lower()
+    if mode == "batch":
+        return False
+    if isinstance(step, PipelineStep) and step.realtime is False and mode not in {"live", "mixed"}:
         return False
     return declared_callable(step, "on_batch") is not None
 

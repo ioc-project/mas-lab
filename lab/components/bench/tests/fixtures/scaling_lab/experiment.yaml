@@ -29,10 +29,14 @@ experiment:
   schedule:
     parallel_scenarios: 1
     pause_between_runs: 0
-    max_attempts: 1
-    retry_backoff_s: 0
-    ordering: coverage
+    plugin: coverage
+  executor:
+    plugin: native
     timeout: 120
+  retry:
+    params:
+      max_attempts: 1
+      backoff_s: 0
   pre:
     - name: start-tools
       type: service_start

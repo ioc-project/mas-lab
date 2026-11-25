@@ -20,7 +20,17 @@ Replay `events.jsonl` through the library converter to OTel SDK JSONL. Same work
 
 ## OPTIONS
 
-See `mas-lab telemetry convert --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `EVENTS_PATH` | Positional argument. |
+| `--output`, `-o` | — |
+| `--service-name` | MAS name when --app-name is unset and events do not carry one. |
+| `--app-name` | MAS name (application_id and service.name). Required unless events already set it. |
+| `--shift-to-now` | Translate timestamps so the earliest event is now (relative gaps kept). |
+| `--new-session-id` | Allocate a new session UUID, distinct from the original run. |
+| `--governance`, `--no-governance` | Include the governance export layer (default: off). |
+| `--layer` | Enable only these export layers (repeatable). Default: structure, execution, semantic, provenance. |
+| `--realtime` | Emit incremental topology.node.*/tool.*/llm.* signal spans as each event replays, instead of the single end-of-run *.graph span (realtime replaces it, same as the live otel plugin's realtime mode). |
 
 ## PIPELINE
 

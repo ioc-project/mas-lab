@@ -20,7 +20,18 @@ Serialize a KG document to Neo4j. Alias: `neo4j-push`. Same `neo4j_push` step as
 
 ## OPTIONS
 
-See `mas-lab kg push --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `KG_PATH` | Positional argument. |
+| `--uri` | — |
+| `--username` | — |
+| `--database` | — |
+| `--app-name` | — |
+| `--infra` | — |
+| `--batch-size` | — |
+| `--enable-extension-layer` | Enable optional ontology extension layer(s) on push. Repeat option. |
+| `--clear-session` | — |
+| `--dry-run` | — |
 
 ## PIPELINE
 

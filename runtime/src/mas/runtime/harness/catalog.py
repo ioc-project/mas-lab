@@ -80,6 +80,11 @@ LIBRARY_TYPES = frozenset(
         "eval_metric",
         "secret_store",
         "identity_scheme",
+        "scenario_generator",
+        "scheduler",
+        "executor",
+        "retrier",
+        "analyzer",
     }
 )
 

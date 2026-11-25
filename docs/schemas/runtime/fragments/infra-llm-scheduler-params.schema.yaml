@@ -32,6 +32,26 @@ properties:
     type: number
     minimum: 0
     description: Seconds to wait for a live slot before TimeoutError.
+  min_in_flight:
+    type: integer
+    minimum: 0
+    description: Floor for AIMD after a refusal (circuit still pauses at 0).
+  increase:
+    type: integer
+    minimum: 1
+    description: Add this many in-flight slots after a clean call, up to max_in_flight.
+  decrease:
+    type: number
+    minimum: 1
+    description: Divide the in-flight cap by this on a refused call.
+  breaker_streak:
+    type: integer
+    minimum: 1
+    description: Refused calls in a row before the bucket pauses.
+  cooldown_s:
+    type: number
+    minimum: 0
+    description: Seconds the bucket stays paused after breaker_streak refusals.
   state_path:
     type: [string, "null"]
     x-filesystem-path: true

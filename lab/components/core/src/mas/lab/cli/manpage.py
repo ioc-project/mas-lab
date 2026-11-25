@@ -458,6 +458,36 @@ CLI_MAN_PAGES: tuple[ManPage, ...] = (
         "benchmark",
     ),
     ManPage(
+        "mas-lab benchmark runs",
+        "lab/docs/cli/benchmark-runs.md",
+        "Plan, shard, merge, retry and summarize runs as separate steps",
+        "benchmark",
+    ),
+    ManPage(
+        "mas-lab benchmark runs plan",
+        "lab/docs/cli/benchmark-runs-plan.md",
+        "Generate and schedule runs; write plan and shards",
+        "benchmark",
+    ),
+    ManPage(
+        "mas-lab benchmark runs retry",
+        "lab/docs/cli/benchmark-runs-retry.md",
+        "Choose the runs another round should run",
+        "benchmark",
+    ),
+    ManPage(
+        "mas-lab benchmark runs merge",
+        "lab/docs/cli/benchmark-runs-merge.md",
+        "Merge shard results trees",
+        "benchmark",
+    ),
+    ManPage(
+        "mas-lab benchmark runs summary",
+        "lab/docs/cli/benchmark-runs-summary.md",
+        "Run the analyzer over a results tree",
+        "benchmark",
+    ),
+    ManPage(
         "mas-lab benchmark pipeline",
         "lab/docs/cli/benchmark-pipeline.md",
         "Standalone pipeline YAML",

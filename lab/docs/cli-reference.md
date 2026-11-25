@@ -62,7 +62,8 @@ With `-b` the command returns immediately and prints the worker id. Follow it wi
 | `--flavour NAME` | experiment's `default_flavour`, then `local` | Runtime flavour, resolved to `<experiment_dir>/flavours/NAME.yaml` |
 | `--control REF[@SELECTOR]` | none | Attach a `kind: Control` file (repeatable). `SELECTOR` is `$all`, `$entry`, `$not-entry`, `$delegates`, agent ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) |
 | `--infra NAME` | experiment's `default_infra` (none otherwise) | Infra bundle, resolved to `<experiment_dir>/infra/NAME.yaml`, used by `service_start` / `service_stop` steps |
-| `--strategy coverage\|depth` | YAML `schedule.ordering`, else `coverage` | `coverage`: every condition gets one run before any gets a second. `depth`: finish all runs of a condition first |
+| `--scheduler ID` | YAML `schedule.plugin`, else the generator default | Any registered scheduler id |
+| `--run-plan FILE` | all planned runs | Run only the runs a run-plan file names (a CI shard; see `benchmark runs plan`) |
 | `--set STEP_TYPE.KEY=VALUE` | — | Override one pipeline step config key (repeatable) |
 | `--override PATH=VALUE` | — | Schema-validated experiment override, applied last (repeatable) |
 | `-x`, `--experiment-overlay YAML` | — | Deep-merge an [experiment overlay](design-experiment-overlays.md) into `experiment.yaml` before running (repeatable, applied in order, paths relative to `experiment.yaml`; lists are replaced, not appended) |

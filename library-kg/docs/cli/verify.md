@@ -20,7 +20,10 @@ Validate native `events.jsonl` against the events spec.
 
 ## OPTIONS
 
-See `mas-lab kg verify --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `EVENTS_PATH` | Positional argument. |
+| `--strictness` | — |
 
 ## PIPELINE
 

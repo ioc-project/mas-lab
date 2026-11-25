@@ -32,7 +32,7 @@ def cpu_count() -> int:
 def validate_worker_processes(n: Any) -> int:
     """Structure only: an integer of at least 1. The machine is checked at run time."""
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
-        raise ValueError(f"schedule.worker_processes must be an integer >= 1, got {n!r}")
+        raise ValueError(f"executor.worker_processes must be an integer >= 1, got {n!r}")
     return n
 
 
@@ -41,7 +41,7 @@ def validate_worker_max_runs(n: Any) -> int | None:
     if n is None:
         return None
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
-        raise ValueError(f"schedule.worker_max_runs must be an integer >= 1, got {n!r}")
+        raise ValueError(f"executor.worker_max_runs must be an integer >= 1, got {n!r}")
     return n
 
 
@@ -50,7 +50,7 @@ def require_cores(n: int) -> int:
     cpus = cpu_count()
     if n > cpus:
         raise ValueError(
-            f"schedule.worker_processes={n} is above the {cpus} CPU cores of this machine; "
+            f"executor.worker_processes={n} is above the {cpus} CPU cores of this machine; "
             f"lower it to {cpus} or fewer, or run on a larger machine"
         )
     return n
@@ -114,14 +114,14 @@ def require_worker_safe(specs: list[Any], *, base_dir: Path) -> None:
         if safety is None:
             raise RuntimeError(
                 f"pipeline step {name!r} (type {step_type!r}) does not declare worker_safe; "
-                "schedule.worker_processes > 1 refuses it. Declare worker_safe = True on the step class "
+                "executor.worker_processes > 1 refuses it. Declare worker_safe = True on the step class "
                 "(or worker_safe: true under attributes in its library entry) when it does not patch "
                 "process state that MAS runs depend on"
             )
         if not safety:
             raise RuntimeError(
                 f"pipeline step {name!r} (type {step_type!r}) declares worker_safe = False; "
-                "schedule.worker_processes > 1 refuses it"
+                "executor.worker_processes > 1 refuses it"
             )
 
 

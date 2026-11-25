@@ -20,7 +20,13 @@ Rewrite OTel spans to clickhouse-shaped JSONL (first stage of otel-to-kg).
 
 ## OPTIONS
 
-See `mas-lab kg otel-to-events --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_PATH` | Positional argument. |
+| `--run-id` | — |
+| `--output-dir` | — |
+| `--no-strict` | — |
+| `--no-synthesize` | — |
 
 ## PIPELINE
 

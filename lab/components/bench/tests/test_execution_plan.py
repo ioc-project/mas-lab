@@ -5,18 +5,26 @@
 from __future__ import annotations
 
 import pytest
-from mas.lab.benchmark.execution.plan import (
-    _build_coupled_plan,
-    build_execution_plan,
-)
+from mas.lab.benchmark.execution.plan import build_execution_plan
 from mas.lab.lab.config import ExperimentDesignSpec
+
+
+def _plan(scenarios, items, n_runs, *, design=None, schedule=None):
+    spec = ExperimentDesignSpec.from_dict(design)
+    return build_execution_plan(
+        scenarios,
+        items,
+        n_runs,
+        design=spec.as_plan_dict(),
+        schedule=schedule,
+    )
 
 
 def test_coupled_plan_is_id_pairs_not_cartesian():
     ids = [f"item-{i}" for i in range(25)]
     items = [{"id": i, "inputs": {"user": i}} for i in ids]
-    couplings = [{"scenario": i, "items": [i]} for i in ids]
-    plan = _build_coupled_plan(couplings, items, n_runs=1)
+    design = {"plugin": "coupled", "params": {"couplings": [{"scenario": i, "items": [i]} for i in ids]}}
+    plan = _plan(ids, items, 1, design=design)
     assert len(plan) == 25
     assert [(s, i["id"]) for s, i, _ in plan] == list(zip(ids, ids, strict=False))
 
@@ -26,11 +34,16 @@ def test_coupled_plan_pairs_scenario_to_item_id():
         {"id": "celestia-weekend", "inputs": {"user": "A"}},
         {"id": "verdantia-budget", "inputs": {"user": "B"}},
     ]
-    couplings = [
-        {"scenario": "celestia-weekend", "items": ["celestia-weekend"]},
-        {"scenario": "verdantia-budget", "items": ["verdantia-budget"]},
-    ]
-    plan = _build_coupled_plan(couplings, items, n_runs=1)
+    design = {
+        "plugin": "coupled",
+        "params": {
+            "couplings": [
+                {"scenario": "celestia-weekend", "items": ["celestia-weekend"]},
+                {"scenario": "verdantia-budget", "items": ["verdantia-budget"]},
+            ]
+        },
+    }
+    plan = _plan(["celestia-weekend", "verdantia-budget"], items, 1, design=design)
     assert [(s, i["id"]) for s, i, _ in plan] == [
         ("celestia-weekend", "celestia-weekend"),
         ("verdantia-budget", "verdantia-budget"),
@@ -42,18 +55,22 @@ def test_coupled_plan_pairs_scenario_to_item_id():
     [
         (
             {
-                "mode": "one_factor",
-                "pin_scenarios": ["baseline"],
-                "vary": {"axis": "item", "values": ["item-1"]},
+                "plugin": "one_factor",
+                "params": {
+                    "pin_scenarios": ["baseline"],
+                    "vary": {"axis": "item", "values": ["item-1"]},
+                },
             },
             ["baseline", "treatment"],
             [("baseline", "item-1", 0)],
         ),
         (
             {
-                "mode": "one_factor",
-                "pin_items": ["item-1"],
-                "vary": {"axis": "scenario", "values": ["s1", "s2"]},
+                "plugin": "one_factor",
+                "params": {
+                    "pin_items": ["item-1"],
+                    "vary": {"axis": "scenario", "values": ["s1", "s2"]},
+                },
             },
             ["s1", "s2", "s3"],
             [("s1", "item-1", 0), ("s2", "item-1", 0)],
@@ -76,14 +93,14 @@ def test_design_spec_rejects_unread_pin():
         ExperimentDesignSpec.from_dict({"pin": {"scenarios": ["s1"]}})
 
 
-def test_unknown_mode_raises():
-    with pytest.raises(ValueError, match="design.mode"):
-        build_execution_plan(["s1"], [{"id": "a"}], 1, design={"mode": "latin"})
+def test_unknown_plugin_lists_registered_ids():
+    with pytest.raises(ValueError, match=r"unknown scenario generator 'latin'; registered:"):
+        ExperimentDesignSpec.from_dict({"plugin": "latin"})
 
 
 def test_one_factor_without_vary_raises():
     with pytest.raises(ValueError, match="one_factor"):
-        build_execution_plan(["s1"], [{"id": "a"}], 1, design={"mode": "one_factor"})
+        ExperimentDesignSpec.from_dict({"plugin": "one_factor"})
 
 
 def test_one_factor_unknown_item_raises():
@@ -93,12 +110,12 @@ def test_one_factor_unknown_item_raises():
             [{"id": "a"}],
             1,
             design={
-                "mode": "one_factor",
-                "vary": {"axis": "item", "values": ["missing"]},
+                "plugin": "one_factor",
+                "params": {"vary": {"axis": "item", "values": ["missing"]}},
             },
         )
 
 
 def test_coupled_without_couplings_raises():
     with pytest.raises(ValueError, match="couplings"):
-        build_execution_plan(["s1"], [{"id": "a"}], 1, design={"mode": "coupled"})
+        ExperimentDesignSpec.from_dict({"plugin": "coupled"})

@@ -28,12 +28,12 @@ The ClickHouse password is the `clickhouse` secret: `mas-ctl secrets set clickho
 | `--by` | Query key: 'session' → ClickHouse session_id column, 'run' → SpanAttributes['mas.run.id'], 'trace' → TraceId column (hex, with or without 0x prefix). |
 | `--app-name` | Optional ServiceName filter. |
 | `-o`, `--output` | Output file path for otel_sdk_spans.jsonl. |
-| `--host` | ClickHouse host (overrides config/env). |
+| `--host` | ClickHouse host. |
 | `--port` | ClickHouse HTTP port. |
 | `--user` | ClickHouse user. |
 | `--database` | ClickHouse database. |
 | `--table` | OTel traces table. |
-| `--json-output` | Print summary as JSON. |
+| `--json-output` | Print result as JSON. |
 
 ## PIPELINE
 

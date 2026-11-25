@@ -28,9 +28,11 @@ experiment:
 
   schedule:
     parallel_scenarios: 1
-    timeout: 180
     pause_between_runs: 1.0
-    ordering: depth
+    plugin: depth
+  executor:
+    plugin: native
+    timeout: 180
   bench_emulation:
     infra:
       llm: live

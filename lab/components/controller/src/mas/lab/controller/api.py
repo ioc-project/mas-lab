@@ -133,6 +133,43 @@ class ControllerAPI:
         record = run_pipeline_worker(self.workers, self.runner, spec)
         return {"worker_id": record.id, "job_id": record.id, "status": record.status.value}
 
+    def schedule_batch(self, spec: dict) -> Dict[str, Any]:
+        from mas.lab.benchmark.control import schedule_batch
+
+        handle = schedule_batch(
+            spec["experiment_yaml"],
+            output_dir=spec.get("output_dir"),
+            plan_file=spec.get("plan_file"),
+            max_scheduled_batches=spec.get("max_scheduled_batches"),
+        )
+        return handle.snapshot()
+
+    def get_batch(self, batch_id: str) -> Dict[str, Any]:
+        from mas.lab.benchmark.control import batch_status
+
+        return batch_status(batch_id)
+
+    def stop_batch(self, batch_id: str) -> Dict[str, Any]:
+        from mas.lab.benchmark.control import stop_batch
+
+        return stop_batch(batch_id)
+
+    def next_runs(self, spec: dict) -> Dict[str, Any]:
+        from mas.lab.benchmark.control import get_batch, next_runs
+
+        handle = get_batch(str(spec.get("batch_id") or "")) if spec.get("batch_id") else None
+        runs = next_runs(
+            handle=handle,
+            scores=dict(spec.get("scores") or {}),
+            strategy=str(spec.get("strategy") or "remaining"),
+            keep_fraction=float(0.5 if spec.get("keep_fraction") is None else spec["keep_fraction"]),
+            keep_n=spec.get("keep_n"),
+        )
+        return {
+            "runs": [run.row() for run in runs],
+            "n_runs": len(runs),
+        }
+
     # -- Jobs (UI alias) --------------------------------------------------------
 
     def list_jobs(self, status: Optional[str] = None) -> List[Dict[str, Any]]:

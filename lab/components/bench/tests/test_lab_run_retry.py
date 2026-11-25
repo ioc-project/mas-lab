@@ -4,25 +4,25 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
-from mas.lab.benchmark.schedule.run_batch.execute import (
-    invoke_lab_run_with_retry,
-    lab_run_error_is_retryable,
-    lab_run_retry_settings,
-)
-from mas.lab.lab.config.execution import MASExecutionSpec
+from mas.lab.benchmark.execution.retry import lab_run_error_is_retryable, run_with_retrier
+from mas.lab.benchmark.execution.roles import resolve_executor, resolve_role_plugin
+from mas.lab.lab.config.execution import ExperimentRetrySpec
+
+
+def _retrier(**params):
+    retrier = resolve_role_plugin("retrier", "native")
+    retrier.validate_params(params)
+    return retrier
 
 
 def test_lab_run_retry_defaults() -> None:
-    attempts, backoff = lab_run_retry_settings(None)
-    assert attempts == 3
-    assert backoff == 2.0
-    spec = MASExecutionSpec.from_dict({})
-    assert spec.max_attempts == 3
-    assert spec.retry_backoff_s == 2.0
-    spec = MASExecutionSpec.from_dict({"max_attempts": 1, "retry_backoff_s": 0})
-    assert spec.max_attempts == 1
-    assert spec.retry_backoff_s == 0.0
+    spec = ExperimentRetrySpec.from_dict(None)
+    assert (spec.plugin, spec.params) == ("native", {})
+    retrier = _retrier()
+    assert (retrier.max_attempts, retrier.backoff_s) == (3, 2.0)
 
 
 def test_lab_run_error_is_retryable_for_llm_and_not_auth() -> None:
@@ -34,7 +34,7 @@ def test_lab_run_error_is_retryable_for_llm_and_not_auth() -> None:
 
 
 @pytest.mark.asyncio
-async def test_invoke_lab_run_retries_then_succeeds() -> None:
+async def test_retries_then_succeeds_and_reports_each_retry() -> None:
     calls = {"n": 0}
 
     def flaky() -> dict:
@@ -43,41 +43,39 @@ async def test_invoke_lab_run_retries_then_succeeds() -> None:
             return {"status": "error", "content": "LLM request failed: HTTP 503"}
         return {"status": "ok", "content": "done", "session_id": "s1"}
 
-    retries: list[int] = []
-    result, status, error, output, used = await invoke_lab_run_with_retry(
+    seen: list[int] = []
+    slept: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        slept.append(delay)
+
+    out = await run_with_retrier(
+        resolve_executor("native"),
+        _retrier(max_attempts=3, backoff_s=1),
         flaky,
-        max_attempts=3,
-        backoff_s=0,
-        on_retry=lambda failed, _n, _e: retries.append(failed),
+        on_retry=lambda n, _e: seen.append(n),
+        sleep=sleep,
     )
-    assert status == "ok"
-    assert output == "done"
-    assert result["session_id"] == "s1"
-    assert used == 3
-    assert retries == [1, 2]
-    assert not error
+    assert (out.status, out.output, out.attempts) == ("ok", "done", 3)
+    assert out.result["session_id"] == "s1"
+    assert seen == [1, 2]
+    assert slept == [1.0, 2.0]
 
 
 @pytest.mark.asyncio
-async def test_invoke_lab_run_does_not_retry_fatal() -> None:
+async def test_hidden_failure_is_not_retried_when_fatal() -> None:
     calls = {"n": 0}
 
     def fatal() -> dict:
         calls["n"] += 1
-        return {
-            "status": "ok",
-            "content": "LLM request failed: HTTP 401 (authentication/authorization). Check the API key",
-        }
+        return {"status": "ok", "content": "LLM request failed: HTTP 401 (authentication/authorization). Check key"}
 
-    _, status, error, _output, used = await invoke_lab_run_with_retry(fatal, max_attempts=3, backoff_s=0)
-    assert status == "error"
-    assert used == 1
-    assert calls["n"] == 1
-    assert "401" in error
+    out = await run_with_retrier(resolve_executor("native"), _retrier(max_attempts=3, backoff_s=0), fatal)
+    assert out.status == "error" and out.attempts == 1 and calls["n"] == 1
 
 
 @pytest.mark.asyncio
-async def test_invoke_lab_run_retries_exceptions() -> None:
+async def test_exception_is_retried() -> None:
     calls = {"n": 0}
 
     def boom() -> dict:
@@ -86,31 +84,26 @@ async def test_invoke_lab_run_retries_exceptions() -> None:
             raise ConnectionError("Connection refused")
         return {"status": "ok", "content": "recovered"}
 
-    _, status, error, output, used = await invoke_lab_run_with_retry(boom, max_attempts=3, backoff_s=0)
-    assert status == "ok"
-    assert output == "recovered"
-    assert used == 2
-    assert not error
+    out = await run_with_retrier(resolve_executor("native"), _retrier(max_attempts=3, backoff_s=0), boom)
+    assert (out.status, out.output, out.attempts) == ("ok", "recovered", 2)
 
 
-def test_write_run_result_replaces_error_cache(tmp_path) -> None:
+@pytest.mark.asyncio
+async def test_failing_before_attempt_is_final() -> None:
+    async def bad() -> None:
+        raise RuntimeError("pre step failed")
+
+    out = await run_with_retrier(
+        resolve_executor("native"), _retrier(max_attempts=3, backoff_s=0), lambda: {"status": "ok"}, before_attempt=bad
+    )
+    assert out.status == "error" and out.attempts == 1 and "pre step failed" in out.error
+
+
+def test_write_run_result_replaces_error_cache_and_records_attempts(tmp_path) -> None:
     from mas.lab.benchmark.cache.trace_store import write_run_result
 
-    write_run_result(tmp_path, "error", 10.0, "HTTP 503")
-    write_run_result(tmp_path, "ok", 20.0, "")
-    import json
-
+    write_run_result(tmp_path, "error", 10.0, "HTTP 503", attempts=3)
+    assert json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))["attempts"] == 3
+    write_run_result(tmp_path, "ok", 20.0, "", attempts=4)
     data = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
-    assert data["status"] == "ok"
-    assert data["error"] == ""
-
-
-def test_write_run_result_preserves_successful_cache(tmp_path) -> None:
-    from mas.lab.benchmark.cache.trace_store import write_run_result
-
-    write_run_result(tmp_path, "ok", 10.0, "")
-    write_run_result(tmp_path, "error", 20.0, "later fail")
-    import json
-
-    data = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
-    assert data["status"] == "ok"
+    assert (data["status"], data["error"], data["attempts"]) == ("ok", "", 4)

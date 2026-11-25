@@ -1,15 +1,15 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """Infer mas-lab runner id from experiment manifest and composed agent config."""
+
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from mas.runtime.spec.source import load_yaml_file
-
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID, normalize_runner_id
+from mas.runtime.spec.source import load_yaml_file
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def infer_runner_id(
     """Resolve lab runner id for one execution.
 
     Priority:
-    1. ``experiment.schedule.runner`` (explicit override; legacy ``execution.runner``)
+    1. ``experiment.executor.runner`` (explicit override; leftover ``schedule.runner`` / ``execution.runner``)
     2. Composed agent manifest ``spec.framework_adapter``
     3. MAS ``mas.yaml`` (from ``applications[].app`` or ``mas.manifest``)
     4. Flavour / inline deployment ``framework.default_adapter``
