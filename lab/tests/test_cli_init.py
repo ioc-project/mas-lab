@@ -182,3 +182,70 @@ def test_init_yes_writes_the_default_api_base(monkeypatch, tmp_path: Path):
 
     assert result.exit_code == 0, result.output
     assert "https://api.openai.com/v1" in (tmp_path / "mas" / "infra" / "llmprovider.yaml").read_text()
+
+
+OLD_INFRA = """\
+apiVersion: infra/v1
+kind: LLMProxy
+metadata: {name: old}
+spec:
+  proxy:
+    api_base: env:LLM_PROXY_API_BASE|https://proxy.example/v1
+    api_key_env: OPENAI_API_KEY
+"""
+
+
+def test_init_finds_files_with_removed_forms_and_rewrites_them_on_a_yes(tmp_path: Path, capsys):
+    from mas.lab.cli.commands.init import _files_with_removed_forms, _offer_migration
+
+    infra = tmp_path / "infra" / "old.yaml"
+    infra.parent.mkdir()
+    infra.write_text(OLD_INFRA, encoding="utf-8")
+    config = tmp_path / "config.yaml"
+    config.write_text(f"infra_refs:\n  - {infra}\n", encoding="utf-8")
+
+    stale = _files_with_removed_forms(config, {"infra_refs": [str(infra)]}, infra.parent, "old")
+    assert stale == [infra.resolve()]
+
+    _offer_migration(stale, yes=True)
+    text = infra.read_text(encoding="utf-8")
+    assert "api_key: {secret: openai}" in text and "env:" not in text and "_env" not in text
+    assert (infra.parent / "old.yaml.bak").read_text(encoding="utf-8") == OLD_INFRA
+    assert 'printf %s "$OPENAI_API_KEY" | mas-ctl secrets set openai' in capsys.readouterr().err
+    assert _files_with_removed_forms(config, {"infra_refs": [str(infra)]}, infra.parent, "old") == []
+
+
+def _stale_home(tmp_path: Path) -> tuple[Path, Path]:
+    home = tmp_path / "mas"
+    infra = home / "infra" / "llm-proxy.yaml"
+    infra.parent.mkdir(parents=True)
+    infra.write_text(OLD_INFRA, encoding="utf-8")
+    (home / "config.yaml").write_text(f"infra_refs:\n  - {infra}\n", encoding="utf-8")
+    return home, infra
+
+
+def test_init_proposes_the_migration_and_explains_it(monkeypatch, tmp_path: Path):
+    """Declined: nothing changes, and the text says what changed, why, and what to do."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    _home, infra = _stale_home(tmp_path)
+    result = CliRunner().invoke(app, ["init"], input="n\n")
+    assert result.exit_code == 1  # nothing else would work: the old forms are refused at load
+    assert infra.read_text(encoding="utf-8") == OLD_INFRA
+    for part in (
+        "old env: / *_env form",
+        "child processes, logs and traces",
+        "`api_key_env: OPENAI_API_KEY` becomes `api_key: {secret: openai}`",
+        "How keys are stored now",
+        "directory 0700, files 0400",
+        "Rewrite these files now",
+        "mas-ctl secrets migrate --write FILE",
+    ):
+        assert part in result.output, part
+
+
+def test_init_rewrites_on_a_yes_and_says_what_to_run_next(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    _home, infra = _stale_home(tmp_path)
+    result = CliRunner().invoke(app, ["init"], input="y\nn\nn\nn\nn\n")
+    assert "api_key: {secret: openai}" in infra.read_text(encoding="utf-8")
+    assert 'Then store the key once:  printf %s "$OPENAI_API_KEY" | mas-ctl secrets set openai' in result.output

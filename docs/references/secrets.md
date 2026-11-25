@@ -162,7 +162,7 @@ headers:
   Authorization: {secret: {name: upstream, prefix: "Bearer "}}
 ```
 
-Move the values once with `mas-ctl secrets import-env .env`. It knows the provider variables (`OPENAI_API_KEY` as `openai`, `ANTHROPIC_API_KEY` as `anthropic`, `HF_TOKEN` as `hf`, `NEO4J_PASSWORD` as `neo4j`, ...) and the env store's `MAS_SECRET_*` names; set any other with `mas-ctl secrets set NAME`, then delete the keys from `.env`.
+Rewrite the files with `mas-ctl secrets migrate --write FILE` (`mas-lab init` offers it for the files your config names; a `.bak` copy is kept). Then move the values once with `mas-ctl secrets import-env .env`. It knows the provider variables (`OPENAI_API_KEY` as `openai`, `ANTHROPIC_API_KEY` as `anthropic`, `HF_TOKEN` as `hf`, `NEO4J_PASSWORD` as `neo4j`, ...) and the env store's `MAS_SECRET_*` names; set any other with `mas-ctl secrets set NAME`, then delete the keys from `.env`.
 
 ## Rules for plugin authors
 
