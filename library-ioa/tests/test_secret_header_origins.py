@@ -38,7 +38,7 @@ def _free_port() -> int:
 @contextmanager
 def _server(handler: type[BaseHTTPRequestHandler], port: int) -> Iterator[None]:
     server = ThreadingHTTPServer(("127.0.0.1", port), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     try:
         yield

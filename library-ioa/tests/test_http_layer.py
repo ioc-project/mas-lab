@@ -44,7 +44,7 @@ async def test_the_http_transport_passes_the_transport_check_and_reports_http_er
             return None
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Echo)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_address[1]}/rpc"
     try:
@@ -90,7 +90,7 @@ async def test_the_http_transport_caps_the_reply_and_never_shows_the_url_query()
             return None
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Big)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
     try:
@@ -129,7 +129,7 @@ async def test_the_http_transport_sends_each_header_once_whatever_its_spelling()
             return None
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Record)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_address[1]}"
     layer = HttpLayer(url=url, headers={"Content-Type": "text/plain", "X-Static": "1"})

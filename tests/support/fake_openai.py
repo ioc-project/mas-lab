@@ -59,7 +59,7 @@ class FakeOpenAI:
 
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.url = f"http://127.0.0.1:{self._server.server_address[1]}/v1"
-        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread = threading.Thread(target=self._server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
         self._infra_dir = tempfile.mkdtemp(prefix="fake-openai-")
         self._infra = Path(self._infra_dir) / "infra.yaml"
         self._infra.write_text(
