@@ -98,6 +98,7 @@ select = ["E", "F", "B", "I"]
 # deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
 addopts = '-p no:deepeval -p mas.runtime.hostenv_pytest -m "not functional and not perf"'
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 # test-only helpers shared by several test trees (the in-process SLIM node); not part of any package
 pythonpath = ["tests/support"]
 testpaths = ["tests", "ctl/tests", "runtime/tests", "library-ioa/tests", "lab/components/controller/tests"]
