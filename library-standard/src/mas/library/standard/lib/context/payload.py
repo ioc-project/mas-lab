@@ -136,7 +136,9 @@ def _sanitize_completed(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
             trailing = j == n
             if not kept and not trailing:
                 stripped = {k: v for k, v in msg.items() if k not in {"tool_calls", "provider_state"}}
-                if str(stripped.get("content") or "").strip():
+                from mas.runtime.contracts.content_types import text_of
+
+                if text_of(stripped.get("content") or "").strip():
                     out.append(stripped)
             else:
                 out.append(msg)

@@ -43,9 +43,11 @@ spec:
       url: https://models.dev
       reusable: true
       note: >
-        Sync source for context windows, max output, modalities, and pricing
-        (`https://models.dev/api.json`, MIT). Maintainer tool:
+        Third-party sync source for context windows, max output, modalities,
+        and pricing (`https://models.dev/api.json`, MIT,
+        Copyright (c) 2025 models.dev). Maintainer tool:
         scripts/sync_model_catalog.py. Not imported at run time.
+        Required notice: NOTICE at the repository root.
     - id: aider
       title: Aider MODEL_SETTINGS
       url: https://github.com/Aider-AI/aider/blob/main/aider/resources/model-settings.yml

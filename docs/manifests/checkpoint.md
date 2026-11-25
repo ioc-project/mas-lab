@@ -9,6 +9,9 @@ Enable checkpoints with `spec.checkpoint` on an Agent manifest when a session mu
 Version 2 files also hold the session lineage and the agent manifest, so a new process can rebuild the session without the original manifest file.
 A checkpoint must not contain inline secrets.
 Keep credentials in environment or secret-store references.
+A user turn with media stores only the part metadata (sha256, type, name,
+size). Restore needs the run's `media/` directory; the checkpoint does not
+embed the bytes. See [multimodal.md](../references/multimodal.md).
 
 ```yaml
 spec:

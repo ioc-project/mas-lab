@@ -4,11 +4,11 @@ $schema: "http://json-schema.org/draft-07/schema#"
 $id: "urn:mas-lab:run-input:v1"
 title: "mas-lab Run Input Envelope (v1)"
 description: >
-  Per-run document. ``user`` is prompt text (string) or ``{ref: file}``.
-  ``tool_fixtures`` / ``memory_seeds`` use ``{ref:}`` or a bare path
-  shorthand. ``environment`` overlays timers and triggers on the
-  experiment world (no fixtures). Expectation values and tool-fixture
-  payloads are free-form.
+  Per-run document. ``user`` is prompt text (string), ``{ref: file}``,
+  or ``{parts: [...]}`` for a turn with media. ``tool_fixtures`` /
+  ``memory_seeds`` use ``{ref:}`` or a bare path shorthand.
+  ``environment`` overlays timers and triggers on the experiment world
+  (no fixtures). Expectation values and tool-fixture payloads are free-form.
 
 type: object
 additionalProperties: false
@@ -21,18 +21,23 @@ properties:
     properties:
       user:
         description: >
-          The user prompt. A string is the text. A list of strings is
-          sequential user messages (no role dicts). A ref object loads
-          that file (scalar, YAML string, or .txt/.md).
+          The user prompt. A string is the text. A list of strings (and
+          optional ``{parts: [...]}`` turns) is sequential user messages.
+          A ref object loads that file (scalar, YAML string, or .txt/.md).
+          A ``{parts: [...]}`` mapping is one turn with text and media.
         oneOf:
           - type: string
             minLength: 1
           - type: array
             minItems: 1
             items:
-              type: string
-              minLength: 1
+              oneOf:
+                - type: string
+                  minLength: 1
+                - $ref: "urn:mas-lab:fragments:user-parts:v1"
+                - $ref: "urn:mas-lab:fragments:ref:v1"
           - $ref: "urn:mas-lab:fragments:ref:v1"
+          - $ref: "urn:mas-lab:fragments:user-parts:v1"
           - type: array
             deprecated: true
             description: >
@@ -48,7 +53,9 @@ properties:
                 role:
                   type: string
                 content:
-                  type: string
+                  oneOf:
+                    - type: string
+                    - type: array
       hitl:
         description: >
           Scripted operator replies, in order, after the user prompt.

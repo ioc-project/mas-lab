@@ -139,7 +139,7 @@ async def test_streaming_works_with_no_on_stream_chunk_installed(monkeypatch):
     lines = [_sse({"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}), "data: [DONE]"]
     _install_fake_client(monkeypatch, lines)
 
-    engine = LiveLlmEngine(ctx=SimpleNamespace(), stream=True, use_cache=False)
+    engine = LiveLlmEngine(ctx=SimpleNamespace(on_stream_chunk=None, session_id=""), stream=True, use_cache=False)
     message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "ok"
@@ -182,7 +182,7 @@ async def test_ignores_malformed_and_empty_sse_lines(monkeypatch):
     ]
     _install_fake_client(monkeypatch, lines)
 
-    engine = LiveLlmEngine(ctx=SimpleNamespace(), stream=True, use_cache=False)
+    engine = LiveLlmEngine(ctx=SimpleNamespace(on_stream_chunk=None, session_id=""), stream=True, use_cache=False)
     message = await engine._achat_completion([{"role": "user", "content": "hi"}], api_key="k", tools=None)
 
     assert message["content"] == "fine"

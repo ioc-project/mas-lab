@@ -264,6 +264,7 @@ class MasBenchRunner:
         ri: RunInput | None = run_input if isinstance(run_input, RunInput) else None
 
         queries = ri.scripted_queries() if ri else ([prompt] if prompt else [])
+        turns = ri.scripted_turns() if ri else list(queries)
         if not queries:
             return RunResult(content="", status="error", error="no user messages in run input")
 
@@ -325,6 +326,17 @@ class MasBenchRunner:
             if isinstance(resolved, RunResult):
                 return self._with_bench_metadata(resolved, run_seed=run_seed)
 
+            if ri is not None and ri.media_blobs:
+                from mas.ctl.media import DirectoryMediaStore, media_directory
+                from mas.runtime.contracts.content_types import media_parts
+
+                store_dir = DirectoryMediaStore(media_directory(output_dir))
+                for msg in list(ri.user) + list(ri.hitl):
+                    for part in media_parts(msg.get("content")):
+                        blob = ri.media_blobs.get(str(part.get("sha256") or ""))
+                        if blob is not None:
+                            store_dir.put(blob, str(part.get("media_type") or ""), str(part.get("name") or ""))
+
             try:
                 result = self._run_controller_turns(
                     instance=resolved.instance,
@@ -333,6 +345,7 @@ class MasBenchRunner:
                     spec_path=resolved.manifest_path,
                     output_dir=output_dir,
                     queries=queries,
+                    turns=turns,
                     memory_seeds=memory_seeds,
                     checkpoint_save=checkpoint_save,
                     checkpoint_path=checkpoint_path,
@@ -768,6 +781,7 @@ class MasBenchRunner:
         spec_path: Path,
         output_dir: Path,
         queries: list[str],
+        turns: list[Any] | None = None,
         memory_seeds: list[MemorySeed],
         checkpoint_save: bool | str,
         checkpoint_path: Path | None,
@@ -824,8 +838,14 @@ class MasBenchRunner:
                 manifest_content=config,
             )
         controller.managed_session = managed_session
+        contents = list(turns) if turns is not None else list(queries)
+        if len(contents) < len(queries):
+            contents.extend(queries[len(contents) :])
         try:
-            results = [controller.run_turn(q) for q in queries]
+            results = [
+                controller.run_turn(q, content=content if content != q else None)
+                for q, content in zip(queries, contents, strict=False)
+            ]
         finally:
             close_observability(controller)
             for recorder in scoped_recorders:

@@ -18,8 +18,10 @@ from mas.library.standard.plugins.llm.http_protocol import (
     normalize_usage,
     sampling_value,
 )
+from mas.library.standard.plugins.llm.media import gemini_text, gemini_user_parts
 from mas.library.standard.plugins.llm.structured import schema_from_format
 from mas.library.standard.plugins.llm.thinking import gemini_thinking_config
+from mas.runtime.contracts.content_types import MediaStore
 from mas.runtime.engine.llm_reasoning import ReasoningSettings, sanitize_assistant_message
 from mas.runtime.engine.llm_request import apply_sampling_payload, merge_extra_body, sampling_settings_from_entry
 from mas.runtime.reliability.classes import ClassifiedFailure, FailureClass
@@ -72,7 +74,7 @@ class GeminiLLMProvider(HttpLlmProtocol):
     ) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         del temperature  # the call's default 0.7 is not a choice; only `sampling` is sent
         url = self._request_url(model, stream=stream)
-        system, contents = _contents(messages)
+        system, contents = _contents(messages, layer=self.kind or "gemini", media_store=self.media_store)
         cap = max_completion_tokens if max_completion_tokens is not None else max_tokens
         generation: dict[str, Any] = {}
         value = sampling_value(sampling, model, "temperature")
@@ -111,7 +113,7 @@ class GeminiLLMProvider(HttpLlmProtocol):
             config = _tool_config(tool_choice)
             if config:
                 payload["toolConfig"] = config
-        extra = merge_extra_body(getattr(self, "extra_body", None), extra_body)
+        extra = merge_extra_body(self.extra_body, extra_body)
         if extra:
             payload.update(extra)
         payload.pop("response_format", None)
@@ -256,15 +258,12 @@ def _model_id(model: str) -> str:
     return name.split("models/", 1)[-1] if name.startswith("models/") else name
 
 
-def _text_of(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
-    return "" if content is None else str(content)
-
-
-def _contents(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
+def _contents(
+    messages: list[dict[str, Any]],
+    *,
+    layer: str = "gemini",
+    media_store: MediaStore | None = None,
+) -> tuple[str, list[dict[str, Any]]]:
     system_parts: list[str] = []
     names: dict[str, str] = {}
     out: list[dict[str, Any]] = []
@@ -280,13 +279,13 @@ def _contents(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]
     for raw in messages:
         role = str(raw.get("role") or "")
         if role == "system":
-            text = _text_of(raw.get("content"))
+            text = gemini_text(raw.get("content"))
             if text:
                 system_parts.append(text)
             continue
         if role == "assistant":
             parts: list[dict[str, Any]] = []
-            text = _text_of(raw.get("content"))
+            text = gemini_text(raw.get("content"))
             if text:
                 parts.append({"text": text})
             state = raw.get("provider_state")
@@ -313,18 +312,17 @@ def _contents(messages: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]
             cid = str(raw.get("tool_call_id") or "")
             name = names.get(cid) or str(raw.get("name") or cid)
             try:
-                response = json.loads(_text_of(raw.get("content")) or "{}")
+                response = json.loads(gemini_text(raw.get("content")) or "{}")
             except (TypeError, ValueError):
-                response = {"result": _text_of(raw.get("content"))}
+                response = {"result": gemini_text(raw.get("content"))}
             if not isinstance(response, dict):
                 response = {"result": response}
             if raw.get("is_error"):
                 response = {"error": response.get("result", response)}
             append("user", [{"functionResponse": {"name": name, "response": response}}])
             continue
-        user_text = _text_of(raw.get("content"))
-        if user_text.strip():
-            append("user", [{"text": user_text}])
+        parts = gemini_user_parts(raw.get("content"), media_store, layer=layer)
+        append("user", parts)
     return "\n".join(system_parts), out
 
 

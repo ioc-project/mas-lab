@@ -36,7 +36,7 @@ build-backend = "hatchling.build"
 bypass-selection = true
 
 [tool.hatch.build.targets.sdist]
-only-include = ["README.md", "LICENSE", "pyproject.toml"]
+only-include = ["README.md", "LICENSE", "NOTICE", "pyproject.toml"]
 
 [dependency-groups]
 dev = [

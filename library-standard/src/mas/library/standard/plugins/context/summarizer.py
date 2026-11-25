@@ -14,13 +14,23 @@ context manager — not a standalone spec slot.
 from __future__ import annotations
 
 import inspect
-import json
 import logging
 from typing import Any
 
 from mas.runtime.aio import settle
+from mas.runtime.contracts.content_types import text_of
 
 _log = logging.getLogger(__name__)
+
+
+def _text_view(messages: list[dict[str, Any]]) -> str:
+    """Text-only view of a conversation. A summary never carries media."""
+    lines: list[str] = []
+    for msg in messages:
+        role = str(msg.get("role") or "?")
+        body = text_of(msg.get("content"), media="placeholder")
+        lines.append(f"{role}: {body}")
+    return "\n".join(lines)
 
 
 def _accepts_kwarg(fn: Any, name: str) -> bool:
@@ -130,7 +140,7 @@ class LlmSummarizer:
             return None
         prompt = [
             {"role": "system", "content": self.instructions},
-            {"role": "user", "content": json.dumps(messages, default=str)},
+            {"role": "user", "content": _text_view(messages)},
         ]
         text: Any
         override = self._resolved_model

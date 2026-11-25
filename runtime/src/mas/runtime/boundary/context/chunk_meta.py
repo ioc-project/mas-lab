@@ -105,7 +105,9 @@ def is_summary_message(msg: dict[str, Any] | None) -> bool:
         return False
     if semantic_of(msg) == SEMANTIC_SUMMARY:
         return True
-    content = str(msg.get("content") or "")
+    from mas.runtime.contracts.content_types import text_of
+
+    content = text_of(msg.get("content") or "")
     return msg.get("role") == "system" and content.startswith(CHUNK_SUMMARY_HEADING)
 
 

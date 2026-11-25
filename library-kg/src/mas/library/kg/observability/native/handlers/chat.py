@@ -34,16 +34,9 @@ def format_messages(messages: Any) -> str:
         if not isinstance(msg, dict):
             continue
         role = str(msg.get("role") or "?").upper()
-        content = msg.get("content") or ""
-        if isinstance(content, list):
-            # Structured multi-part content (vision, tool_use, …)
-            texts: List[str] = []
-            for part in content:
-                if isinstance(part, dict):
-                    texts.append(part.get("text") or json.dumps(part, ensure_ascii=False)[:120])
-                else:
-                    texts.append(str(part))
-            content = " ".join(texts)
+        from mas.runtime.contracts.content_types import text_of
+
+        content = text_of(msg.get("content"), media="placeholder")
         parts.append(f"[{role}]\n{content}")
     return "\n\n".join(parts)
 
@@ -119,8 +112,12 @@ def response_text(resp: Dict[str, Any]) -> str:
     choices = resp.get("choices") or []
     if choices and isinstance(choices, list) and isinstance(choices[0], dict):
         msg = choices[0].get("message")
-        return str((msg.get("content") if isinstance(msg, dict) else "") or "")
-    return str(resp.get("content") or resp.get("text") or "")
+        from mas.runtime.contracts.content_types import text_of
+
+        return text_of(msg.get("content") if isinstance(msg, dict) else "").strip()
+    from mas.runtime.contracts.content_types import text_of
+
+    return text_of(resp.get("content") or resp.get("text") or "").strip()
 
 
 def _extract_completion(resp: Dict[str, Any]) -> str:
@@ -223,7 +220,9 @@ def _read_return(event: Dict[str, Any], node: Dict[str, Any]) -> None:
     resp: Dict[str, Any] = event.get("response") or {}
     if not isinstance(resp, dict):
         resp = {}
-    flat_out = str(event.get("content") or event.get("output") or "").strip()
+    from mas.runtime.contracts.content_types import text_of
+
+    flat_out = text_of(event.get("content") or event.get("output") or "").strip()
     usage: Dict[str, Any] = {}
     top_usage = event.get("tokens_used")
     if isinstance(top_usage, dict):

@@ -119,7 +119,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: anthropic
     urn: mas.llm_provider.anthropic
@@ -139,7 +139,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output, prompt_cache, thinking]
+      features: [tools, streaming, structured_output, prompt_cache, thinking, media]
   - type: llm_provider
     name: gemini
     urn: mas.llm_provider.gemini
@@ -159,7 +159,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output, thinking]
+      features: [tools, streaming, structured_output, thinking, media]
   - type: llm_provider
     name: openresponses
     urn: mas.llm_provider.openresponses
@@ -179,7 +179,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output, prompt_cache, thinking]
+      features: [tools, streaming, structured_output, prompt_cache, thinking, media]
   - type: llm_provider
     name: vertex
     urn: mas.llm_provider.vertex
@@ -199,7 +199,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output, thinking]
+      features: [tools, streaming, structured_output, thinking, media]
       proxy_fields: [project, location]
   - type: llm_provider
     name: azure
@@ -220,7 +220,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
       proxy_fields: [deployment, api_version, auth]
   - type: llm_provider
     name: bedrock
@@ -241,7 +241,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, prompt_cache, thinking]
+      features: [tools, prompt_cache, thinking, media]
   - type: llm_provider
     name: groq
     urn: mas.llm_provider.groq
@@ -261,7 +261,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: openrouter
     urn: mas.llm_provider.openrouter
@@ -281,7 +281,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: xai
     urn: mas.llm_provider.xai
@@ -301,7 +301,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: litellm
     urn: mas.llm_provider.litellm
@@ -321,7 +321,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: cerebras
     urn: mas.llm_provider.cerebras
@@ -341,7 +341,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: mistral
     urn: mas.llm_provider.mistral
@@ -361,7 +361,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: vllm
     urn: mas.llm_provider.vllm
@@ -381,7 +381,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: huggingface
     urn: mas.llm_provider.huggingface
@@ -401,7 +401,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   - type: llm_provider
     name: databricks
     urn: mas.llm_provider.databricks
@@ -421,7 +421,7 @@ plugins:
       call_kinds: [llm]
       priority: 0
       protocol_layer: true
-      features: [tools, streaming, structured_output]
+      features: [tools, streaming, structured_output, media]
   # Decorator around a routed protocol plugin — not claimed as spec.models[].kind
   - type: llm_provider
     name: cache

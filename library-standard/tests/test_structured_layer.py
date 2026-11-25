@@ -65,6 +65,14 @@ def test_apply_structured_result_validates() -> None:
         apply_structured_result({"content": "{}"}, {"type": "nope"})
     fenced = apply_structured_result({"content": '```json\n{"n": 1}\n```'}, _SCHEMA)
     assert fenced["parsed"] == {"n": 1}
+    parts = apply_structured_result({"content": [{"type": "text", "text": '{"n": 1}'}]}, _SCHEMA)
+    assert parts["parsed"] == {"n": 1}
+    array_schema = {"type": "array", "items": {"type": "object"}}
+    already = apply_structured_result(
+        {"content": [{"type": "text", "text": "hello"}]},
+        array_schema,
+    )
+    assert already["parsed"] == [{"type": "text", "text": "hello"}]
 
 
 def test_apply_skips_a_tool_call_turn() -> None:
@@ -150,6 +158,23 @@ def test_wrap_skips_non_llm_ops() -> None:
     out = asyncio.run(layer.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL")))
     assert out.text == "ok"
     assert asyncio.run(layer.ainvoke(InvokeEngineIo(correlation_id=1, op="TOOL_CALL"))).text == "ok"
+
+
+def test_parse_json_content_treats_part_list_as_wrapped_json() -> None:
+    from mas.library.standard.plugins.llm.structured import parse_json_content
+
+    assert parse_json_content([{"type": "text", "text": '{"n": 1}'}]) == {"n": 1}
+    image = {
+        "type": "image",
+        "media_type": "image/png",
+        "sha256": "abc",
+        "name": "chart.png",
+        "bytes": 4,
+    }
+    with pytest.raises(ClassifiedFailure):
+        parse_json_content([{"type": "text", "text": "see"}, image])
+    assert parse_json_content([1, 2, 3]) == [1, 2, 3]
+    assert parse_json_content([{"type": "tool_use"}]) == [{"type": "tool_use"}]
 
 
 def test_inject_and_validate_without_a_payload() -> None:

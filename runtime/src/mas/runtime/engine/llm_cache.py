@@ -216,13 +216,6 @@ def lookup_response(
     return None, None, ""
 
 
-def last_user_text(messages: list[dict[str, Any]]) -> str:
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            return str(msg.get("content") or "")
-    return ""
-
-
 def middleware_cache_serialize(
     ret: Any,
     *,

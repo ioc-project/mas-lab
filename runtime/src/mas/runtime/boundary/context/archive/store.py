@@ -57,11 +57,7 @@ class ConversationChunkStore:
         return ids
 
     def covering_message_ids(self) -> set[str]:
-        return {
-            cid
-            for cid in self.covering_ids()
-            if isinstance(self.chunks.get(cid), MessageChunk)
-        }
+        return {cid for cid in self.covering_ids() if isinstance(self.chunks.get(cid), MessageChunk)}
 
     @property
     def view_id(self) -> str:
@@ -132,8 +128,7 @@ class ConversationChunkStore:
         pinned = [
             cid
             for cid in child_ids
-            if isinstance(self.chunks.get(cid), MessageChunk)
-            and self.chunks[cid].pin_policy == PIN_NEVER
+            if isinstance(self.chunks.get(cid), MessageChunk) and self.chunks[cid].pin_policy == PIN_NEVER
         ]
         folded = [cid for cid in child_ids if cid not in pinned]
         if not folded:
@@ -161,7 +156,9 @@ class ConversationChunkStore:
         summary_text = ""
         rest = list(managed)
         if rest and is_summary_message(rest[0]):
-            content = str(rest[0].get("content") or "")
+            from mas.runtime.contracts.content_types import text_of
+
+            content = text_of(rest[0].get("content") or "")
             summary_text = content.split("\n", 1)[-1] if "\n" in content else ""
             rest = rest[1:]
 
@@ -253,9 +250,7 @@ class ConversationChunkStore:
             summary_chunk_id=str(data.get("summary_chunk_id") or ""),
             order=[str(x) for x in data.get("order") or []],
             persist_dir=str(data.get("persist_dir") or ""),
-            memory_watermark_bytes=int(
-                data.get("memory_watermark_bytes") or ARCHIVE_MEMORY_WATERMARK_BYTES
-            ),
+            memory_watermark_bytes=int(data.get("memory_watermark_bytes") or ARCHIVE_MEMORY_WATERMARK_BYTES),
         )
         for cid, raw in (data.get("chunks") or {}).items():
             store.chunks[str(cid)] = chunk_from_dict(raw)

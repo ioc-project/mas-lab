@@ -14,7 +14,16 @@ from typing import Any
 def _user_text(messages: list[dict[str, Any]]) -> str:
     for message in messages:
         if message.get("role") == "user":
-            return str(message.get("content") or "")
+            content = message.get("content")
+            if isinstance(content, str):
+                return content
+            if isinstance(content, list):
+                return "\n".join(
+                    str(part.get("text") or "")
+                    for part in content
+                    if isinstance(part, dict) and str(part.get("type") or "text") == "text"
+                )
+            return ""
     return ""
 
 

@@ -22,26 +22,26 @@ A test checks this table against `library.yaml`.
 | `structured_output` | `response_format` reaches the provider, so it constrains the answer |
 | `prompt_cache` | The layer places provider cache markers ([llm-prompt-cache.md](llm-prompt-cache.md)) |
 | `thinking` | The portable `reasoning` block is mapped to the provider's thinking controls |
-| `vision` | Image inputs are mapped |
+| `media` | Image and PDF file parts are mapped on the wire. Media is accepted on user turns only |
 
-| Provider | tools | streaming | structured_output | prompt_cache | thinking | vision |
-|----------|-------|-----------|-------------------|--------------|----------|--------|
-| openai | yes | yes | yes | - | - | - |
-| azure | yes | yes | yes | - | - | - |
-| anthropic | yes | yes | yes | yes | yes | - |
-| bedrock | yes | - | - | yes | yes | - |
-| gemini | yes | yes | yes | - | yes | - |
-| vertex | yes | yes | yes | - | yes | - |
-| openresponses | yes | yes | yes | yes | yes | - |
-| groq | yes | yes | yes | - | - | - |
-| openrouter | yes | yes | yes | - | - | - |
-| xai | yes | yes | yes | - | - | - |
-| litellm | yes | yes | yes | - | - | - |
-| cerebras | yes | yes | yes | - | - | - |
-| mistral | yes | yes | yes | - | - | - |
-| vllm | yes | yes | yes | - | - | - |
-| huggingface | yes | yes | yes | - | - | - |
-| databricks | yes | yes | yes | - | - | - |
+| Provider | tools | streaming | structured_output | prompt_cache | thinking | media |
+|----------|-------|-----------|-------------------|--------------|----------|-------|
+| openai | yes | yes | yes | - | - | yes |
+| azure | yes | yes | yes | - | - | yes |
+| anthropic | yes | yes | yes | yes | yes | yes |
+| bedrock | yes | - | - | yes | yes | yes |
+| gemini | yes | yes | yes | - | yes | yes |
+| vertex | yes | yes | yes | - | yes | yes |
+| openresponses | yes | yes | yes | yes | yes | yes |
+| groq | yes | yes | yes | - | - | yes |
+| openrouter | yes | yes | yes | - | - | yes |
+| xai | yes | yes | yes | - | - | yes |
+| litellm | yes | yes | yes | - | - | yes |
+| cerebras | yes | yes | yes | - | - | yes |
+| mistral | yes | yes | yes | - | - | yes |
+| vllm | yes | yes | yes | - | - | yes |
+| huggingface | yes | yes | yes | - | - | yes |
+| databricks | yes | yes | yes | - | - | yes |
 
 `openai` and its inheritors forward `reasoning` fields as chat-completions fields (see [llm-reasoning.md](llm-reasoning.md)) but are not listed under `thinking`: the column is for layers that build a vendor thinking request from the catalog's `thinking_mode`.
 Prompt caching on the openai family is automatic on the provider side; the layer only forwards `prompt_cache_key` and `prompt_cache_retention`.
@@ -64,6 +64,7 @@ Every layer also accepts `extra` (merged into the body) and `extra_headers` / `e
 | reasoning | `reasoning_effort` and the other fields of [llm-reasoning.md](llm-reasoning.md), catalog-gated |
 | prompt cache | `prompt_cache_key` and `prompt_cache_retention` for `openai`, `azure`, `openrouter` and `litellm`; dropped on the other named hosts; `prompt_cache_breakpoints` never |
 | usage | `prompt_tokens_details.cached_tokens` becomes `cached_tokens`; `completion_tokens_details.reasoning_tokens` becomes `reasoning_tokens` (also when streaming) |
+| media | Image parts become `image_url` data URLs; PDF file parts become `file.file_data` data URLs. Bytes come from the host media store. Media is only accepted on user turns. A model whose catalog `modalities.input` omits the part is refused before the request |
 
 Differences: Azure posts to `/openai/deployments/{name}/chat/completions` with `api-key` (or bearer with `proxy.auth: bearer`); Groq, Cerebras and Mistral send `max_tokens` instead of `max_completion_tokens`; Databricks posts to `/serving-endpoints/{name}/invocations`.
 
@@ -78,6 +79,7 @@ Differences: Azure posts to `/openai/deployments/{name}/chat/completions` with `
 | reasoning | Built from the catalog `thinking_mode` ([llm-reasoning.md](llm-reasoning.md#thinking-on-anthropic-bedrock-and-gemini)): `adaptive` sends `thinking: {type: adaptive}` and `output_config.effort`; `budget` sends `thinking: {type: enabled, budget_tokens}` kept at least 1024 below `max_tokens`; `always_on` sends only the effort. Effort `none` or `disable` sends nothing. While thinking is on, `temperature`, `top_p`, `top_k` and a forced `tool_choice` are not sent. `exclude: false` asks for `display: summarized` and returns the text as `reasoning`. Signed thinking blocks of a tool turn come back in `provider_state` and are sent first on the next request; when a tool turn of the current loop has none (a resumed session), thinking is left off for that request |
 | prompt cache | `cache_control` markers from `prompt_cache_breakpoints`, TTL from `prompt_cache_retention` (`24h` is sent as `1h`, the maximum) |
 | usage | `input_tokens` plus cache tokens becomes `prompt_tokens`; `cache_read_input_tokens` becomes `cached_tokens`; `cache_creation_input_tokens` becomes `cache_write_tokens` (also when streaming) |
+| media | Image parts become `image` blocks (`source.type: base64`); PDF file parts become `document` blocks with a `title`. Bytes come from the host media store |
 
 A refusal, or a tool call cut off by `max_tokens`, is a failed call. A failed tool result (`is_error`) is sent with `is_error: true`.
 
@@ -92,6 +94,7 @@ A refusal, or a tool call cut off by `max_tokens`, is a failed call. A failed to
 | reasoning | For a model the catalog lists with a `thinking_mode`: `additionalModelRequestFields.thinking` and `output_config.effort`, as for Anthropic. `reasoningContent` blocks of a tool turn are kept in `provider_state` and replayed first. A model the catalog does not list gets nothing; use `extra.additionalModelRequestFields` |
 | prompt cache | `cachePoint` blocks after the system content, the last tool and the last user turns; `ttl` `5m` or `1h` from `prompt_cache_retention`. Without a setting, markers go only on a model the catalog lists |
 | usage | `inputTokens` plus cache tokens becomes `prompt_tokens`; `cacheReadInputTokens` becomes `cached_tokens`; `cacheWriteInputTokens` becomes `cache_write_tokens` |
+| media | Image parts become Converse `image` blocks (`format` from the media type, `source.bytes` base64); PDF file parts become `document` blocks (`format: pdf`, `name`, `source.bytes`). Bytes come from the host media store |
 
 Authentication is a bearer token (`AWS_BEARER_TOKEN_BEDROCK`). A failed tool result is sent with `status: error`.
 
@@ -106,6 +109,7 @@ Authentication is a bearer token (`AWS_BEARER_TOKEN_BEDROCK`). A failed tool res
 | reasoning | `generationConfig.thinkingConfig` from the catalog `thinking_mode`: `budget` sends `thinkingBudget` (from `budget_tokens`, else the effort, else the catalog default, within the catalog bounds; effort `none` sends `0` only where the catalog allows it), `level` sends `thinkingLevel` `low` or `high`. `exclude: false` adds `includeThoughts` and the thought text comes back as `reasoning`, never in `content`. The `thoughtSignature` of each function call is kept in `provider_state` and replayed; a call without one gets the skip-validation signature |
 | prompt cache | a `prompt_cache_key` that starts with `cachedContents/` is sent as top-level `cachedContent`; other values and the other two fields are ignored (implicit caching is automatic) |
 | usage | `cachedContentTokenCount` becomes `cached_tokens`; `thoughtsTokenCount` becomes `reasoning_tokens` |
+| media | Image and PDF file parts become `inline_data` (`mime_type`, base64 `data`). Bytes come from the host media store |
 
 Vertex uses the project path (`proxy.project`, `proxy.location`) and a bearer token; the body is the same.
 An error body on HTTP 200 is a failed call. A failed tool result is sent as `{error: ...}`.
@@ -122,12 +126,12 @@ An error body on HTTP 200 is a failed call. A failed tool result is sent as `{er
 | reasoning | `reasoning.effort`, `reasoning.mode` and `include` from [llm-reasoning.md](llm-reasoning.md); `exclude: false` adds `reasoning.summary: auto` and the summary comes back as `reasoning`. With thinking on, `include` gets `reasoning.encrypted_content`, and each reasoning item is kept in `provider_state` and replayed before its tool call |
 | prompt cache | `prompt_cache_key` and `prompt_cache_retention` (`in_memory` or `24h`); `prompt_cache_breakpoints` is never sent |
 | usage | `input_tokens` / `output_tokens` become `prompt_tokens` / `completion_tokens`; `input_tokens_details.cached_tokens` becomes `cached_tokens`; `output_tokens_details.reasoning_tokens` becomes `reasoning_tokens` |
+| media | Image parts become `input_image` (`image_url` data URL); PDF file parts become `input_file` (`filename`, `file_data` data URL). The same media store as chat-completions. Media is only accepted on user turns |
 
 A `failed` response, an in-stream `error` event, a refusal with no other output, and a tool call cut off by `max_output_tokens` are failed calls.
 
 ## What is not supported
 
-- Image and other non-text inputs on every layer (`vision`).
 - Thinking controls for a model the catalog does not list on Bedrock (set `extra.additionalModelRequestFields`).
 - `reasoning.mode`, `think` and `include` on Anthropic, Bedrock and Gemini (they are OpenAI-family and Ollama fields).
 - A true event stream on Bedrock (`converse-stream`) and SigV4 request signing.

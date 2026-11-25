@@ -377,10 +377,8 @@ Score = (number of correct key facts) / (total number of key facts in ground tru
         messages = kg.get("messages", kg.get("session", {}).get("messages", []))
         for msg in reversed(messages):
             if msg.get("role") == "assistant":
-                content = msg.get("content", "")
-                if isinstance(content, list):
-                    texts = [c.get("text", "") for c in content if isinstance(c, dict)]
-                    return " ".join(texts)
-                return str(content)
+                from mas.runtime.contracts.content_types import text_of
+
+                return text_of(msg.get("content"), media="placeholder")
 
         return str(kg)

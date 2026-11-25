@@ -77,8 +77,9 @@ def _pick_fragment(data: Any, frag: str) -> Any:
     raise ValueError(f"fixture id {frag!r} not found")
 
 
-def load_ref(ref: str, base_path: Optional[Path]) -> Any:
-    path_text, frag = _split_ref(ref)
+def resolve_ref_path(ref: str, base_path: Optional[Path]) -> Path:
+    """Resolve ``ref`` to an existing file. Does not read the file."""
+    path_text, _frag = _split_ref(ref)
     path = Path(path_text)
     if base_path and not path.is_absolute():
         path = base_path / path
@@ -90,6 +91,17 @@ def load_ref(ref: str, base_path: Optional[Path]) -> Any:
             path = resolved
     if not path.is_file():
         raise FileNotFoundError(f"dataset ref {ref!r} not found (looked for {path})")
+    return path
+
+
+def load_binary_ref(ref: str, base_path: Optional[Path]) -> bytes:
+    """Read a part ref as bytes (images, PDFs). Never YAML-decode."""
+    return resolve_ref_path(ref, base_path).read_bytes()
+
+
+def load_ref(ref: str, base_path: Optional[Path]) -> Any:
+    path = resolve_ref_path(ref, base_path)
+    _path_text, frag = _split_ref(ref)
     if path.suffix.lower() in {".txt", ".md"}:
         if frag:
             raise ValueError(f"text ref {ref!r} does not support #fragments")

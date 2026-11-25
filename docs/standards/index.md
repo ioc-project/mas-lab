@@ -31,3 +31,25 @@ peer. [Tutorial 4](../tutorials/04-mcp-tools/README.md) and
 The landing page lists the same protocols. Hands-on paths stay under
 [Discover](../discover/index.md). Flag tables and YAML kinds stay under
 [References](../references/index.md).
+
+## Other useful references
+
+These are not open standards. MAS-Lab uses them as data or tooling.
+
+### [models.dev](https://models.dev)
+
+A community catalog of model facts (context windows, output limits,
+modalities, pricing). Source:
+[anomalyco/models.dev](https://github.com/anomalyco/models.dev). API:
+`https://models.dev/api.json`. MIT (`Copyright (c) 2025 models.dev`).
+Compatible with this repository's Apache-2.0 license; the required
+copyright and permission notice is in `NOTICE` at the repository root.
+
+MAS-Lab does not fetch it at run time and does not vendor the full dump.
+`scripts/sync_model_catalog.py` copies context, max output, modalities, and
+pricing onto curated rows in the
+[LLM model catalog](../manifests/llm-model-catalog.md). Hand-written
+settings stay as written. A sync unions modalities with the catalog list
+(so a curated `pdf` is not dropped when models.dev omits it) and does not
+write an empty list over a missing field. The runtime then gates image and
+PDF parts against those lists.

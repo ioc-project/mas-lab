@@ -73,6 +73,18 @@ def adapt_llm_provider(provider: Any, *, name: str = "") -> Any:
     return SyncLLMProvider(provider)
 
 
+def completion_stream(provider: Any) -> Any:
+    """Bound ``achat_completion_stream`` when the class defines one, else ``None``."""
+    for cls in type(provider).__mro__:
+        if "achat_completion_stream" not in cls.__dict__:
+            continue
+        stream = cls.__dict__["achat_completion_stream"]
+        if not callable(stream):
+            return None
+        return stream.__get__(provider, cls)
+    return None
+
+
 @runtime_checkable
 class LLMProvider(Protocol):
     """Protocol for LLM-provider plugins in the MAS runtime.

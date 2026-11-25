@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 _ROOT = Path(__file__).resolve().parents[2]
-_VOCABULARY = ["tools", "streaming", "structured_output", "prompt_cache", "thinking", "vision"]
+_VOCABULARY = ["tools", "streaming", "structured_output", "prompt_cache", "thinking", "media"]
 
 
 def _library_features() -> dict[str, list[str]]:

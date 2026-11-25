@@ -32,18 +32,20 @@ Loader: `mas.runtime.engine.llm_model_catalog`.
 
 ## Why a curated catalog
 
-The closest reusable community tables are [models.dev](https://models.dev) (MIT, `https://models.dev/api.json`) and [LiteLLM `model_prices_and_context_window.json`](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (MIT).
+The closest reusable community tables are [models.dev](https://models.dev) (MIT, `https://models.dev/api.json`, `Copyright (c) 2025 models.dev`) and [LiteLLM `model_prices_and_context_window.json`](https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json) (MIT).
 They are large, change often, and are not a MAS schema, so the runtime does not import them wholesale.
 The catalog lists both under `spec.sources` with `reusable: true`.
+models.dev is third-party data, not an open standard; how MAS-Lab uses it is on [Open standards — Other useful references](../standards/index.md#other-useful-references). The MIT notice is in `NOTICE` at the repository root.
 Refresh curated numbers and modalities with `python scripts/sync_model_catalog.py` (optional `--from-file` for a saved `api.json`; `--check` exits non-zero when the file would change).
 The tool writes only `context_window`, `max_output_tokens`, `modalities`, and `pricing`. It never touches aliases, apis, defaults, settings, `thinking_mode`, or `max_thinking_tokens`.
+A sync unions `modalities` with the list already on the row, so a curated token such as `pdf` stays when models.dev omits it. An empty incoming list does not write `modalities` onto a row that omitted the field.
 
 Other pointers (not in-process libraries):
 
 | Source | URL | Reuse |
 |--------|-----|--------|
 | OpenRouter models API | https://openrouter.ai/api/v1/models | live HTTP (`supported_parameters`) |
-| models.dev | https://models.dev | sync source (`reusable: true`; MIT `api.json`) |
+| models.dev | https://models.dev | third-party sync source (`reusable: true`; MIT `api.json`; notice in `NOTICE`) |
 | Hugging Face model cards | https://huggingface.co/models | cards / TGI |
 | vLLM OpenAI server | https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html | `think` / `chat_template_kwargs` |
 | Ollama API | https://github.com/ollama/ollama/blob/main/docs/api.md | `think` |

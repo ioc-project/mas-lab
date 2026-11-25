@@ -114,6 +114,67 @@ def test_sync_reports_unmatched_and_does_not_drop_it(tmp_path, sync):
     assert "unmatched-entry:" in text
 
 
+def test_sync_unions_curated_pdf_with_models_dev_image(tmp_path, sync):
+    catalog = _write_catalog(
+        tmp_path / "cat.yaml",
+        """\
+    gpt-4o:
+      aliases: [openai/gpt-4o]
+      context_window: 1
+      max_output_tokens: 2
+      modalities:
+        input: [text, image, pdf]
+        output: [text]
+""",
+    )
+    result = sync.sync_catalog(catalog, from_file=FIXTURE)
+    entry = yaml.safe_load(catalog.read_text(encoding="utf-8"))["spec"]["models"]["gpt-4o"]
+    assert entry["modalities"]["input"] == ["text", "image", "pdf"]
+    assert "gpt-4o" in result.updated
+
+
+def test_sync_does_not_write_empty_modalities_over_omitted(tmp_path, sync):
+    catalog = _write_catalog(
+        tmp_path / "cat.yaml",
+        """\
+    unmatched-entry:
+      aliases: [nobody/unmatched]
+      context_window: 111
+      max_output_tokens: 22
+""",
+    )
+    sync.sync_catalog(catalog, from_file=FIXTURE)
+    entry = yaml.safe_load(catalog.read_text(encoding="utf-8"))["spec"]["models"]["unmatched-entry"]
+    assert "modalities" not in entry
+
+
+def test_sync_gemma_override_stays_text(tmp_path, sync):
+    catalog = _write_catalog(
+        tmp_path / "cat.yaml",
+        f"""\
+    {sync.GEMMA_DEPLOYMENT}:
+      aliases: [gemma-4-26b]
+      context_window: 1
+      max_output_tokens: 2
+""",
+    )
+    api = {
+        "google": {
+            "models": {
+                sync.GEMMA_DEPLOYMENT: {
+                    "id": sync.GEMMA_DEPLOYMENT,
+                    "modalities": {"input": ["text", "image"], "output": ["text"]},
+                    "limit": {"context": 8192, "output": 1024},
+                }
+            }
+        }
+    }
+    sync.sync_catalog(catalog, api=api)
+    entry = yaml.safe_load(catalog.read_text(encoding="utf-8"))["spec"]["models"][sync.GEMMA_DEPLOYMENT]
+    assert entry["modalities"]["input"] == ["text"]
+    assert entry["context_window"] == 8192
+
+
 def test_sync_leaves_handwritten_fields_untouched(tmp_path, sync):
     catalog = _write_catalog(
         tmp_path / "cat.yaml",

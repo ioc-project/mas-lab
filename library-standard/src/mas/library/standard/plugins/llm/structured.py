@@ -38,7 +38,9 @@ def json_schema_format(schema: dict[str, Any], *, name: str = "result") -> dict[
 
 
 def _json_text(content: Any) -> str:
-    text = content.strip() if isinstance(content, str) else ""
+    from mas.runtime.contracts.content_types import text_of
+
+    text = (content if isinstance(content, str) else text_of(content)).strip()
     if not text.startswith("```"):
         return text
     rest = text[3:]
@@ -48,8 +50,23 @@ def _json_text(content: Any) -> str:
     return rest
 
 
+def _looks_like_content_parts(content: list[Any]) -> bool:
+    """True when *content* is a message part list wrapping JSON, not a JSON array value."""
+    if not content or not all(isinstance(part, dict) for part in content):
+        return False
+    kinds = [str(part.get("type") or "text") for part in content]
+    if not all(kind in {"text", "image", "file", "audio", "video"} for kind in kinds):
+        return False
+    if any(kind != "text" for kind in kinds):
+        return True
+    joined = "".join(str(part.get("text") or "") for part in content).strip()
+    return joined.startswith("{") or joined.startswith("[") or joined.startswith("```")
+
+
 def parse_json_content(content: Any) -> Any:
-    if isinstance(content, (dict, list)):
+    if isinstance(content, dict):
+        return content
+    if isinstance(content, list) and not _looks_like_content_parts(content):
         return content
     text = _json_text(content)
     if not text:

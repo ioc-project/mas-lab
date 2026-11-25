@@ -1,21 +1,20 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
+"""Event parsing: events → typed execution records."""
 
 from __future__ import annotations
-
-"""Event parsing: events → typed execution records."""
 
 import json
 from collections import defaultdict
 from typing import Any
 
+from mas.lab.plots.multilevel_trajectory.annotations import _derive_context_semantics
 from mas.lab.plots.multilevel_trajectory.constants import (
     _CALL_TYPE_TO_LEVEL,
     _KIND_BASE_TO_TYPE,
     _PROC_TYPE_LABEL,
     PROCESSING_NAME_CONTEXT_ASSEMBLY,
 )
-from mas.lab.plots.multilevel_trajectory.annotations import _derive_context_semantics
 
 
 def _normalized_str(s: Any, default: str = "?") -> str:
@@ -32,9 +31,9 @@ def _event_loc(idx: Any, ev: dict[str, Any] | None = None, *, kind: Any = "", ts
 
 def _event_sig(ev: dict[str, Any]) -> str:
     return (
-        f"kind={ev.get('kind','')} agent_id={ev.get('agent_id','')} "
-        f"call_id={ev.get('call_id','')} parent_call_id={ev.get('parent_call_id','')} "
-        f"ts={ev.get('timestamp','')}"
+        f"kind={ev.get('kind', '')} agent_id={ev.get('agent_id', '')} "
+        f"call_id={ev.get('call_id', '')} parent_call_id={ev.get('parent_call_id', '')} "
+        f"ts={ev.get('timestamp', '')}"
     )
 
 
@@ -45,30 +44,37 @@ def _dict_list(value: Any) -> list[dict] | None:
     return items or None
 
 
-def _normalize_context_messages(messages: Any) -> list[dict[str, str]]:
-    out: list[dict[str, str]] = []
+def _content_text(content: Any) -> str:
+    from mas.runtime.contracts.content_types import text_of
+
+    return text_of(content, media="placeholder").strip()
+
+
+def _content_key(content: Any) -> str:
+    from mas.runtime.contracts.content_types import content_fingerprint
+
+    return content_fingerprint(content)
+
+
+def _normalize_context_messages(messages: Any) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     if not isinstance(messages, list):
         return out
     for m in messages:
         if not isinstance(m, dict):
             continue
         role = _normalized_str(m.get("role"))
-        content = m.get("content") or ""
-        if isinstance(content, list):
-            content = " ".join(
-                p.get("text", "") for p in content if isinstance(p, dict)
-            )
-        content = str(content).strip()
-        if not content:
+        content = m.get("content")
+        if not _content_text(content) and not (isinstance(content, list) and content):
             continue
         out.append({"role": role, "content": content})
     return out
 
 
 def _context_parts_from_messages(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     *,
-    prev_messages: list[dict[str, str]] | None = None,
+    prev_messages: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Build context source records from assembled messages.
 
@@ -98,25 +104,24 @@ def _context_parts_from_messages(
         all_new = True
     else:
         prev_pairs = {
-            (_normalized_str(m.get("role")), str(m.get("content") or "").strip())
+            (_normalized_str(m.get("role")), _content_key(m.get("content")))
             for m in prev_messages
-            if str(m.get("content") or "").strip()
+            if _content_text(m.get("content")) or (isinstance(m.get("content"), list) and m.get("content"))
         }
         all_new = False
 
     parts: list[dict[str, Any]] = []
     for msg_idx, msg in enumerate(messages):
         role = _normalized_str(msg.get("role"))
-        content = str(msg.get("content") or "").strip()
-        if not content:
+        raw_content = msg.get("content")
+        content = _content_text(raw_content)
+        if not content and not (isinstance(raw_content, list) and raw_content):
             continue
-        is_new = all_new or (role, content) not in prev_pairs
+        is_new = all_new or (role, _content_key(raw_content)) not in prev_pairs
 
         # Derive semantics from role, source, and content
         semantics = _derive_context_semantics(
-            role, f"assembled/{role}",
-            tool_call_id=_normalized_str(msg.get("tool_call_id")),
-            content=content
+            role, f"assembled/{role}", tool_call_id=_normalized_str(msg.get("tool_call_id")), content=content
         )
         trigger = semantics["trigger"]
         actor = semantics["actor"]
@@ -124,39 +129,42 @@ def _context_parts_from_messages(
         cause_type = semantics["causeType"]
         cause_detail = semantics["cause_detail"]
 
-        parts.append({
-            # What: the context content
-            "content": content,
-            # Where: source tracking
-            "source": f"context/{role}",
-            "sourceType": role,
-            "sourceId": f"message_{msg_idx}",
-            "actor": actor,
-            "via": via,
-            # Why: decision tracking
-            "decision": "",  # empty unless specified in event data
-            "cause": cause_detail,
-            "causeType": cause_type,
-            "trigger": trigger,
-            # Category and mechanism (legacy, for compatibility)
-            "category": "SYSTEM" if role == "system" else "CONTEXT",
-            "mechanism": "inject",
-            # Metadata
-            "retrieval": "",
-            "tokens": max(1, len(content) // 4),
-            "retained": True,
-            "placement": f"context/{role}",
-            "sectionId": f"assembled/{msg_idx}/{role}",
-            # Newness flag: True for context pieces added since the previous LLM call
-            # Identifies delegation results, tool calls, and all other new turns
-            "highlight": is_new,
-        })
+        parts.append(
+            {
+                # What: the context content
+                "content": content,
+                # Where: source tracking
+                "source": f"context/{role}",
+                "sourceType": role,
+                "sourceId": f"message_{msg_idx}",
+                "actor": actor,
+                "via": via,
+                # Why: decision tracking
+                "decision": "",  # empty unless specified in event data
+                "cause": cause_detail,
+                "causeType": cause_type,
+                "trigger": trigger,
+                # Category and mechanism (legacy, for compatibility)
+                "category": "SYSTEM" if role == "system" else "CONTEXT",
+                "mechanism": "inject",
+                # Metadata
+                "retrieval": "",
+                "tokens": max(1, len(content) // 4),
+                "retained": True,
+                "placement": f"context/{role}",
+                "sectionId": f"assembled/{msg_idx}/{role}",
+                # Newness flag: True for context pieces added since the previous LLM call
+                # Identifies delegation results, tool calls, and all other new turns
+                "highlight": is_new,
+            }
+        )
     # Sort so that newly-added context pieces appear LAST in the list.
     # This improves readability: existing context is shown first, then the
     # new additions that caused this context assembly. Uses stable sort to
     # preserve message order within each group (new vs existing).
     parts.sort(key=lambda p: p["highlight"])
     return parts
+
 
 def _build_call_records(events: list[dict]) -> list[dict]:
     """Pair ``*_start`` / ``*_end`` events into typed execution record dicts.
@@ -177,7 +185,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
     records: list[dict] = []
     open_by_id: dict[str, dict] = {}
     open_calls: dict[tuple, list[dict]] = defaultdict(list)
-    call_seq:   dict[tuple, int]        = defaultdict(int)
+    call_seq: dict[tuple, int] = defaultdict(int)
     _STRICT_ID_TYPES = {
         "MASCall",
         "AgentCall",
@@ -237,9 +245,9 @@ def _build_call_records(events: list[dict]) -> list[dict]:
     _prev_context_by_agent: dict[str, list[dict[str, str]]] = {}
 
     for _ev_idx, ev in sorted(enumerate(events), key=lambda p: float(p[1].get("timestamp") or 0)):
-        kind      = ev.get("kind", "")
+        kind = ev.get("kind", "")
         kind_base = kind.replace("_start", "").replace("_end", "")
-        agent_id  = ev.get("agent_id", "")
+        agent_id = ev.get("agent_id", "")
         tool_name = ev.get("tool_name", "")
         # Resolve generic "contract_call" wrappers to the real tool name so the
         # start/end pair on a consistent key and the bar shows the true tool.
@@ -280,8 +288,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
             _pid = ev.get("parent_call_id")
             if _cid and _pid and _cid == _pid:
                 raise ValueError(
-                    "Invalid self-parent call boundary: call_id equals parent_call_id "
-                    f"for {_event_sig(ev)}"
+                    f"Invalid self-parent call boundary: call_id equals parent_call_id for {_event_sig(ev)}"
                 )
         # Promote MITM processing calls to a dedicated visual type.
         if call_type == "ProcessingCall" and ev.get("processing_type") == "mitm_rewrite":
@@ -308,20 +315,20 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                 call_seq[key] += 1
                 call_id = f"{kind_base}-{agent_id}-{seq}"
             record: dict[str, Any] = {
-                "call_id":        call_id,
+                "call_id": call_id,
                 "parent_call_id": ev.get("parent_call_id"),  # None for roots / old traces
-                "_has_ids":  "call_id" in ev,  # True when runtime emitted the field
+                "_has_ids": "call_id" in ev,  # True when runtime emitted the field
                 "call_type": call_type,
-                "level":     _CALL_TYPE_TO_LEVEL.get(call_type, "call"),
-                "agent_id":  agent_id,
-                "start_ts":  float(ev.get("timestamp") or 0),
-                "end_ts":    0.0,
-                "input":     ev.get("input") or ev.get("prompt") or "",
-                "output":    "",
-                "label":     _build_call_label(call_type, ev),
+                "level": _CALL_TYPE_TO_LEVEL.get(call_type, "call"),
+                "agent_id": agent_id,
+                "start_ts": float(ev.get("timestamp") or 0),
+                "end_ts": 0.0,
+                "input": ev.get("input") or ev.get("prompt") or "",
+                "output": "",
+                "label": _build_call_label(call_type, ev),
                 "tool_name": tool_name,
-                "model":     ev.get("model", ""),
-                "thinking":  "",
+                "model": ev.get("model", ""),
+                "thinking": "",
                 "correlation_id": ev.get("correlation_id"),
                 "processing_name": ev.get("processing_name", "") if call_type == "ProcessingCall" else "",
             }
@@ -347,14 +354,12 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     record["segments"] = parts
                 record["context_operation"] = str(ev.get("context_operation") or "")
                 _ctx_msgs = _normalize_context_messages(
-                    ev.get("messages")
-                    or _ca_messages_by_corr.get((agent_id, ev.get("correlation_id")))
+                    ev.get("messages") or _ca_messages_by_corr.get((agent_id, ev.get("correlation_id")))
                 )
                 if _ctx_msgs:
                     record["context_messages"] = _ctx_msgs
                     record["context_parts"] = _context_parts_from_messages(
-                        _ctx_msgs,
-                        prev_messages=_prev_context_by_agent.get(agent_id)
+                        _ctx_msgs, prev_messages=_prev_context_by_agent.get(agent_id)
                     )
                     # Update tracking: this context assembly is now the "previous"
                     # for the next LLM call from this same agent. correlation_id 0
@@ -377,15 +382,11 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     lines: list[str] = []
                     for m in msgs:
                         role = m.get("role", "?")
-                        content = m.get("content") or ""
-                        if isinstance(content, list):
-                            content = " ".join(
-                                p.get("text", "") for p in content if isinstance(p, dict)
-                            )
+                        content = _content_text(m.get("content"))
                         if not content:
                             continue
                         _label = "TOOL RESULT" if role == "tool" else role.upper()
-                        lines.append(f"[{_label}]\n{str(content)}")
+                        lines.append(f"[{_label}]\n{content}")
                     if lines:
                         record["input"] = "\n\n---\n\n".join(lines)
             if call_type == "ToolCall" and not record["input"]:
@@ -470,8 +471,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
             _end_cid = ev.get("call_id")
             if call_type in _STRICT_ID_TYPES and not _end_cid:
                 raise ValueError(
-                    "Trajectory parsing requires runtime call_id on end events; "
-                    f"cannot match {_event_sig(ev)}"
+                    f"Trajectory parsing requires runtime call_id on end events; cannot match {_event_sig(ev)}"
                 )
             record = None
             if _end_cid and _end_cid in open_by_id:
@@ -510,11 +510,11 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     #   flat runtime:     {content, tool_calls, usage}
                     choices = resp.get("choices") or []
                     if choices:
-                        msg        = choices[0].get("message") or {}
-                        content    = msg.get("content") or ""
+                        msg = choices[0].get("message") or {}
+                        content = _content_text(msg.get("content"))
                         tool_calls = msg.get("tool_calls") or []
                     else:
-                        content    = str(resp.get("content") or "")
+                        content = _content_text(resp.get("content"))
                         tool_calls = resp.get("tool_calls") or []
 
                     parts: list[str] = []
@@ -523,7 +523,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     if tool_calls:
                         tc_lines: list[str] = []
                         for tc in tool_calls:
-                            fn   = tc.get("function") or {}
+                            fn = tc.get("function") or {}
                             name = fn.get("name") or tc.get("name") or "?"
                             args = fn.get("arguments") or tc.get("arguments") or ""
                             if not isinstance(args, str):
@@ -561,8 +561,7 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                     record["context_messages"] = _ctx_msgs
                     _agent_id = record.get("agent_id") or ""
                     record["context_parts"] = _context_parts_from_messages(
-                        _ctx_msgs,
-                        prev_messages=_prev_context_by_agent.get(_agent_id)
+                        _ctx_msgs, prev_messages=_prev_context_by_agent.get(_agent_id)
                     )
                     # Update tracking: this context assembly is now the "previous"
                     # for the next LLM call from this same agent. correlation_id 0
@@ -573,7 +572,11 @@ def _build_call_records(events: list[dict]) -> list[dict]:
                         _prev_context_by_agent[_agent_id] = _ctx_msgs
                 if not record.get("context_operation"):
                     record["context_operation"] = str(ev.get("context_operation") or "")
-                if record.get("context_messages") and (not record.get("output") or str(record.get("output", "")).strip() in {"assembled", PROCESSING_NAME_CONTEXT_ASSEMBLY, "context_assembly"}):
+                if record.get("context_messages") and (
+                    not record.get("output")
+                    or str(record.get("output", "")).strip()
+                    in {"assembled", PROCESSING_NAME_CONTEXT_ASSEMBLY, "context_assembly"}
+                ):
                     # Keep context assembly as structured CPR only (parts/messages),
                     # not as a synthetic textual diff block.
                     record["output"] = ""
@@ -718,7 +721,8 @@ def _build_call_records(events: list[dict]) -> list[dict]:
         if r.get("call_type") == "LLMCall" and r.get("correlation_id") is not None
     }
     records = [
-        r for r in records
+        r
+        for r in records
         if not (
             r.get("call_type") == "ProcessingCall"
             and str(r.get("processing_name") or "").strip().lower() == PROCESSING_NAME_CONTEXT_ASSEMBLY.lower()
@@ -787,7 +791,8 @@ def _attach_parentless_calls(records: list[dict]) -> None:
 
 
 def _synthesize_context_processing_records(
-    events: list[dict], records: list[dict],
+    events: list[dict],
+    records: list[dict],
     prev_context_by_agent: dict[str, list[dict[str, str]]],
 ) -> list[dict]:
     """Create a ProcessingCall (context-assembly) node before each LLM call.
@@ -846,66 +851,65 @@ def _synthesize_context_processing_records(
         # dag.py clears a ProcessingCall's output from the following state, so
         # the system prompt shows only on the ⚙ context bar itself.
         context_messages = _normalize_context_messages(msgs)
-        context_parts = _context_parts_from_messages(
-            context_messages,
-            prev_messages=prev_context_by_agent.get(aid)
-        )
+        context_parts = _context_parts_from_messages(context_messages, prev_messages=prev_context_by_agent.get(aid))
         # Update tracking: this context assembly is now the "previous"
         # for the next LLM call from this same agent.
         prev_context_by_agent[aid] = context_messages
         cid = f"ctxasm-{aid}-{corr}"
         operation = "PREPEND" if any(msg.get("role") == "system" for msg in context_messages) else "APPEND"
-        out.append({
-            "call_id": cid,
-            "parent_call_id": llm.get("parent_call_id"),
-            "_has_ids": True,
-            "call_type": "ProcessingCall",
-            "level": "call",
-            "agent_id": aid,
-            # Sit between the preceding call and this LLM: anchor the start at the
-            # latest real call that ended before the LLM (a tool result / prior
-            # LLM) so the node never overlaps a tool that finished a fraction of a
-            # millisecond earlier.  Fall back to a tiny lead when nothing precedes
-            # (the agent's first call); Rule 1 then widens it to the agent start.
-            "start_ts": max(
-                (e for e in _ends_by_agent.get(aid, []) if e <= llm["start_ts"] + 1e-9),
-                default=llm["start_ts"] - 0.001,
-            ),
-            "end_ts": llm["start_ts"],
-            # input drives the preceding state — leave empty so the incoming turn
-            # (user question / tool result) shown there is not overwritten.
-            "input": "",
-            # Keep assembly semantics in structured fields only.
-            "output": "",
-            "label": "⚙ context",
-            "tool_name": "",
-            "model": "",
-            "thinking": "",
-            "correlation_id": corr,
-            "processing_name": "context assembly",
-            "context_operation": operation,
-            "context_messages": context_messages,
-            "context_parts": context_parts,
-        })
+        out.append(
+            {
+                "call_id": cid,
+                "parent_call_id": llm.get("parent_call_id"),
+                "_has_ids": True,
+                "call_type": "ProcessingCall",
+                "level": "call",
+                "agent_id": aid,
+                # Sit between the preceding call and this LLM: anchor the start at the
+                # latest real call that ended before the LLM (a tool result / prior
+                # LLM) so the node never overlaps a tool that finished a fraction of a
+                # millisecond earlier.  Fall back to a tiny lead when nothing precedes
+                # (the agent's first call); Rule 1 then widens it to the agent start.
+                "start_ts": max(
+                    (e for e in _ends_by_agent.get(aid, []) if e <= llm["start_ts"] + 1e-9),
+                    default=llm["start_ts"] - 0.001,
+                ),
+                "end_ts": llm["start_ts"],
+                # input drives the preceding state — leave empty so the incoming turn
+                # (user question / tool result) shown there is not overwritten.
+                "input": "",
+                # Keep assembly semantics in structured fields only.
+                "output": "",
+                "label": "⚙ context",
+                "tool_name": "",
+                "model": "",
+                "thinking": "",
+                "correlation_id": corr,
+                "processing_name": "context assembly",
+                "context_operation": operation,
+                "context_messages": context_messages,
+                "context_parts": context_parts,
+            }
+        )
     return out
 
 
 def _build_call_label(call_type: str, ev: dict) -> str:
     _fn: dict[str, Any] = {
-        "MASCall":        lambda e: e.get("mas_name") or e.get("agent_id") or "MAS",
-        "AgentCall":      lambda e: e.get("agent_id") or "agent",
-        "LLMCall":        lambda e: e.get("model") or "LLM",
-        "ToolCall":       lambda e: e.get("tool_name") or e.get("endpoint") or "tool",
-        "MemoryCall":     lambda e: e.get("memory_type") or "memory",
-        "RAGQuery":       lambda e: "RAG",
-        "MITMCall":       lambda e: "⚠ MITM",
+        "MASCall": lambda e: e.get("mas_name") or e.get("agent_id") or "MAS",
+        "AgentCall": lambda e: e.get("agent_id") or "agent",
+        "LLMCall": lambda e: e.get("model") or "LLM",
+        "ToolCall": lambda e: e.get("tool_name") or e.get("endpoint") or "tool",
+        "MemoryCall": lambda e: e.get("memory_type") or "memory",
+        "RAGQuery": lambda e: "RAG",
+        "MITMCall": lambda e: "⚠ MITM",
         "ProcessingCall": lambda e: (
             _PROC_TYPE_LABEL.get(e.get("processing_type", ""), "")
             or e.get("processing_name")
             or e.get("skill_name")
             or "proc"
         ),
-        "ContextState":   lambda e: str(e.get("update_type") or "state")[:22],
+        "ContextState": lambda e: str(e.get("update_type") or "state")[:22],
     }
     return str(_fn.get(call_type, lambda e: call_type)(ev))[:22]
 
@@ -951,6 +955,7 @@ def _extract_final_output(events: list[dict]) -> str:
 # Thinking records — synthesised from LLMCall records with thinking content
 # ---------------------------------------------------------------------------
 
+
 def _synthesize_thinking_records(records: list[dict]) -> list[dict]:
     """Create synthetic ThinkingCall records from LLMCall records that carry thinking text.
 
@@ -963,29 +968,28 @@ def _synthesize_thinking_records(records: list[dict]) -> list[dict]:
         if rec.get("call_type") != "LLMCall" or not thinking_text:
             continue
         duration = rec["end_ts"] - rec["start_ts"]
-        thinking_end_ts = (
-            rec["start_ts"] + duration * 0.85 if duration > 0.0
-            else rec["end_ts"] - 0.1
+        thinking_end_ts = rec["start_ts"] + duration * 0.85 if duration > 0.0 else rec["end_ts"] - 0.1
+        result.append(
+            {
+                "call_id": rec["call_id"] + "-thinking",
+                "parent_call_id": rec["call_id"],
+                "_has_ids": True,
+                # Internal field — used to retrieve the LLM call end for the thinking lane.
+                "_llm_end_ts": rec["end_ts"],
+                "call_type": "ThinkingCall",
+                "level": "thinking",
+                "agent_id": rec["agent_id"],
+                "start_ts": rec["start_ts"],
+                "end_ts": thinking_end_ts,
+                # Input = the LLM prompt that triggered the thinking
+                "input": rec.get("input", ""),
+                "output": thinking_text,
+                # Carry the real LLM response for the ThinkingEmit hover_out
+                "llm_output": rec.get("output", ""),
+                "label": "Think",
+                "tool_name": "",
+                "model": rec.get("model", ""),
+                "thinking": "",
+            }
         )
-        result.append({
-            "call_id":        rec["call_id"] + "-thinking",
-            "parent_call_id": rec["call_id"],
-            "_has_ids":       True,
-            # Internal field — used to retrieve the LLM call end for the thinking lane.
-            "_llm_end_ts":    rec["end_ts"],
-            "call_type":      "ThinkingCall",
-            "level":          "thinking",
-            "agent_id":       rec["agent_id"],
-            "start_ts":       rec["start_ts"],
-            "end_ts":         thinking_end_ts,
-            # Input = the LLM prompt that triggered the thinking
-            "input":          rec.get("input", ""),
-            "output":         thinking_text,
-            # Carry the real LLM response for the ThinkingEmit hover_out
-            "llm_output":     rec.get("output", ""),
-            "label":          "Think",
-            "tool_name":      "",
-            "model":          rec.get("model", ""),
-            "thinking":       "",
-        })
     return result

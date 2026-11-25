@@ -1,0 +1,48 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+$schema: "http://json-schema.org/draft-07/schema#"
+$id: "urn:mas-lab:fragments:user-parts:v1"
+title: User turn with media parts
+description: >
+  One user turn whose content is an ordered list of text and media parts.
+  ``image`` / ``file`` refs are binary files next to the dataset.
+  ``audio`` and ``video`` are accepted here and refused by the loader.
+type: object
+additionalProperties: false
+required: [parts]
+properties:
+  parts:
+    type: array
+    minItems: 1
+    items:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [text]
+          properties:
+            text:
+              type: string
+        - type: object
+          additionalProperties: false
+          required: [image]
+          properties:
+            image:
+              $ref: "urn:mas-lab:fragments:ref:v1"
+        - type: object
+          additionalProperties: false
+          required: [file]
+          properties:
+            file:
+              $ref: "urn:mas-lab:fragments:ref:v1"
+        - type: object
+          additionalProperties: false
+          required: [audio]
+          properties:
+            audio:
+              $ref: "urn:mas-lab:fragments:ref:v1"
+        - type: object
+          additionalProperties: false
+          required: [video]
+          properties:
+            video:
+              $ref: "urn:mas-lab:fragments:ref:v1"

@@ -159,6 +159,11 @@ class SummarizingConversation(ContextManagerContract):
             content = m.get("content", "")
             if isinstance(content, str):
                 total += len(content)
+            else:
+                from mas.runtime.contracts.content_types import MEDIA_PART_TOKEN_ESTIMATE, media_parts, text_chars
+
+                total += text_chars(content)
+                total += MEDIA_PART_TOKEN_ESTIMATE * 4 * len(media_parts(content))
         return total // 4 + len(messages) * 4
 
     @staticmethod
@@ -171,13 +176,14 @@ class SummarizingConversation(ContextManagerContract):
     @staticmethod
     def _fingerprint(turns: list[list[dict[str, Any]]]) -> str:
         """Content identity of a turn prefix — used when message objects were copied."""
+        from mas.runtime.contracts.content_types import content_fingerprint
+
         digest = hashlib.sha256()
         for turn in turns:
             for msg in turn:
                 digest.update(str(msg.get("role") or "").encode())
                 digest.update(b"\x1f")
-                content = msg.get("content", "")
-                digest.update(content.encode() if isinstance(content, str) else repr(content).encode())
+                digest.update(content_fingerprint(msg.get("content", "")).encode())
                 digest.update(b"\x1e")
             digest.update(b"\x1d")
         return digest.hexdigest()

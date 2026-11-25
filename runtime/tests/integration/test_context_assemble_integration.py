@@ -19,6 +19,7 @@ async def test_assemble_llm_messages_includes_user_turn():
         committed_messages=[],
         turn_history=[],
         last_user_text="hello",
+        last_user_content=None,
         observability=observability,
         turn_index=0,
         agent_id="agent",

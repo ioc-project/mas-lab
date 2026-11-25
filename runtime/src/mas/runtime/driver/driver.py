@@ -477,7 +477,7 @@ class KernelDriver(Lifecycle):
                     )
                     note = getattr(self.ctx, "note_user_input", None)
                     if callable(note):
-                        note(ingress.text)
+                        note(ingress.text, content=ingress.content)
 
             err = self._notify_governance("ingress", ingress)
             if err is not None:

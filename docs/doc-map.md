@@ -69,6 +69,7 @@ under **Open standards**. `navigation.path` renders ancestor breadcrumbs above t
 
 - [Overview](standards/index.md)
 - [OpenAI](standards/openai.md), [Open Responses](standards/openresponses.md), [MCP](standards/mcp.md), [A2A](standards/a2a.md), [Agent Skills](standards/agent-skills.md), [OpenTelemetry](standards/opentelemetry.md)
+- Other useful references (not a protocol): [models.dev](standards/index.md#other-useful-references)
 - Internals (linked, not a kicker): [A2A internals](a2a/developer.md)
 
 ### References

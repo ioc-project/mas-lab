@@ -27,7 +27,9 @@ def is_retained_instruction(msg: dict[str, Any]) -> bool:
 
 
 def _project_instruction(msg: dict[str, Any]) -> dict[str, Any]:
-    projected = {"role": "system", "content": str(msg.get("content") or "")}
+    from mas.runtime.contracts.content_types import text_of
+
+    projected = {"role": "system", "content": text_of(msg.get("content") or "")}
     attach_chunk_meta(projected, message_chunk_meta(msg))
     return projected
 
@@ -100,11 +102,5 @@ def drop_prefix_duplicates(
     return [
         msg
         for msg in messages
-        if not (
-            is_retained_instruction(msg)
-            and msg.get("role") == "system"
-            and section_id_of(msg) in section_ids
-        )
+        if not (is_retained_instruction(msg) and msg.get("role") == "system" and section_id_of(msg) in section_ids)
     ]
-
-

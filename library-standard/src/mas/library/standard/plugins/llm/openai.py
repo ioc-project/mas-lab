@@ -12,7 +12,13 @@ import json
 import logging
 from typing import Any, Callable
 
-from mas.library.standard.plugins.llm.http_protocol import HttpLlmProtocol, araise_for_status, normalize_usage
+from mas.library.standard.plugins.llm.http_protocol import (
+    HttpLlmProtocol,
+    araise_for_status,
+    normalize_usage,
+    prompt_cache_retention_wire,
+)
+from mas.library.standard.plugins.llm.media import wire_chat_messages
 from mas.runtime.boundary.context.assemble import llm_tool_choice
 from mas.runtime.engine.llm_reasoning import (
     ReasoningSettings,
@@ -34,24 +40,6 @@ from mas.runtime.reliability.classify import provider_failure
 from mas.runtime.secrets.ref import SecretRef
 
 logger = logging.getLogger(__name__)
-
-
-_FOREIGN_MESSAGE_KEYS = ("provider_state", "is_error")
-
-
-def _wire_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Messages without the keys other protocols read (the chat-completions wire rejects unknown properties)."""
-    return [
-        {k: v for k, v in m.items() if k not in _FOREIGN_MESSAGE_KEYS}
-        if any(k in m for k in _FOREIGN_MESSAGE_KEYS)
-        else m
-        for m in messages
-    ]
-
-
-def _retention(value: Any) -> str:
-    """``in_memory`` or ``24h``, the two values chat completions takes (``5m`` is the first, ``1h`` the second)."""
-    return "in_memory" if str(value) in {"in_memory", "5m"} else "24h"
 
 
 class OpenAILLMProvider(HttpLlmProtocol):
@@ -91,7 +79,7 @@ class OpenAILLMProvider(HttpLlmProtocol):
     ) -> tuple[str, dict[str, Any], dict[str, str], dict[str, Any] | None]:
         url = self.api_base.rstrip("/") + "/chat/completions"
         payload: dict[str, Any] = apply_reasoning_payload(
-            {"model": model, "messages": _wire_messages(messages)},
+            {"model": model, "messages": wire_chat_messages(messages, self.media_store, layer=self.kind or "openai")},
             reasoning,
             max_tokens=max_tokens,
         )
@@ -109,9 +97,9 @@ class OpenAILLMProvider(HttpLlmProtocol):
             if not self.forwards_prompt_cache_fields or (info is not None and not info.supports(name)):
                 payload.pop(name, None)
         if "prompt_cache_retention" in payload:
-            payload["prompt_cache_retention"] = _retention(payload["prompt_cache_retention"])
+            payload["prompt_cache_retention"] = prompt_cache_retention_wire(payload["prompt_cache_retention"])
         payload["temperature"] = info.clamp("temperature", temperature) if info is not None else temperature
-        extra = merge_extra_body(getattr(self, "extra_body", None), nested_extra, extra_body)
+        extra = merge_extra_body(self.extra_body, nested_extra, extra_body)
         if extra:
             payload.update(extra)
         payload = apply_output_token_limit(

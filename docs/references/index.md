@@ -59,6 +59,7 @@ The execution kernel, contracts, and plugins (`mas-runtime`, `mas-ctl`).
 |-------|-----------|
 | Runtime manifests (Agent, MAS, overlay) | [Manifest fields](../manifests/runtime.md) |
 | Context window, summarization, pinned prompt parts, cache and token usage | [Context management](context-management.md) |
+| Image and file parts on messages, the media store, and which layers map them | [multimodal.md](multimodal.md) |
 | Reliability (retries, circuit, `error_policy`, logging) | [reliability.md](reliability.md) |
 | Hardening: the production posture and its named checks | [hardening.md](hardening.md) |
 | LLM response cache (`llm_cache` infra middleware) | [llm-cache.md](llm-cache.md) |

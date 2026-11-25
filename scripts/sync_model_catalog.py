@@ -7,6 +7,9 @@ Maintainer tool: not imported by the runtime, not run in CI. Default writes
 the catalog; ``--check`` prints a diff and exits non-zero when it would change.
 Hand-written fields (aliases, apis, defaults, settings, thinking_mode,
 max_thinking_tokens) are left untouched.
+
+models.dev is MIT (Copyright (c) 2025 models.dev). The required notice is in
+NOTICE at the repository root. The runtime does not fetch this URL.
 """
 
 from __future__ import annotations
@@ -205,6 +208,11 @@ def _norm_modalities(raw: Any) -> list[str]:
     if not isinstance(raw, list):
         return []
     present = {str(item) for item in raw}
+    return [name for name in ALLOWED_MODALITIES if name in present]
+
+
+def _union_modalities(existing: Any, incoming: Any) -> list[str]:
+    present = set(_norm_modalities(existing)) | set(_norm_modalities(incoming))
     return [name for name in ALLOWED_MODALITIES if name in present]
 
 
@@ -481,6 +489,18 @@ def sync_catalog(
             result.unmatched.append(str(name))
             continue
         facts = facts_from_record(record)
+        existing_modalities = raw.get("modalities") if isinstance(raw, dict) else None
+        incoming_modalities = facts.get("modalities") if isinstance(facts.get("modalities"), dict) else {}
+        old_in = existing_modalities.get("input") if isinstance(existing_modalities, dict) else []
+        old_out = existing_modalities.get("output") if isinstance(existing_modalities, dict) else []
+        new_in = incoming_modalities.get("input") or []
+        new_out = incoming_modalities.get("output") or []
+        merged_in = _union_modalities(old_in, new_in)
+        merged_out = _union_modalities(old_out, new_out)
+        if merged_in or merged_out:
+            facts["modalities"] = {"input": merged_in, "output": merged_out}
+        else:
+            facts.pop("modalities", None)
         if str(name) == GEMMA_DEPLOYMENT:
             modalities = dict(facts.get("modalities") or {})
             modalities["input"] = ["text"]

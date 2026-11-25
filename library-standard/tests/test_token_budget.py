@@ -25,6 +25,26 @@ def _tool_group(call_id: str, arg_len: int = 20) -> list[dict]:
     ]
 
 
+def test_estimate_tokens_counts_list_content_and_media() -> None:
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "see"},
+                {
+                    "type": "image",
+                    "media_type": "image/png",
+                    "sha256": "abc",
+                    "name": "chart.png",
+                    "bytes": 4,
+                },
+            ],
+        }
+    ]
+    n = estimate_tokens(messages)
+    assert n > estimate_tokens([{"role": "user", "content": "see"}])
+
+
 def test_pin_tail_alone_over_budget_is_trimmed_not_just_warned() -> None:
     pin_tail = _tool_group("c1") + _tool_group("c2") + _tool_group("c3") + _tool_group("c4")
     budget_for_one_group = estimate_tokens(_tool_group("cN")) + 4  # just over one group's cost

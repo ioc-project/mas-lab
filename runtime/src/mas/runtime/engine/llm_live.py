@@ -427,8 +427,10 @@ class LiveLlmEngine(Lifecycle):
         message, _retries = await self._acomplete_with_truncation_policy(
             messages, tools=None, temperature=0.0, model=use_model
         )
-        content = message.get("content") if isinstance(message, dict) else getattr(message, "content", "")
-        return str(content or "").strip()
+        content = message.get("content") if isinstance(message, dict) else ""
+        from mas.runtime.contracts.content_types import text_of
+
+        return text_of(content).strip()
 
     async def aexchange_snapshot(self, op: str, *, correlation_id: int = 0) -> ExchangeSnapshot:
         """Structured outbound LLM payload or pending tool call. Not a display string.
@@ -792,7 +794,9 @@ class LiveLlmEngine(Lifecycle):
                 pricing=pricing or {},
             )
 
-        text = str(message.get("content") or "").strip()
+        from mas.runtime.contracts.content_types import text_of
+
+        text = text_of(message.get("content")).strip()
         return EngineIoReturn(
             correlation_id=io.correlation_id,
             response_kind="MODEL_TEXT",
@@ -885,8 +889,11 @@ class LiveLlmEngine(Lifecycle):
         provider = self.llm_provider
         if provider is None:
             raise RuntimeError("no LLM provider configured")
-        on_chunk = getattr(self.ctx, "on_stream_chunk", None) if self.ctx is not None else None
+        on_chunk = self.ctx.on_stream_chunk if self.ctx is not None else None
         use_model = (model or self.model or "").strip() or self.model
+        from mas.runtime.contracts.content_types import check_messages_modalities
+
+        check_messages_modalities(use_model, messages)
         kwargs: dict[str, Any] = {
             "model": use_model,
             "messages": messages,
@@ -905,15 +912,12 @@ class LiveLlmEngine(Lifecycle):
         if api_key is not None:
             kwargs["api_key"] = api_key
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        if not hasattr(provider, "achat_completion"):
-            raise RuntimeError(
-                f"LLM provider {type(provider).__name__} has no achat_completion "
-                "(async twin of chat_completion is required; worker-thread fallback is not supported)"
-            )
-        stream_iter = getattr(provider, "achat_completion_stream", None)
+        from mas.runtime.registry.llm_provider_protocol import completion_stream
+
+        stream_iter = completion_stream(provider)
         # ainvoke is the cancellable path. Stream when the provider can, so
         # cancel lands between tokens and append_partial has a prefix to keep.
-        if callable(stream_iter):
+        if stream_iter is not None:
             kwargs["stream"] = True
             return await self._achat_completion_streamed(stream_iter, kwargs)
         return await provider.achat_completion(**kwargs)
@@ -948,9 +952,7 @@ class LiveLlmEngine(Lifecycle):
         return {"role": "assistant", "content": "".join(parts), "finish_reason": "stop"}
 
     def _emit_llm_delta(self, text: str) -> None:
-        session_id = ""
-        if self.ctx is not None:
-            session_id = str(getattr(self.ctx, "session_id", "") or "")
+        session_id = str(self.ctx.session_id or "") if self.ctx is not None else ""
         if session_id:
             from mas.runtime.engine.inflight_llm import append_partial
 

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from enum import Enum
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal, Union
 
 from mas.runtime.schema.hitl import HitlResolveChoice
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +29,7 @@ class UserInputReceived(BaseModel):
     kind: Literal[IngressKind.USER_INPUT_RECEIVED] = IngressKind.USER_INPUT_RECEIVED
     user_turn_id: str
     text: str
+    content: str | list[dict[str, Any]] | None = None
     # One fresh id per input prompt — distinct from user_turn_id (a short,
     # session-sequential label like "u1", reused for delegation matching).
     # Governance/observability read this (via Transition.task_id, propagated

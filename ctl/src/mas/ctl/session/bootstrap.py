@@ -124,6 +124,7 @@ class InstantiationOptions:
     obs_attach_plugins: bool = True
     entry_id: str | None = None
     delegate_ids: tuple[str, ...] = ()
+    media_store: Any = None
 
 
 def _enforce_hardening(options: InstantiationOptions, spec: dict) -> dict:
@@ -325,6 +326,10 @@ def instantiate_runtime(
     else:
         from mas.ctl.session.manifest_config import agent_id_from_manifest
 
+        if options.media_store is None:
+            from mas.ctl.media import directory_store_for_events_file
+
+            options = replace(options, media_store=directory_store_for_events_file(options.events_file))
         selection = build_engine(
             ctx,
             options.agent_manifest,
@@ -346,6 +351,7 @@ def instantiate_runtime(
             agent_id=agent_id_from_manifest(options.agent_manifest),
             entry_id=str(options.entry_id or ""),
             delegate_ids=list(options.delegate_ids),
+            media_store=options.media_store,
         )
     engine_obj = selection.engine
     if engine_obj is not None:

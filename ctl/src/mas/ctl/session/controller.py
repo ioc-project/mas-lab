@@ -106,7 +106,9 @@ class TurnResult:
 
     @property
     def text(self) -> str:
-        parts = [r.content for r in self.responses if getattr(r, "content", "")]
+        from mas.runtime.contracts.content_types import text_of
+
+        parts = [text_of(r.content) for r in self.responses if text_of(r.content)]
         return "\n".join(parts).strip()
 
 
@@ -400,6 +402,7 @@ class SessionController:
         parent_call_id: str = "",
         upstream_correlation_id: int | None = None,
         dequeued: bool = False,
+        content: Any = None,
     ) -> TurnResult:
         """Sync entry for callers that are not async: :meth:`arun_turn` on this controller's own loop.
 
@@ -414,6 +417,7 @@ class SessionController:
                 parent_call_id=parent_call_id,
                 upstream_correlation_id=upstream_correlation_id,
                 dequeued=dequeued,
+                content=content,
             )
         )
 
@@ -481,6 +485,7 @@ class SessionController:
         parent_call_id: str = "",
         upstream_correlation_id: int | None = None,
         dequeued: bool = False,
+        content: Any = None,
     ) -> TurnResult:
         """Run one user turn. One session runs one turn at a time: a second one raises ``SessionBusy``.
 
@@ -497,6 +502,7 @@ class SessionController:
                 parent_call_id=parent_call_id,
                 upstream_correlation_id=upstream_correlation_id,
                 dequeued=dequeued,
+                content=content,
             )
 
     async def _arun_turn_guarded(
@@ -508,6 +514,7 @@ class SessionController:
         parent_call_id: str = "",
         upstream_correlation_id: int | None = None,
         dequeued: bool = False,
+        content: Any = None,
     ) -> TurnResult:
         if text.strip().lower() == "/backtrack" or text.strip().lower().startswith("/backtrack "):
             return self._handle_backtrack(text)
@@ -541,6 +548,7 @@ class SessionController:
                 auto_hitl=auto_hitl,
                 parent_call_id=parent_call_id,
                 upstream_correlation_id=upstream_correlation_id,
+                content=content,
             )
         finally:
             with self._turn_lock:
@@ -580,6 +588,7 @@ class SessionController:
         auto_hitl: bool = True,
         parent_call_id: str = "",
         upstream_correlation_id: int | None = None,
+        content: Any = None,
     ) -> TurnResult:
         from mas.ctl.manifest.mas_agent_merge import reset_engine_delegation
 
@@ -595,7 +604,10 @@ class SessionController:
         if hasattr(self.instance, "driver") and hasattr(self.instance.driver, "caller_agent_id"):
             self.instance.driver.caller_agent_id = self.caller_agent_id
         if self.display is not None:
-            self.display.on_user(text, turn_id=tid)
+            from mas.runtime.contracts.content_types import text_of
+
+            shown = text if content is None else (text_of(content, media="placeholder") or text)
+            self.display.on_user(shown, turn_id=tid)
         on_working = getattr(self.display, "on_working", None)
         if callable(on_working):
             on_working()
@@ -611,6 +623,7 @@ class SessionController:
             source=queued_source,
             sender=queued_actor,
             intent="steer" if queued_source == "peer" else "",
+            content=content,
         )
         end_working = getattr(self.display, "end_working", None)
         if callable(end_working):
@@ -708,10 +721,13 @@ class SessionController:
             self._present_boundary_error(err)
 
     def _present_client_response(self, resp: EmitClientResponse) -> None:
+        from mas.runtime.contracts.content_types import text_of
+
+        body = text_of(resp.content)
         if resp.finish_reason == "error":
-            self.display.on_turn_error(resp.content)
-        elif resp.content.strip():
-            self.display.on_agent(resp.content)
+            self.display.on_turn_error(body)
+        elif body.strip():
+            self.display.on_agent(body)
 
     def _present_boundary_error(self, err: object) -> None:
         code = getattr(err, "code", str(err))

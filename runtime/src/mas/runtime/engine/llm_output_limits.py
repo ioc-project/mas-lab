@@ -252,6 +252,11 @@ def estimate_prompt_tokens(messages: list[dict[str, Any]], tools: list[dict[str,
         content = message.get("content")
         if isinstance(content, str):
             chars += len(content)
+        elif isinstance(content, list):
+            from mas.runtime.contracts.content_types import MEDIA_PART_TOKEN_ESTIMATE, media_parts, text_chars
+
+            chars += text_chars(content)
+            chars += MEDIA_PART_TOKEN_ESTIMATE * 4 * len(media_parts(content))
         elif content is not None:
             chars += len(json.dumps(content, default=str))
         for call in message.get("tool_calls") or []:

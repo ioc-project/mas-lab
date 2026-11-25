@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 from mas.runtime.driver.driver import KernelDriver
+from mas.runtime.driver.mocks import AutoCtxAssembler
 from mas.runtime.engine.inflight_llm import has_inflight
 from mas.runtime.kernel.orchestrator import RuntimeKernel
 from mas.runtime.schema.egress import InvokeEngineIo
@@ -117,7 +118,7 @@ async def test_preempt_live_stream_keeps_prefix_and_does_not_finish() -> None:
             yield {"delta": "Hello "}
             await asyncio.sleep(30)
 
-    ctx = type("C", (), {"session_id": "s-live", "observability": None})()
+    ctx = AutoCtxAssembler(session_id="s-live")
     engine = LiveLlmEngine(llm_provider=_HangStream(), use_cache=False, model="stub", stream=False, ctx=ctx)
     driver = KernelDriver(kernel=RuntimeKernel(), engine=engine, session_id="s-live")
     io = InvokeEngineIo(correlation_id=1, op="LLM_CALL")

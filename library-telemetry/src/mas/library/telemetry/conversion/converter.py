@@ -1617,7 +1617,9 @@ class MasOtelConverter:
                 if role:
                     out.setdefault(semconv.GEN_AI_PROMPT_ROLE, str(role))
                 if content:
-                    out.setdefault(semconv.GEN_AI_PROMPT_CONTENT, str(content))
+                    from mas.runtime.contracts.content_types import text_of
+
+                    out.setdefault(semconv.GEN_AI_PROMPT_CONTENT, text_of(content, media="placeholder"))
 
         if boundary == "ToolCall":
             tool_name = out.get("mas.tool.name")

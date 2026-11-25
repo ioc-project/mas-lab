@@ -274,6 +274,7 @@ def build_engine(
     agent_id: str = "",
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    media_store: Any = None,
 ) -> EngineSelection:
     pid = pattern_plugin_id or default_pattern_plugin_id()
     if not _requires_concrete_model(manifest, pattern_plugin_id):
@@ -396,6 +397,7 @@ def build_engine(
         reasoning=reasoning.to_spec_dict(),
         wrap_cache=False,
         retry_overlay=retry_overlay,
+        media_store=media_store,
     )
     engine = LiveLlmEngine(
         ctx=ctx,
