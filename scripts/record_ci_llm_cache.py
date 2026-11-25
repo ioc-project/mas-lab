@@ -16,8 +16,8 @@ Usage (repo root; the provider key is the ``openai`` secret of the file store):
 The store defaults to the repository's ``.mas/secrets``; the recording runs read it, never
 an environment variable.
 
-``MAS_RECORD_PROVIDER`` overrides the inner LLM bundle (default: user
-``~/.config/mas/infra/llm-proxy.yaml`` if present, else ``standard:openai``).
+``MAS_RECORD_PROVIDER`` overrides the inner LLM bundle (default: ``standard:openai``). The recording needs
+an OpenAI key: cache keys include the ``api_base``, so a gateway cannot record what ``standard:openai`` replays.
 """
 
 from __future__ import annotations
@@ -38,7 +38,6 @@ REPLAY = REPO / "tests" / "fixtures" / "llm-cache" / "ci-replay.yaml"
 CACHE = REPO / "tests" / "fixtures" / "llm-cache" / "ci.llm-cache.json"
 T01 = REPO / "docs" / "tutorials" / "01-building-an-agent"
 SAMPLE_WS = REPO / "library-samples" / "sample-workspace"
-USER_PROXY = Path.home() / ".config" / "mas" / "infra" / "llm-proxy.yaml"
 
 _MANIFESTS = (
     REPO / "tests" / "fixtures" / "lab-smoke" / "labs.yaml",
@@ -74,12 +73,14 @@ def _openai_secret_present(directory: Path) -> bool:
 
 
 def _provider() -> str:
-    env = os.environ.get("MAS_RECORD_PROVIDER", "").strip()
-    if env:
-        return env
-    if USER_PROXY.is_file():
-        return str(USER_PROXY.resolve())
-    return "standard:openai"
+    """The inner LLM bundle to record with.
+
+    A cache key includes the leaf name and the ``api_base``, and the replay runs on ``standard:openai``
+    (``https://api.openai.com/v1``). A recording made through another gateway therefore replays nothing, so
+    the default is ``standard:openai`` and ``MAS_RECORD_PROVIDER`` is for a provider with the same leaf and
+    ``api_base``.
+    """
+    return os.environ.get("MAS_RECORD_PROVIDER", "").strip() or "standard:openai"
 
 
 def _experiments() -> list[tuple[str, Path]]:
@@ -125,6 +126,7 @@ def _run_experiment(experiment: Path, out: Path, traces: Path, env: dict[str, st
             "-c",
             (
                 "import sys; from pathlib import Path; "
+                "from mas.runtime.entrypoint import install_host_environment; install_host_environment(); "
                 "from mas.lab.secret_host import SecretHostSettings; "
                 "SecretHostSettings(directory=sys.argv[4]).install_process(); "
                 "from mas.lab.benchmark.worker import run_benchmark_sync; "
