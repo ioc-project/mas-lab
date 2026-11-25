@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from mas.ctl.session.llm_scheduler_env import install_env_overrides, llm_scheduler_overrides
-from mas.runtime.engine.llm_scheduler import SchedulerPolicy, explicit_overrides, install_overrides
+from mas.library.standard.lib.llm_scheduler import SchedulerPolicy, explicit_overrides, install_overrides
 
 
 @pytest.fixture(autouse=True)

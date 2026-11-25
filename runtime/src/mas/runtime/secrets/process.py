@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from mas.runtime import hostenv
-from mas.runtime.envkeys import CHILD_KEYS, LAB_KEYS, PROCESS_KEEP
+from mas.runtime.envkeys import CHILD_KEYS, LAB_KEYS, PROCESS_KEEP, declared_lab_keys
 
 
 class HostNotInstalled(RuntimeError):
@@ -17,7 +17,8 @@ class HostNotInstalled(RuntimeError):
 def child_env(extra: Mapping[str, str] | None = None, *, lab: bool = False) -> dict[str, str]:
     """Environment for a spawn: the host's :data:`~mas.runtime.envkeys.CHILD_KEYS` (run, trust anchors,
     proxies; a credentialed proxy URL is refused at the entry point), with *lab* also
-    :data:`~mas.runtime.envkeys.LAB_KEYS` and :data:`~mas.runtime.envkeys.PROCESS_KEEP`, plus *extra*.
+    :data:`~mas.runtime.envkeys.LAB_KEYS`, :data:`~mas.runtime.envkeys.PROCESS_KEEP` and the keys a library
+    declared, plus *extra*.
 
     The source is hostenv: a process whose entry point installed no host raises instead of starting a
     child with an empty environment.
@@ -29,7 +30,7 @@ def child_env(extra: Mapping[str, str] | None = None, *, lab: bool = False) -> d
             "mas.runtime.entrypoint.install_host_environment() first."
         )
     host = hostenv.snapshot()
-    keys = CHILD_KEYS | LAB_KEYS | PROCESS_KEEP if lab else CHILD_KEYS
+    keys = CHILD_KEYS | LAB_KEYS | PROCESS_KEEP | declared_lab_keys() if lab else CHILD_KEYS
     out = {key: host[key] for key in sorted(keys) if key in host}
     out.update({str(key): str(value) for key, value in (extra or {}).items()})
     return out

@@ -10,6 +10,10 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ## Unreleased
 
+### Changed
+
+- The live-LLM slot scheduler (`llm_scheduler` infra middleware) now lives entirely in `library-standard`: its store and policy moved from `mas.runtime.engine.llm_scheduler` to `mas.library.standard.lib.llm_scheduler`, next to the plugin. The runtime holds no pacing code and no pacing names: the `MAS_LLM_RPM` family of variables is declared by the scheduler's library through `mas.runtime.envkeys.declare_lab_keys`, which `mas-ctl` and `mas-lab` call at start, and a stack without the middleware paces nothing. `mas.runtime.envkeys.LLM_SCHEDULER_KEYS` is now `LLM_KEYS` (model, cache and HTTP retry variables only). Update any import of the old module.
+
 ### Added
 
 - Identity contract (`identity-contract/0`, provisional) in `library-standard` (`lib/identity`): a record builds a wallet, a holder of identities, that lists them (`identities`), selects one for an audience and task (`select`) and shows it (`present`, phases `initiate`, `challenge` and `sign`). Optional `Verifier`, `Describer`, `Revoker`, `Handshaker` and `Delegator` (derive a narrower identity into the wallet; a `Grant` only narrows). A secret param is a `SecretRef` revealed only inside the call that uses it. The contract is types and Protocols only; `rules` checks what a scheme returns, the plugin type `identity_scheme` has the explicit `none` scheme, and `testing.identity_conformance.SchemeConformance` is the conformance kit with fakes and a scripted double. A harness is bound to it in a later change; absent, nothing changes. See `docs/references/identity.md`.

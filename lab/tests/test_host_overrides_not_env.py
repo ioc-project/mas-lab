@@ -15,7 +15,8 @@ from mas.lab.benchmark.host_overrides import apply, capture
 from mas.lab.benchmark.schedule.run_batch.execute import _infra_refs_for_scenario
 from mas.lab.benchmark.schedule.run_batch.prepare import extra_overlays_for_scenario
 from mas.lab.controller.workers import _run_spec_with_demo_ui
-from mas.runtime.engine import llm_cache, llm_scheduler
+from mas.library.standard.lib import llm_scheduler
+from mas.runtime.engine import llm_cache
 
 
 @pytest.fixture(autouse=True)
@@ -122,7 +123,8 @@ def test_run_scoped_bindings_do_not_leak_between_concurrent_runs() -> None:
     """Two runs in one process (the controller daemon) each see their own bindings."""
     import threading
 
-    from mas.runtime.engine import llm_cache, llm_scheduler
+    from mas.library.standard.lib import llm_scheduler
+    from mas.runtime.engine import llm_cache
 
     seen: dict[str, tuple] = {}
     both_bound = threading.Barrier(2)
@@ -150,7 +152,7 @@ def test_run_scoped_bindings_do_not_leak_between_concurrent_runs() -> None:
 
 
 def test_the_default_scheduler_user_does_not_stick_to_the_process() -> None:
-    from mas.runtime.engine import llm_scheduler
+    from mas.library.standard.lib import llm_scheduler
 
     with llm_scheduler.default_user("first-experiment"):
         assert llm_scheduler.current_overrides()["user"] == "first-experiment"

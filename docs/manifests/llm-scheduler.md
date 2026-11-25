@@ -96,7 +96,7 @@ mas-ctl chat agent.yaml \
   --infra-ref standard:openai
 ```
 
-Env overrides (last resort, same as other `MAS_LLM_*` knobs). Only the `mas-ctl` and `mas-lab` entry points read these variables. They hand the values to the scheduler as explicit overrides (`mas.runtime.engine.llm_scheduler.install_overrides`), which win over the step's `params`. The runtime and the plugin never read the environment; a host that embeds the runtime calls `install_overrides` itself:
+Env overrides (last resort, same as other `MAS_LLM_*` knobs). Only the `mas-ctl` and `mas-lab` entry points read these variables. They hand the values to the scheduler as explicit overrides (`mas.library.standard.lib.llm_scheduler.install_overrides`), which win over the step's `params`. The runtime and the plugin never read the environment; a host that embeds the runtime calls `install_overrides` itself:
 
 | Variable | Overrides |
 | --- | --- |
@@ -115,4 +115,4 @@ Env overrides (last resort, same as other `MAS_LLM_*` knobs). Only the `mas-ctl`
 - [Infra manifests](infra.md)
 - Plugin: `mas.library.standard.plugins.infra.llm_scheduler.LlmSchedulerMiddleware`
 - Params schema: [`infra-llm-scheduler-params.schema.yaml`](../schemas/runtime/fragments/infra-llm-scheduler-params.schema.yaml)
-- Store: `mas.runtime.engine.llm_scheduler`
+- Store: `mas.library.standard.lib.llm_scheduler` (library-standard, next to the plugin)

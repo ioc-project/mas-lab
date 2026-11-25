@@ -274,7 +274,7 @@ def test_install_openai_llm_service_routes_and_is_idempotent(monkeypatch) -> Non
 
     monkeypatch.setattr("openai.OpenAI", _Client)
     monkeypatch.setattr(
-        "mas.runtime.engine.llm_scheduler.install_policy_from_pipeline",
+        "mas.library.standard.lib.llm_scheduler.install_policy_from_pipeline",
         lambda steps: installed.append(list(steps)),
     )
 

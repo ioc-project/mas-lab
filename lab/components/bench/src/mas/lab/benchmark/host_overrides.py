@@ -18,9 +18,9 @@ from typing import Any
 def capture() -> dict[str, Any]:
     """The overrides this process holds, as plain data for a job payload."""
     from mas.ctl.workspace.config import bound_infra_refs
+    from mas.library.standard.lib.llm_scheduler import current_overrides
     from mas.runtime import hostenv
     from mas.runtime.engine.llm_cache import snapshot_paths
-    from mas.runtime.engine.llm_scheduler import current_overrides
 
     return {
         "overlay": hostenv.overlay_snapshot(),
@@ -37,8 +37,8 @@ def apply(host: Mapping[str, Any] | None) -> Iterator[None]:
         yield
         return
     from mas.ctl.workspace.config import bind_infra_refs
+    from mas.library.standard.lib import llm_scheduler
     from mas.runtime import hostenv
-    from mas.runtime.engine import llm_scheduler
     from mas.runtime.engine.llm_cache import bind_paths
 
     previous = llm_scheduler.explicit_overrides()
