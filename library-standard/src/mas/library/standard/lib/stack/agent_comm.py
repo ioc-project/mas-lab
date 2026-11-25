@@ -13,6 +13,7 @@ from typing import Any
 from mas.library.standard.lib.comm.send_context import align_send
 from mas.library.standard.lib.stack.envelope import Envelope
 from mas.library.standard.lib.stack.layer import Handler
+from mas.library.standard.lib.stack.session import SESSION_HOOK_META
 from mas.runtime.aio import acall
 from mas.runtime.boundary.agentcomm.protocol import SendContext
 
@@ -99,5 +100,8 @@ def call_kwargs(envelope: Envelope) -> dict[str, Any]:
             intent=str(meta.get("intent") or ""),
             sender=str(meta.get("sender") or ""),
             mode=str(meta.get("mode") or ""),
+            metadata=dict(meta.get("metadata") or {}),
+            session_hook=meta.get(SESSION_HOOK_META),
+            message_id=str(meta.get("message_id") or ""),
         ),
     }

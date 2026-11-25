@@ -1,0 +1,32 @@
+[
+  {
+    "body": {
+      "id": "<uuid>",
+      "jsonrpc": "2.0",
+      "method": "SendMessage",
+      "params": {
+        "configuration": {},
+        "message": {
+          "messageId": "<uuid>",
+          "metadata": {
+            "mas.caller_call_id": "",
+            "mas.correlation_id": "0"
+          },
+          "parts": [
+            {
+              "text": "hello"
+            }
+          ],
+          "role": "ROLE_USER"
+        }
+      }
+    },
+    "headers": {
+      "a2a-version": "1.0",
+      "accept": "*/*",
+      "content-type": "application/json"
+    },
+    "method": "POST",
+    "path": "/"
+  }
+]

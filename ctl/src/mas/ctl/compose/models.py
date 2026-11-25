@@ -51,6 +51,10 @@ class ResolvedInfra:
     agent_chains: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     agent_usage: dict[str, list[str]] = field(default_factory=dict)
     stacks: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    # The records of the ``Identity`` infra rows, by id: a scheme and its params (a secret one is a SecretRef).
+    identities: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # One token per bind that uses identity: the wallets of two runs in one process never read each other's.
+    identity_scope: str = ""
     # Flavour bind.llm / bind.tools default steps, and each agent's own when
     # bind.agents.<id>.llm / .tools names a stack (else the default).
     llm_stack: list[dict[str, Any]] = field(default_factory=list)

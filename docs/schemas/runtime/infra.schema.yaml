@@ -51,6 +51,7 @@ properties:
       - RuntimeEngine
       - ServiceBundle
       - Stack
+      - Identity
 
   metadata:
     type: object
@@ -179,6 +180,21 @@ properties:
           uses ``llm_cache`` replay (``raise_on_miss``); cache wraps the
           routed protocol plugin.
         default: openai
+
+      identities:
+        type: array
+        description: >
+          Identity kind: named identity records, each a scheme (an installed
+          ``identity_scheme`` plugin) with its parameters. A secret parameter
+          is a SecretRef (``{secret: NAME}``), never a value.
+        items:
+          type: object
+          additionalProperties: false
+          required: [id, scheme]
+          properties:
+            id: {type: string, minLength: 1}
+            scheme: {type: string, minLength: 1}
+            params: {type: object, additionalProperties: true}
 
       layers:
         type: array

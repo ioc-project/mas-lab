@@ -394,6 +394,7 @@ def expose_agent(
         require_a2a_grpc(grpc_reason)
     plugin_type = a2a_plugin_type(protocol) if a2a_plugin_type is not None else protocol
     _refuse_unhardened_listener(flavour_spec, manifest, endpoint)
+    _refuse_unenforced_pipeline(endpoint)
     exposure = get_registry().create(
         "agent_expose",
         binding={"type": plugin_type},
@@ -435,6 +436,27 @@ def expose_agent(
     url = str(endpoint.get("url") or "").strip() or f"http://{handle.host}:{handle.port}"
     logger.info("agent %r: A2A interrogation listening on %s", (manifest.get("metadata") or {}).get("name") or "", url)
     return _ExposureWithConversations(handle, handler)
+
+
+def _refuse_unenforced_pipeline(endpoint: dict[str, Any]) -> None:
+    """A listen row that names a protocol layer (an identity verifier) the host cannot put in front of its handler.
+
+    The A2A and MCP hosts take their inbound chain from the program that builds them; this host builds the endpoint
+    only, so a verifier named here would never run and the listener would serve unverified. Refused, not skipped.
+    """
+    steps = [step for step in endpoint.get("pipeline") or [] if isinstance(step, dict)]
+    if not steps:
+        return
+    from mas.runtime.layers.compose import layer_id, layer_role
+
+    carried = [
+        layer_id(step) for step in steps if layer_role(step) == "protocol" and layer_id(step) not in {"a2a", "mcp"}
+    ]
+    if carried:
+        raise ValueError(
+            f"listen row {endpoint.get('url') or endpoint.get('protocol')!r} names layer {carried[0]!r}, which "
+            "this host cannot put in front of its handler: it would serve callers unverified"
+        )
 
 
 def _refuse_unhardened_listener(

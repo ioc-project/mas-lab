@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import logging
 import threading
 import time
@@ -45,6 +47,54 @@ async def test_a_sync_layer_over_a_sync_layer_runs_without_deadlock_on_one_threa
     bottom, top = _Bottom(), _SyncTop()
     top.bind(bottom)
     assert await top.asend(Envelope(payload="p")) == "top>bottom:p"
+
+
+class _AsyncMiddle(Layer):
+    async def asend(self, envelope: Envelope) -> str:
+        return f"middle>{await self._require().asend(envelope)}"
+
+
+class _BottomUsingRunSync(Layer):
+    needs_lower = False
+
+    async def asend(self, envelope: Envelope) -> str:
+        # a transport that runs a blocking call on the shared sync workers
+        return await run_sync(lambda: f"bottom:{envelope.payload}")
+
+
+async def test_a_sync_layer_over_an_async_layer_over_a_run_sync_bottom_does_not_deadlock_on_one_thread() -> None:
+    configure_sync_threads(1)
+
+    class _SyncOverAsync(Layer):
+        def send(self, envelope: Envelope) -> str:
+            # a sync layer hands the call back to the loop for the async layer below (the inherited send)
+            return f"top>{super().send(envelope)}"
+
+    bottom, middle, top = _BottomUsingRunSync(), _AsyncMiddle(), _SyncOverAsync()
+    middle.bind(bottom)
+    top.bind(middle)
+    reply = await asyncio.wait_for(top.asend(Envelope(payload="p")), timeout=10)
+    assert reply == "top>middle>bottom:p"
+
+
+async def test_the_context_of_a_sync_layer_reaches_the_layer_below_through_the_loop() -> None:
+    configure_sync_threads(1)
+    var: contextvars.ContextVar[str] = contextvars.ContextVar("who", default="nobody")
+
+    class _Reads(Layer):
+        needs_lower = False
+
+        async def asend(self, envelope: Envelope) -> str:
+            return var.get()
+
+    class _Top(Layer):
+        def send(self, envelope: Envelope) -> str:
+            return super().send(envelope)
+
+    bottom, top = _Reads(), _Top()
+    top.bind(bottom)
+    var.set("alice")
+    assert await asyncio.wait_for(top.asend(Envelope(payload="p")), timeout=10) == "alice"
 
 
 async def test_the_worker_pool_size_is_the_engine_setting() -> None:

@@ -40,11 +40,12 @@ credentials, and a check that everything works. The CLI and web UI share it.
 | 13 | [Control attach and debug scripts](13-control-and-debug/README.md) | Interrupt a bad session, persist, resume; investigate; steer-to-fix on the restarted chat; auto-checkpoint tree; gdb `script_file` / `--debug-script` |
 | 14 | [Governance and HITL](14-governance-hitl/README.md) | Require human or policy approval (human in the loop, HITL) before a tool call runs |
 | 15 | [World events and fixtures](15-world-events-and-fixtures/README.md) | Experiment fixtures, per-item triggers, `environment.jsonl`, and the timeline lane |
+| 16 | [Identity](16-identity/README.md) | Put an identity on a tool server, check it, and gate a call on what the identity covers |
 
 After Tutorial 14, reproduce the paper results in three labs: [Paper](../paper/index.md).
 
 Do Tutorials 0 to 3 in order: install, then one agent, then a MAS, then
-experiments. Tutorials 4 to 6 and 8 to 14 each cover one capability. Each page
+experiments. Tutorials 4 to 6 and 8 to 16 each cover one capability. Each page
 lists its prerequisites at the top, usually Tutorial 0 plus the agent or MAS it
 reuses.
 

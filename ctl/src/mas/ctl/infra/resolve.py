@@ -71,6 +71,7 @@ _LEAF_KINDS = {
     "Datastore",
     "RuntimeEngine",
     "Stack",
+    "Identity",
 }
 _VALID_KINDS = _LEAF_KINDS | {"InfraBundle"}
 
@@ -250,6 +251,7 @@ def resolve_infra_refs(
         runtime_refs=list(runtime_effective),
         applications=dict(merged.applications),
         stacks=dict(merged.stacks),
+        identities={rid: dict(row) for rid, row in merged.identities.items()},
     )
 
 
@@ -664,6 +666,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
     tool_server_order: list[str] = []
     providers: dict[str, dict[str, Any]] = {}
     stacks: dict[str, list[dict[str, Any]]] = {}
+    identities: dict[str, dict[str, Any]] = {}
     name = parts[-1].name
 
     from mas.runtime.spec.runtime_engine import merge_runtime_engine_layers
@@ -687,6 +690,9 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
             tool_servers_by_id[sid] = {**previous, **server}
             refuse_retarget(previous, tool_servers_by_id[sid], server, where=f"tool server {sid!r}")
         applications.update(m.applications)
+        identities.update(m.identities)
+        if m.kind == "Identity":
+            continue
         if m.kind == "Stack" or m.stacks:
             stacks.update(m.stacks or {str(m.name): list(m.pipeline)})
             if m.kind == "Stack":
@@ -776,6 +782,7 @@ def _merge_many(parts: list[InfraManifest]) -> InfraManifest:
         applications=applications,
         providers=providers,
         stacks=stacks,
+        identities=identities,
     )
 
 

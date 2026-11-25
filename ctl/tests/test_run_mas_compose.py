@@ -160,6 +160,8 @@ spec:
 
 
 def test_inproc_bus_transport_handoff():
+    import asyncio
+
     from mas.ctl.placement.bus.adapter import RuntimeCommEndpoint
     from mas.ctl.placement.bus.inproc import InProcessCommBus
     from mas.runtime.schema.egress import InvokeEngineIo
@@ -167,16 +169,18 @@ def test_inproc_bus_transport_handoff():
     delivered = []
 
     class _Inst:
-        def feed(self, payload):
+        async def afeed(self, payload):
             delivered.append(payload.response_kind)
 
     bus = InProcessCommBus()
     bus.register("alpha", RuntimeCommEndpoint("alpha", _Inst()))
     bus.register("beta", RuntimeCommEndpoint("beta", _Inst()))
-    result = bus.send(
-        from_agent="alpha",
-        to_agent="beta",
-        intent=InvokeEngineIo(correlation_id=1, op="TRANSPORT_MSG"),
+    result = asyncio.run(
+        bus.asend(
+            from_agent="alpha",
+            to_agent="beta",
+            intent=InvokeEngineIo(correlation_id=1, op="TRANSPORT_MSG"),
+        )
     )
     assert result is not None
     assert result.response_kind == "TRANSPORT_ACK"

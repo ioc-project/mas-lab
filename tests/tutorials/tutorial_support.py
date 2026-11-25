@@ -33,6 +33,7 @@ T09 = TUTORIALS / "09-kg-scope"
 T12 = TUTORIALS / "12-subagents"
 T13 = TUTORIALS / "13-control-and-debug"
 T14 = TUTORIALS / "14-governance-hitl"
+T16 = TUTORIALS / "16-identity"
 
 
 # ---------------------------------------------------------------------------

@@ -487,7 +487,7 @@ class LiveLlmEngine(Lifecycle):
             return None
         self._budget.note_tool()
         name, arguments = self._take_pending_tool(io.correlation_id)
-        return IN_FLIGHT_TOOL.set(InFlightTool(owner=id(self), name=name, arguments=arguments))
+        return IN_FLIGHT_TOOL.set(InFlightTool(owner=id(self), name=name, arguments=arguments, call=io.correlation_id))
 
     def _tool_failure_return(self, io: InvokeEngineIo, exc: BaseException) -> EngineIoReturn:
         classified = (

@@ -114,6 +114,7 @@ class InfraManifest:
     applications: dict[str, dict[str, Any]] = field(default_factory=dict)
     providers: dict[str, dict[str, Any]] = field(default_factory=dict)
     stacks: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    identities: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def load(cls, path: Path | str) -> InfraManifest:
@@ -154,6 +155,11 @@ class InfraManifest:
                 stamp_layer_step(item, where=name or "stack") for item in (raw_layers or []) if isinstance(item, dict)
             ]
             stacks = {name or "stack": list(pipeline)}
+        identities = {
+            str(row["id"]): dict(row)
+            for row in (spec.get("identities") or [])
+            if isinstance(row, dict) and row.get("id")
+        }
         return cls(
             name=name,
             kind=kind,
@@ -179,6 +185,7 @@ class InfraManifest:
             applications=applications,
             providers=_providers_from_document(spec.get("providers")),
             stacks=stacks,
+            identities=identities,
         )
 
     def to_document(self) -> dict[str, Any]:
@@ -219,6 +226,8 @@ class InfraManifest:
             spec["providers"] = {str(name): dict(leaf) for name, leaf in self.providers.items()}
         if self.protocol:
             spec["protocol"] = self.protocol
+        if self.identities:
+            spec["identities"] = [dict(row) for row in self.identities.values()]
         return {
             "apiVersion": "infra/v1",
             "kind": self.kind or "InfraBundle",

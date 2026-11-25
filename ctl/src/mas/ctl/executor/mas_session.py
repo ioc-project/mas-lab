@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -280,7 +280,10 @@ def resolve_entry_pattern_plugin_id(
 
 def materialize_mas_compose(compose: ComposeResult, *, mas_base_dir: Path | None = None) -> MaterializedMas:
     base = mas_base_dir or compose.bind.mas_base_dir or Path.cwd()
-    materialized = get_placement_backend(compose.plan.strategy).materialize(compose.bind, compose.plan)
+    # The agents are built from the infra the session bound (a Flavour's stacks, an Identity row's records), not from
+    # the infra the compose step resolved before any Flavour was applied.
+    bind = replace(compose.bind, resolved_infra=compose.resolved_infra)
+    materialized = get_placement_backend(compose.plan.strategy).materialize(bind, compose.plan)
     return MaterializedMas(compose=compose, materialized=materialized, mas_base_dir=base)
 
 
@@ -626,11 +629,7 @@ def make_workflow_send(
             from mas.runtime.schema.egress import InvokeEngineIo
 
             state["correlation_id"] += 1
-            from mas.runtime.aio import run_sync
-
-            # the bus feeds the peer's driver through its sync bridge, which refuses to run on this loop
-            await run_sync(
-                bus.send,
+            await bus.asend(
                 from_agent=prev_agent,
                 to_agent=agent_id,
                 intent=InvokeEngineIo(correlation_id=state["correlation_id"], op="TRANSPORT_MSG"),

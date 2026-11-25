@@ -18,7 +18,8 @@ def _library_features() -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for row in _rows(rows):
         attrs = row.get("attributes") or {}
-        if row.get("type") == "layer" and attrs.get("protocol_layer"):
+        # an LLM provider layer: a protocol layer that serves model calls only (the identity layer also serves tools)
+        if row.get("type") == "layer" and attrs.get("protocol_layer") and attrs.get("call_kinds") == ["llm"]:
             out[str(row["name"])] = sorted(attrs.get("features") or [])
     return out
 

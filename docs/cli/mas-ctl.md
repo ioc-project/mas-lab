@@ -378,6 +378,9 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | Command | Purpose | Typical flags |
 | --- | --- | --- |
 | `mas-ctl validate PATH …` | Schema-check manifests. | `-k/--kind`, `--strict/--no-strict`, `--no-validate`, `--resolve-refs/--no-resolve-refs`, `-o/--overlay`, `--profile default\|production` |
+| `mas-ctl identity list [MANIFEST]` | List the `Identity` records, their scheme, the names of their secret params, and which agents use them. Never a value. See [Identity](#identity). | `--flavour`, `--infra-ref`, `--override`, `--middleware`, `--control`, `--json` |
+| `mas-ctl identity check [MANIFEST]` | Preflight: schemes installed, params valid, secrets set, gate requirements well formed and readable. Exit 1 with each problem and its fix. | as `list`, plus `--require-gate` |
+| `mas-ctl identity describe RECORD [MANIFEST]` | Print the `facts` of the public view of each identity of the record's wallet, as the agent's own tools show them (no attestation, no advertisement, never a proof). | as `list` |
 | `mas-ctl hardening list` | List the named hardening checks with severity, rationale and fix. See [hardening.md](../references/hardening.md). | `--json` |
 | `mas-ctl hardening check MANIFEST` | Run the hardening checks over an Agent or MAS as a session resolves it. Default posture is advisory (exit 0); `production` exits 1 on a failed check. | `--profile`, `--flavour`, `--infra-ref`, `--runtime-ref`, `--override`, `--middleware`, `--control`, `--json` |
 | `mas-ctl schemas` | List registered schema kinds. | none |
@@ -395,6 +398,22 @@ mas-ctl serve agent.yaml --listen "qa-agent=a2a://127.0.0.1:9006"
 | `mas-ctl checkpoint show PATH` | Print one checkpoint as JSON. | none |
 | `mas-ctl checkpoint fork PATH` | Create a new v2 checkpoint branch. The source file stays untouched. | `--output-dir`, `--session-id` |
 | `mas-ctl checkpoint resume PATH` | Resume from a checkpoint, using its embedded manifest or the CLI chat setup. | none |
+
+### `mas-ctl identity`
+
+Look at the identities a session would use, resolved the way `mas-ctl chat` and `run-mas` resolve them: the infra refs,
+the Flavour and its Controls, then the bind. Nothing it prints is a secret: not a value, and not the reference to one.
+
+```bash
+mas-ctl identity list mas.yaml --flavour flavours/gated.yaml --infra-ref infra/identity.yaml
+mas-ctl identity check mas.yaml --flavour flavours/gated.yaml --infra-ref infra/identity.yaml --require-gate
+mas-ctl identity describe desk-badge mas.yaml --infra-ref infra/identity.yaml
+```
+
+`check` exits 1 when a scheme is not installed, a param is invalid (a plain value in a secret slot is
+`$.key: secret_ref`), a secret is not set, a gate requirement is malformed, names a record the agent does not hold, or
+reads facts from a scheme that has no `describe`. An agent that holds a record but has no `identity-gate` in its governance
+is a warning, and an error with `--require-gate`. See [Identity](../references/identity.md).
 
 ### `mas-ctl control`
 

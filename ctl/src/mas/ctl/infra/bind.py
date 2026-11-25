@@ -27,6 +27,7 @@ import re
 from typing import Any
 
 from mas.ctl.compose.models import ResolvedInfra
+from mas.ctl.infra.identity import IdentityBindError, inline_identities
 from mas.runtime.secrets import SecretRefError, prepare_manifest
 from mas.runtime.secrets.ref import iter_secret_refs
 
@@ -563,7 +564,11 @@ def bind_flavour(
             server["pipeline"] = _replace_stack_prefix(list(server.get("pipeline") or []), previous_tools, tool_steps)
         updates["tool_pipeline"] = _replace_stack_prefix(list(resolved.tool_pipeline or []), previous_tools, tool_steps)
         updates["tool_server_registry"] = servers
-    return dataclasses.replace(resolved, **updates)
+    bound = dataclasses.replace(resolved, **updates)
+    try:
+        return inline_identities(bound) or bound
+    except IdentityBindError as exc:
+        raise BindError(str(exc)) from None
 
 
 def bind_session(resolved: ResolvedInfra | None, flavour: Any, *, agent_ids: list[str]) -> ResolvedInfra:

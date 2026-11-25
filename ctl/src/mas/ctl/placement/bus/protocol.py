@@ -15,7 +15,7 @@ class CommEndpoint(Protocol):
 
     agent_id: str
 
-    def deliver(self, payload: EngineIoReturn) -> None:
+    async def adeliver(self, payload: EngineIoReturn) -> None:
         """Deliver inbound inter-agent message as ENGINE_IO_RETURN."""
 
 
@@ -25,8 +25,8 @@ class CommBus(Protocol):
     def register(self, agent_id: str, endpoint: CommEndpoint) -> None:
         """Register a runtime instance endpoint."""
 
-    def send(self, *, from_agent: str, to_agent: str, intent: InvokeEngineIo) -> EngineIoReturn | None:
-        """Route TRANSPORT_MSG; returns synthetic ack for synchronous local bus."""
+    async def asend(self, *, from_agent: str, to_agent: str, intent: InvokeEngineIo) -> EngineIoReturn | None:
+        """Route TRANSPORT_MSG; returns synthetic ack for the local bus."""
 
     def resolve_address(self, agent_id: str) -> str:
         """Return bind address (inproc://, unix://, host:port) for placement introspection."""

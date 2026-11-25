@@ -1,0 +1,21 @@
+[
+  {
+    "body": {
+      "messages": [
+        {
+          "content": "q",
+          "role": "user"
+        }
+      ],
+      "model": "m",
+      "temperature": 0.7
+    },
+    "headers": {
+      "accept": "*/*",
+      "authorization": "Bearer k-golden",
+      "content-type": "application/json"
+    },
+    "method": "POST",
+    "path": "/v1/chat/completions"
+  }
+]

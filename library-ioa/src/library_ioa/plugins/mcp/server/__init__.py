@@ -6,12 +6,13 @@ import argparse
 import importlib.util
 import logging
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import wraps
 from inspect import Parameter, Signature, iscoroutinefunction, signature
 from pathlib import Path
 from typing import Any, Dict, List
 
+from mas.library.standard.lib.stack import Handler
 from mas.runtime.entrypoint import install_host_environment
 from mas.runtime.manifest.schema.tool import ToolDocument
 from mas.runtime.secrets.errors import SecretRefError
@@ -20,6 +21,8 @@ from mas.runtime.spec.endpoint_usage import usage_listens
 from mas.runtime.spec.yaml_errors import safe_yaml_load
 from mcp.server.extension import Extension
 from mcp.server.mcpserver import Context, MCPServer
+
+from library_ioa.plugins.mcp.server.inbound import InboundGate
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +200,14 @@ def _tool_icons(raw: Any) -> Any:
 class MCPToolServerFactory:
     """Factory for wrapping MAS tools in an MCP server."""
 
-    def __init__(self, *, server_name: str = "mas-tool-server", extensions: Sequence[Extension] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        server_name: str = "mas-tool-server",
+        extensions: Sequence[Extension] = (),
+        inbound: Callable[[Handler], Handler] | None = None,
+    ) -> None:
+        self.inbound = inbound
         self.server_name = server_name
         self._server = MCPServer(server_name, extensions=extensions)
         self._tools: List[Dict[str, Any]] = []
@@ -357,9 +367,27 @@ class MCPToolServerFactory:
         """Register a protocol handler without exposing the SDK server object."""
         self._server._lowlevel_server.add_request_handler(method, params_type, handler)
 
+    def asgi_app(self, **kwargs: Any) -> Any:
+        """The streamable-HTTP app, behind the inbound chain when the factory has one.
+
+        ``kwargs`` are the SDK's (``session_idle_timeout``, ``max_sessions``, ...): sessions, their owner binding and
+        their expiry are the SDK's own.
+        """
+        app = self._server.streamable_http_app(**kwargs)
+        return InboundGate(app, self.inbound) if self.inbound is not None else app
+
     def run(self, transport: str = "stdio", **kwargs: Any) -> None:
+        if self.inbound is not None and transport != "streamable-http":
+            # only the streamable-HTTP app sits behind the inbound chain: another transport would serve unverified
+            raise ValueError(f"an MCP server with an inbound chain is served over streamable-http, not {transport!r}")
         if transport == "stdio":
             self._server.run(transport="stdio")
+            return
+        if transport == "streamable-http" and self.inbound is not None:
+            import uvicorn
+
+            host, port = str(kwargs.get("host", "127.0.0.1")), int(kwargs.get("port", 8000))
+            uvicorn.run(self.asgi_app(host=host), host=host, port=port)
             return
         if transport in {"sse", "streamable-http"}:
             self._server.run(transport=transport, **kwargs)

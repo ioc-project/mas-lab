@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, ClassVar
 
 from mas.library.standard.lib.comm.capabilities import capability_set, merge_capabilities
@@ -29,6 +29,14 @@ class LinkIdentity:
     fabric_id: int | None = None
     agent_id: str = ""
 
+    async def apeer_facts(self, target: str) -> Mapping[str, Any]:
+        """What this link knows of the peer ``target`` before a send, as plain declarations (never a secret).
+
+        None by default. A link that has read the peer's published description (an A2A agent card) returns
+        what it declares, so a layer above can decide what to present.
+        """
+        return {}
+
 
 class ChainMember(LinkIdentity):
     """What a class says about itself when it joins a chain a Flavour binds.
@@ -41,6 +49,16 @@ class ChainMember(LinkIdentity):
 
     #: Why an agent cannot be served from this process on this transport, or ``""``.
     LISTEN_REFUSAL: ClassVar[str] = ""
+
+    #: True when an envelope header of this layer is a wire header (an HTTP header). False when only message
+    #: metadata crosses the wire: a layer above then sends what it would send as headers in ``meta["metadata"]``
+    #: under ``mas.headers``, and the receiving side reads them back as headers.
+    WIRE_HEADERS: ClassVar[bool] = True
+
+    #: True when this layer, sitting above a transport whose ``WIRE_HEADERS`` is False, sends its envelope headers as
+    #: message metadata under ``mas.headers`` and reads them back from there. A transport honours inbound
+    #: ``mas.headers`` only when a layer above it says so: with none, a peer cannot inject headers.
+    HEADERS_IN_METADATA: ClassVar[bool] = False
 
     @classmethod
     def shared_service(cls, params: Mapping[str, Any]) -> Any:
@@ -86,11 +104,42 @@ class Layer(ChainMember):
 
     def __init__(self, **_params: Any) -> None:
         self._lower: Layer | None = None
+        self._above: tuple[Layer, ...] = ()
         self._started = False
         self._stopped = False
 
     def bind(self, lower: Layer) -> None:
         self._lower = lower
+
+    def bind_above(self, above: Sequence[Layer]) -> None:
+        """Tell this layer which layers sit above it in its stack (nearest first)."""
+        self._above = tuple(above)
+
+    @property
+    def headers_in_metadata_above(self) -> bool:
+        """True when a layer above that verifies inbound requests carries its headers as message metadata (see
+        ``HEADERS_IN_METADATA``): only then are inbound ``mas.headers`` read, as a layer that does not verify would
+        pass them on unchecked."""
+        return any(layer.HEADERS_IN_METADATA and layer.wraps_inbound for layer in self._above)
+
+    @property
+    def verified_above(self) -> bool:
+        """True when a layer above wraps what this one receives (it overrides ``serve``), so it may read more of the
+        request than the text."""
+        return any(layer.wraps_inbound for layer in self._above)
+
+    @property
+    def wire_headers_below(self) -> bool:
+        """False when this layer, or one below it, carries only message metadata (see ``WIRE_HEADERS``).
+
+        Walks down to the bottom, so a plain layer between a sender and the transport does not hide the transport.
+        """
+        layer: Layer | None = self
+        while layer is not None:
+            if not layer.WIRE_HEADERS:
+                return False
+            layer = layer._lower
+        return True
 
     def _require(self) -> Layer:
         if self._lower is None:
@@ -107,6 +156,10 @@ class Layer(ChainMember):
 
     def honoured_send_intents(self) -> frozenset[str] | None:
         return None
+
+    async def peer_facts(self, envelope: Envelope) -> Mapping[str, Any]:
+        """What the bottom of the stack knows of the peer ``envelope`` is addressed to, before it is sent."""
+        return await self._lower.peer_facts(envelope) if self._lower is not None else {}
 
     @property
     def wraps_inbound(self) -> bool:

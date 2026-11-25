@@ -1,0 +1,14 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Step 1: the tool server, as it always was. Nothing here says who may call it.
+apiVersion: infra/v1
+kind: ToolServerRegistry
+metadata: {name: fare-tools}
+spec:
+  tool_servers:
+    - id: fares
+      protocol: mcp
+      usage: connect
+      transport: streamable-http
+      url: http://127.0.0.1:9101/mcp
+      tools: "*"

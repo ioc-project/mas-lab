@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, ClassVar
 from urllib.parse import urlsplit, urlunsplit
 
@@ -17,8 +17,7 @@ from mas.library.standard.lib.comm.endpoint import split_url
 from mas.library.standard.lib.comm.headers import validate_headers
 from mas.library.standard.lib.comm.payload import MAX_MESSAGE_SIZE
 from mas.library.standard.lib.comm.text import safe_text
-from mas.library.standard.lib.stack import Envelope, Layer
-from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.library.standard.lib.stack import AuthorizableTransport, Envelope, Layer, SessionHook
 from mas.library.standard.lib.tls import resolve_ssl_verify
 from mas.runtime.aio import LoopCache, new_thread
 from mas.runtime.boundary.agentcomm.protocol import AgentCommError
@@ -54,6 +53,45 @@ def _check_header_names(headers: Mapping[str, Any] | None) -> None:
             probe[str(key)] = str(value)
     if probe:
         sendable(probe)
+
+
+def _awaitable(call: Any) -> Any:
+    """``call`` as the coroutine function an async client's event hook must be."""
+
+    async def hook(request: httpx.Request) -> None:
+        call(request)
+
+    return hook
+
+
+class _StaticFirst(httpx.Auth):
+    """Put a row's static headers on the request, then let ``auth`` present and sign it."""
+
+    def __init__(self, hook: Any, auth: httpx.Auth) -> None:
+        self._hook = hook
+        self._auth = auth
+        self.requires_request_body = auth.requires_request_body
+        self.requires_response_body = auth.requires_response_body
+
+    def sync_auth_flow(self, request: httpx.Request):  # type: ignore[no-untyped-def]
+        self._hook.apply(request)
+        flow = self._auth.sync_auth_flow(request)
+        try:
+            sent = next(flow)
+            while True:
+                sent = flow.send((yield sent))
+        except StopIteration:
+            return
+
+    async def async_auth_flow(self, request: httpx.Request):  # type: ignore[no-untyped-def]
+        self._hook.apply(request)
+        flow = self._auth.async_auth_flow(request)
+        try:
+            sent = await flow.__anext__()
+            while True:
+                sent = await flow.asend((yield sent))
+        except StopAsyncIteration:
+            return
 
 
 def shown_url(url: str) -> str:
@@ -103,11 +141,15 @@ def _call_url(url: str) -> None:
         raise AgentCommError(f"call transport url {shown_url(text)!r} needs an http:// or https:// host")
 
 
-class HttpCallTransport(LayerLifecycle):
+class HttpCallTransport(AuthorizableTransport):
     """The HTTP client under a protocol layer (``openai`` on llm calls, ``mcp`` on tool calls).
 
     It holds the row's headers, timeout, redirects and TLS settings; the protocol layer above posts
     through :attr:`client` (sync) or :attr:`aclient` (async, one per running event loop).
+
+    A layer above the transport may install an ``httpx.Auth`` (:meth:`use_auth`): every request of both clients
+    passes through it, so it can add headers per request and answer a 401 once. It may also offer a session hook
+    (:meth:`add_session_hook`) to the protocol layer above. With neither, the requests are what they were.
     """
 
     needs_lower: ClassVar[bool] = False
@@ -158,6 +200,30 @@ class HttpCallTransport(LayerLifecycle):
         # and its client closed before it is forgotten.
         self._aclients: dict[int, tuple[asyncio.AbstractEventLoop, httpx.AsyncClient]] = {}
         self._lock = threading.Lock()
+        self._auth: httpx.Auth | None = None
+        self._auth_guard: Callable[[httpx.Request], None] | None = None
+        self._hooks: list[SessionHook] = []
+
+    def use_auth(self, auth: httpx.Auth, *, guard: Callable[[httpx.Request], None] | None = None) -> None:
+        with self._lock:
+            if self._client is not None or self._aclients:
+                raise AgentCommError("http transport: install auth before the first request")
+            if self._auth is not None:  # two layers presenting on one request would each overwrite the other
+                raise AgentCommError("http transport: an auth layer is installed already")
+            self._auth = auth
+            self._auth_guard = guard
+
+    def static_header_names(self) -> list[str]:
+        """The header names of the row: what an auth layer's evidence must not collide with."""
+        return [str(name) for name in self._header_refs]
+
+    def add_session_hook(self, hook: SessionHook) -> None:
+        with self._lock:
+            self._hooks.append(hook)
+
+    def session_hooks(self) -> list[SessionHook]:
+        with self._lock:
+            return list(self._hooks)
 
     @classmethod
     def from_params(cls, params: Mapping[str, Any] | None) -> "HttpCallTransport":
@@ -173,6 +239,28 @@ class HttpCallTransport(LayerLifecycle):
             follow_redirects=bool(raw.get("follow_redirects")),
         )
 
+    def _same_origin(self, request: httpx.Request) -> None:
+        """Refuse a request to another origin than the row's url (a redirect hop) while an auth layer is installed.
+
+        An auth layer put its credentials on the first request; a redirect would carry them, and a body with them,
+        to whoever the answer names.
+        """
+        sent = request.url
+        here = httpx.URL(self.url)
+        ports = {"http": 80, "https": 443}
+
+        def origin(url: httpx.URL) -> tuple[str, str, int]:
+            return url.scheme.lower(), url.host.lower(), url.port or ports.get(url.scheme.lower(), 0)
+
+        # a url with credentials in it is refused as a place, as the identity auth's own guard refuses it
+        if sent.userinfo or origin(sent) != origin(here):
+            raise AgentCommError(
+                "http transport: a redirect to another origin is refused while an auth layer is installed"
+            )
+
+    async def _same_origin_async(self, request: httpx.Request) -> None:
+        self._same_origin(request)
+
     def _options(self, *, sync: bool) -> dict[str, Any]:
         timeout = httpx.Timeout(self.timeout) if self.timeout is not None else httpx.Timeout(30.0, read=300.0)
         hook = self._headers_hook
@@ -181,13 +269,21 @@ class HttpCallTransport(LayerLifecycle):
             hooks["response"].append(hook.check_redirect if sync else hook.acheck_redirect)
         from mas.runtime.secrets.transport import httpx_client_kwargs_for
 
-        return {
+        options: dict[str, Any] = {
             "timeout": timeout,
             "verify": self._verify,
             "follow_redirects": self.follow_redirects,
             "event_hooks": hooks,
             **httpx_client_kwargs_for(self.url),
         }
+        if self._auth is not None:
+            # the row's headers go on before the auth layer signs, so a signature covers them
+            options["auth"] = _StaticFirst(hook, self._auth)
+            hooks["request"].append(self._same_origin if sync else self._same_origin_async)
+            guard = self._auth_guard  # the auth's own place check of each hop
+            if guard is not None:
+                hooks["request"].append(guard if sync else _awaitable(guard))
+        return options
 
     @property
     def client(self) -> httpx.Client:

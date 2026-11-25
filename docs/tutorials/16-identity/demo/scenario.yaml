@@ -1,0 +1,43 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+name: tutorial-16-identity
+title: "Tutorial 16 — Identity"
+description: >
+  Put an identity on a tool server, check it, and gate a call on what the identity covers.
+version: "1.0"
+authors: ["MAS Framework Team"]
+tags: ["identity", "governance", "tutorial"]
+prerequisites:
+  - "Tutorial 4"
+  - "Offline: pytest tests/tutorials/test_scenario_commands.py -k tuto-16"
+estimated_duration_min: 10
+working_dir: . # repo root
+cache_dir: ".demo-cache"
+
+sections:
+  - id: validate
+    title: "Validate"
+    steps:
+      - type: command
+        title: "Validate the MAS"
+        command: mas-ctl validate docs/tutorials/16-identity/mas.yaml
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "OK"
+
+      - type: command
+        title: "An Agent that names an identity is refused"
+        command: mas-ctl validate docs/tutorials/16-identity/broken/agent-with-identity.yaml
+        allowed_modes: [offline]
+        expected_exit_code: 1
+        expected_output: "identity concern"
+
+  - id: no-identity
+    title: "No identity"
+    steps:
+      - type: command
+        title: "Without an Identity row the list is empty"
+        command: mas-ctl identity list docs/tutorials/16-identity/mas.yaml --infra-ref infra/tools.yaml
+        allowed_modes: [offline]
+        expected_exit_code: 0
+        expected_output: "no Identity rows"

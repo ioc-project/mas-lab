@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mas.library.standard.lib.stack.call import LayerLifecycle
+from mas.library.standard.lib.stack import LayerLifecycle
 
 from library_ioa.plugins.mcp.client import MCPClient
 from library_ioa.plugins.mcp.client.wrapper import MCPClientWrapper
@@ -52,6 +52,7 @@ class McpLayer(LayerLifecycle):
             cache_ttl_ms=binding.cache_ttl_ms,
             cache_scope=binding.cache_scope,
             http_client=(lambda: _http_client(inner)) if inner is not None else None,
+            session_hooks=inner.session_hooks() if isinstance(inner, LayerLifecycle) else None,
         )
         wrapped = cls(MCPClientWrapper(client), inner=inner)
         return wrapped

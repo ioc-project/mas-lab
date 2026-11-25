@@ -10,15 +10,25 @@ from typing import Any, Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class SendContext:
-    """Per-send envelope. The caller may set headers, intent, and steer mode; only the link sets sender."""
+    """Per-send envelope. The caller may set headers, intent, and steer mode; only the link sets sender.
+
+    ``metadata`` is protocol-level data a link may carry next to the message (A2A message metadata): namespaced
+    keys, set by a layer on the way down, never by a caller. ``session_hook`` is an opaque object a layer hands to
+    the link so it can take part in the peer's session setup (the library's ``SessionHook``); the runtime never
+    reads it. ``message_id`` is the id of the message a layer above fixed, so a resent message keeps it.
+    """
 
     headers: Mapping[str, str] = field(default_factory=dict)
     intent: str = ""
     sender: str = ""
     mode: str = ""
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    session_hook: Any = None
+    message_id: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "headers", MappingProxyType(dict(self.headers)))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
 
     def __deepcopy__(self, memo: dict[int, Any]) -> SendContext:
         copied = SendContext(
@@ -26,12 +36,19 @@ class SendContext:
             intent=self.intent,
             sender=self.sender,
             mode=self.mode,
+            metadata=dict(self.metadata),
+            session_hook=self.session_hook,
+            message_id=self.message_id,
         )
         memo[id(self)] = copied
         return copied
 
-    def __reduce__(self) -> tuple[type[SendContext], tuple[dict[str, str], str, str, str]]:
-        return (type(self), (dict(self.headers), self.intent, self.sender, self.mode))
+    def __reduce__(self) -> tuple[type[SendContext], tuple[dict[str, str], str, str, str, dict[str, Any], None, str]]:
+        # a session hook belongs to one live send and does not travel
+        return (
+            type(self),
+            (dict(self.headers), self.intent, self.sender, self.mode, dict(self.metadata), None, self.message_id),
+        )
 
 
 _current_transport: ContextVar[str] = ContextVar(
@@ -52,6 +69,11 @@ def consume_current_transport() -> str:
 
 class AgentCommError(RuntimeError):
     """Raised when an agent communication plugin cannot complete a send."""
+
+
+class LayerRefusal(AgentCommError):
+    """A layer refused a call before anything was sent. The text is a value-free code and is the whole story: a
+    caller reports it as it is, with no traceback."""
 
 
 @dataclass(frozen=True)

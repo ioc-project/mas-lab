@@ -1,0 +1,16 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# A tool server whose identity step names a record no Identity row declares.
+apiVersion: infra/v1
+kind: ToolServerRegistry
+metadata: {name: fare-tools-dangling}
+spec:
+  tool_servers:
+    - id: fares
+      protocol: mcp
+      usage: connect
+      transport: streamable-http
+      url: http://127.0.0.1:9101/mcp
+      tools: "*"
+      pipeline:
+        - {layer: identity, params: {identity: no-such-badge}}
