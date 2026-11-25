@@ -626,7 +626,11 @@ def make_workflow_send(
             from mas.runtime.schema.egress import InvokeEngineIo
 
             state["correlation_id"] += 1
-            bus.send(
+            from mas.runtime.aio import run_sync
+
+            # the bus feeds the peer's driver through its sync bridge, which refuses to run on this loop
+            await run_sync(
+                bus.send,
                 from_agent=prev_agent,
                 to_agent=agent_id,
                 intent=InvokeEngineIo(correlation_id=state["correlation_id"], op="TRANSPORT_MSG"),
