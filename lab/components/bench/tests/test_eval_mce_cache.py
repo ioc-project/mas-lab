@@ -55,6 +55,14 @@ def _doc(h) -> dict:
     return json.loads((h.run / "metrics.json").read_text(encoding="utf-8"))
 
 
+def test_incomplete_result_json_is_not_scored(harness):
+    (harness.run / "result.json").write_text('{"status": "error", "error": "timeout"}', encoding="utf-8")
+    out = harness.run_step()
+    assert harness.calls["judge"] == 0
+    assert out.metadata["reason"] == "incomplete"
+    assert not (harness.run / "metrics.json").exists()
+
+
 def test_first_run_scores_and_stamps_digest(harness):
     out = harness.run_step()
     assert harness.calls["judge"] == 1

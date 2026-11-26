@@ -21,7 +21,10 @@ spans have status ERROR. With `--fail`, exit 1 when any ERROR span is present.
 
 ## OPTIONS
 
-See `mas-lab telemetry errors --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_FILE` | Positional argument. |
+| `--fail` | Exit 1 when the file holds any ERROR span. |
 
 ## SEE ALSO
 

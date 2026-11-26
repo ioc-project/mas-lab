@@ -76,10 +76,17 @@ MASExperimentConfig YAML structure::
       run:
         n_runs: 3
 
+      design:
+        plugin: cartesian
+        max_executions: 200
+
       schedule:
+        plugin: coverage
         parallel_scenarios: 4
+
+      executor:
+        plugin: native
         timeout: 300
-        ordering: coverage
 
       bench_emulation:                    # layered resource emulation
         infra:                             # L1: backing resources
@@ -103,7 +110,10 @@ MASExperimentConfig YAML structure::
 from .artifact_types import list_artifact_types, register_artifact_type
 from .execution import (
     EmulationSpec,
+    ExperimentAnalyzerSpec,
     ExperimentDesignSpec,
+    ExperimentExecutorSpec,
+    ExperimentRetrySpec,
     ExperimentScheduleSpec,
     InfraEmulationSpec,
     InterceptSpec,
@@ -134,6 +144,9 @@ __all__ = [
     "ArtifactSpec",
     "EmulationSpec",
     "ExperimentDesignSpec",
+    "ExperimentAnalyzerSpec",
+    "ExperimentExecutorSpec",
+    "ExperimentRetrySpec",
     "ExperimentScheduleSpec",
     "InfraEmulationSpec",
     "InterceptSpec",

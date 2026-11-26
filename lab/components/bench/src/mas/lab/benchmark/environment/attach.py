@@ -138,7 +138,7 @@ def environment_violations(data: Mapping[str, Any], base_dir: Path | None = None
 
 
 def refuse_environment_in_workers(*, exp: Any, plan: Sequence[tuple[str, Mapping[str, Any], int]]) -> None:
-    """``schedule.worker_processes > 1`` runs each MAS in a spawn child, which has no bound environment.
+    """``executor.worker_processes > 1`` runs each MAS in a spawn child, which has no bound environment.
 
     The port, the fixtures, named actions, recorded replay and the event stream live in this
     process. A trigger would silently never fire in the child, so a batch that declares any
@@ -156,7 +156,7 @@ def refuse_environment_in_workers(*, exp: Any, plan: Sequence[tuple[str, Mapping
             or spec.clock.kind != "wall"
         ):
             raise ValueError(
-                f"environment of scenario {scenario_id!r} needs schedule.worker_processes: 1; "
+                f"environment of scenario {scenario_id!r} needs executor.worker_processes: 1; "
                 "a worker process has no bound environment, so its triggers, fixtures, named "
                 "actions and recorded replay would never run"
             )

@@ -444,6 +444,7 @@ def write_run_result(
     status: str,
     elapsed_ms: float,
     error: str,
+    attempts: int = 1,
 ) -> None:
     """Write execution results to the global cache entry.
 
@@ -471,6 +472,7 @@ def write_run_result(
         "status": status,
         "elapsed_ms": round(elapsed_ms, 1),
         "error": error,
+        "attempts": int(attempts),
         "executed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }
     result_path.write_text(json.dumps(result, indent=2))

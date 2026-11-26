@@ -239,7 +239,7 @@ This is not the `experiment.checkpoints` starting-state axis.
 
 ## Common mistakes
 
-- `schedule.worker_processes` above 1 with an `environment:` — the batch refuses it: a worker process has no bound environment, so its triggers, fixtures, named actions and recorded replay would never run.
+- `executor.worker_processes` above 1 with an `environment:` — the batch refuses it: a worker process has no bound environment, so its triggers, fixtures, named actions and recorded replay would never run.
 - Putting allocated ports in the cache key — they are excluded; the command is not.
 - Expecting `service_start` to leave a process running after the level — set `keep_running: true`.
 - `http_call` to a non-loopback host without `allow_network`, or expecting it to follow a redirect.

@@ -20,7 +20,7 @@ List native event kinds that have a registered span handler.
 
 ## OPTIONS
 
-See `mas-lab telemetry kinds --help` for the current flag list (Click help is the source of truth).
+This command takes no extra flags. See `--help` for inherited group options.
 
 ## SEE ALSO
 

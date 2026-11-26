@@ -244,7 +244,7 @@ class PipelineStep(ABC):
         return None
 
     worker_safe: ClassVar[bool]
-    """Declared by each step class that may run beside ``schedule.worker_processes > 1``.
+    """Declared by each step class that may run beside ``executor.worker_processes > 1``.
 
     Pipeline steps run in the parent process; process workers run only the MAS.
     ``True`` says the step patches no process state that MAS runs depend
@@ -346,6 +346,10 @@ class PipelineStep(ABC):
             if not isinstance(data["realtime"], bool):
                 raise ValueError(f"step {step.name!r}: realtime must be true or false, got {data['realtime']!r}")
             step.realtime = data["realtime"]
+        if data.get("mode") is not None:
+            from mas.lab.benchmark.execution.completeness import normalize_stage_mode
+
+            step.mode = normalize_stage_mode(str(data["mode"]), realtime=step.realtime, folds=False)
         return step
 
     @classmethod

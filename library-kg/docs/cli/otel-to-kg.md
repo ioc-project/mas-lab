@@ -20,7 +20,12 @@ OTel spans → kg.json through one `normalize_otel` step. Options: `--run-id`, `
 
 ## OPTIONS
 
-See `mas-lab kg otel-to-kg --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_PATH` | Positional argument. |
+| `--run-id` | — |
+| `--output-dir` | — |
+| `--dry-run` | — |
 
 ## PIPELINE
 

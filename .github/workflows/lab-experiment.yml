@@ -1,0 +1,330 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+#
+# Run an experiment's runs on GitHub-hosted (or self-hosted) runners, one matrix job per shard.
+#
+#   plan     generate + schedule the runs, write the plan and its shards      (mas-lab benchmark runs plan | retry)
+#   run      one job per shard: run only that shard's runs                    (mas-lab benchmark run --run-plan)
+#   collect  merge the shard trees, analyze, and start the next retry round    (runs merge | summary | retry)
+#
+# Each step reads and writes files only, so the roles stay separate: change how runs are
+# generated, ordered, retried or analyzed without touching how a runner executes them.
+# GitHub's "re-run failed jobs" re-runs a shard job and is safe to use: a shard that finished
+# keeps its result, and `collect` never lets a failed folder replace an `ok` one.
+#
+# A caller must grant `actions: write` (the collect job starts the next round) and `actions: read`.
+# The caller owns the model endpoint: set OPENAI_API_KEY (secret `llm_api_key`) and, if needed,
+# the endpoint through the experiment's infra or `env` input.
+name: Lab experiment
+
+on:
+  workflow_call:
+    inputs:
+      experiment:
+        description: Path to the experiment YAML in this repository.
+        required: true
+        type: string
+      shard_by:
+        description: What one job runs (run, scenario, item or chunk).
+        required: false
+        type: string
+        default: run
+      shard_size:
+        description: Runs per job when shard_by is chunk.
+        required: false
+        type: number
+        default: 1
+      max_parallel:
+        description: Most shard jobs running at once.
+        required: false
+        type: number
+        default: 20
+      max_rounds:
+        description: Most retry rounds started after the first (0 disables automatic retry).
+        required: false
+        type: number
+        default: 2
+      round:
+        description: Current round (0 is the first). Set by the workflow itself.
+        required: false
+        type: number
+        default: 0
+      retry_of:
+        description: Run id of the previous round, whose merged results this round continues from.
+        required: false
+        type: string
+        default: ""
+      next_workflow:
+        description: Workflow file dispatched for the next retry round (this file, unless a caller wraps it).
+        required: false
+        type: string
+        default: lab-experiment.yml
+      experiment_args:
+        description: >-
+          Extra flags given to every plan, run, retry and summary call, such as
+          "-x overlays/small.yaml --override run.n_runs=3". Split on spaces (no quoting).
+        required: false
+        type: string
+        default: ""
+      runs_on:
+        description: Runner label for shard jobs.
+        required: false
+        type: string
+        default: ubuntu-latest
+      shard_timeout_minutes:
+        description: Timeout of one shard job.
+        required: false
+        type: number
+        default: 60
+    secrets:
+      llm_api_key:
+        required: false
+  workflow_dispatch:
+    inputs:
+      experiment:
+        description: Path to the experiment YAML in this repository.
+        required: true
+        type: string
+      shard_by:
+        description: What one job runs (run, scenario, item or chunk).
+        required: false
+        type: choice
+        options: [run, scenario, item, chunk]
+        default: run
+      shard_size:
+        description: Runs per job when shard_by is chunk.
+        required: false
+        type: number
+        default: 1
+      max_parallel:
+        description: Most shard jobs running at once.
+        required: false
+        type: number
+        default: 20
+      max_rounds:
+        description: Most retry rounds started after the first (0 disables automatic retry).
+        required: false
+        type: number
+        default: 2
+      experiment_args:
+        description: >-
+          Extra flags given to every plan, run, retry and summary call, such as
+          "-x overlays/small.yaml --override run.n_runs=3". Split on spaces (no quoting).
+        required: false
+        type: string
+        default: ""
+      round:
+        description: Current round (0 is the first). Set by the workflow itself.
+        required: false
+        type: number
+        default: 0
+      retry_of:
+        description: Run id of the previous round, whose merged results this round continues from.
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  EXPERIMENT: ${{ inputs.experiment }}
+  ROUND: ${{ inputs.round || 0 }}
+  RETRY_OF: ${{ inputs.retry_of }}
+  SHARD_BY: ${{ inputs.shard_by || 'run' }}
+  SHARD_SIZE: ${{ inputs.shard_size || 1 }}
+  MAX_PARALLEL: ${{ inputs.max_parallel || 20 }}
+  MAX_ROUNDS: ${{ inputs.max_rounds || 0 }}
+  EXP_ARGS: ${{ inputs.experiment_args }}
+  NEXT_WORKFLOW: ${{ inputs.next_workflow || 'lab-experiment.yml' }}
+  REF_NAME: ${{ github.ref_name }}
+  RUN_ID: ${{ github.run_id }}
+
+jobs:
+  plan:
+    name: Plan round ${{ inputs.round || 0 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_runs: ${{ steps.matrix.outputs.has_runs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          install-dev: "true"
+      - name: Fetch the previous round
+        if: ${{ env.RETRY_OF != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-results
+          path: previous/results
+          run-id: ${{ inputs.retry_of }}
+          github-token: ${{ github.token }}
+      - name: Fetch the previous plan
+        if: ${{ env.RETRY_OF != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: full-plan
+          path: previous/plan
+          run-id: ${{ inputs.retry_of }}
+          github-token: ${{ github.token }}
+      - name: Generate and schedule the runs
+        if: ${{ env.RETRY_OF == '' }}
+        run: |
+          read -ra extra <<< "$EXP_ARGS"
+          uv run --no-sync mas-lab benchmark runs plan "$EXPERIMENT" "${extra[@]}" \
+            -o plan/plan.json --shard-by "$SHARD_BY" --shard-size "$SHARD_SIZE"
+          cp plan/plan.json full-plan.json
+      - name: Choose the runs to retry
+        if: ${{ env.RETRY_OF != '' }}
+        run: |
+          read -ra extra <<< "$EXP_ARGS"
+          uv run --no-sync mas-lab benchmark runs retry "$EXPERIMENT" "${extra[@]}" \
+            --plan previous/plan/full-plan.json --results previous/results \
+            -o plan/plan.json --shard-by "$SHARD_BY" --shard-size "$SHARD_SIZE"
+          cp previous/plan/full-plan.json full-plan.json
+      - id: matrix
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          matrix = json.load(open("plan/matrix.json"))
+          print("matrix=" + json.dumps(matrix))
+          print("has_runs=" + ("true" if matrix["include"] else "false"))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: plan/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-plan
+          path: full-plan.json
+
+  run:
+    name: Shard ${{ matrix.shard }}
+    needs: plan
+    if: ${{ needs.plan.outputs.has_runs == 'true' }}
+    runs-on: ${{ inputs.runs_on || 'ubuntu-latest' }}
+    timeout-minutes: ${{ inputs.shard_timeout_minutes || 60 }}
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max_parallel || 20) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          install-dev: "true"
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+          path: plan
+      - name: Run this shard's runs
+        env:
+          OPENAI_API_KEY: ${{ secrets.llm_api_key }}
+        run: |
+          read -ra extra <<< "$EXP_ARGS"
+          uv run --no-sync mas-lab benchmark run "$EXPERIMENT" "${extra[@]}" \
+            --run-plan "plan/${{ matrix.file }}" -o "results" --no-progress
+      - name: Controller log on failure
+        if: ${{ failure() || cancelled() }}
+        run: |
+          log="$HOME/.local/share/mas/controller/daemon.log"
+          if [ -f "$log" ]; then cat "$log"; fi
+      - name: Copy traces out of the trace cache
+        if: ${{ always() }}
+        run: |
+          # run folders link their traces into the runner's trace cache; the artifact must hold the files
+          if [ -d results ]; then cp -RL results results-flat; fi
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: results-shard-${{ matrix.shard }}
+          path: results-flat/
+          if-no-files-found: ignore
+
+  collect:
+    name: Collect round ${{ inputs.round || 0 }}
+    needs: [plan, run]
+    if: ${{ always() && needs.plan.result == 'success' && needs.plan.outputs.has_runs == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-mas
+        with:
+          install-dev: "true"
+      - name: Fetch the full plan
+        uses: actions/download-artifact@v4
+        with:
+          name: full-plan
+          path: full
+      - name: Fetch this round's shard results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: results-shard-*
+          path: shards
+      - name: Fetch the previous round's merged results
+        if: ${{ env.RETRY_OF != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: merged-results
+          path: shards/previous
+          run-id: ${{ inputs.retry_of }}
+          github-token: ${{ github.token }}
+      - name: Merge
+        run: |
+          mkdir -p shards
+          # previous round first: a later source wins between equals, and an ok folder is never replaced
+          shopt -s nullglob
+          sources=()
+          [ -d shards/previous ] && sources+=(shards/previous)
+          sources+=(shards/results-shard-*)
+          if [ "${#sources[@]}" -eq 0 ]; then
+            echo "no shard produced results"; mkdir -p merged
+          else
+            uv run --no-sync mas-lab benchmark runs merge "${sources[@]}" -o merged
+          fi
+      - name: Analyze
+        id: summary
+        continue-on-error: true
+        run: |
+          read -ra extra <<< "$EXP_ARGS"
+          uv run --no-sync mas-lab benchmark runs summary "$EXPERIMENT" "${extra[@]}" \
+            --plan full/full-plan.json --results merged --fail-on-incomplete | tee summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merged-results
+          path: merged/
+      - name: Report
+        run: |
+          echo '### Round ${{ inputs.round || 0 }}' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          head -c 6000 summary.json >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Start the next retry round
+        if: ${{ steps.summary.outcome == 'failure' && (inputs.round || 0) < (inputs.max_rounds || 0) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -ra extra <<< "$EXP_ARGS"
+          uv run --no-sync mas-lab benchmark runs retry "$EXPERIMENT" "${extra[@]}" \
+            --plan full/full-plan.json --results merged -o next-plan.json --shards-dir next
+          if [ "$(python3 -c 'import json;print(len(json.load(open("next/matrix.json"))["include"]))')" = "0" ]; then
+            echo "the retrier gave up on every incomplete run"; exit 0
+          fi
+          gh workflow run "$NEXT_WORKFLOW" --ref "$REF_NAME" \
+            -f experiment="$EXPERIMENT" -f shard_by="$SHARD_BY" -f shard_size="$SHARD_SIZE" \
+            -f max_parallel="$MAX_PARALLEL" -f max_rounds="$MAX_ROUNDS" \
+            -f experiment_args="$EXP_ARGS" -f round="$((ROUND + 1))" -f retry_of="$RUN_ID"
+      - name: Fail when runs are still incomplete
+        if: ${{ steps.summary.outcome == 'failure' && (inputs.round || 0) >= (inputs.max_rounds || 0) }}
+        run: |
+          echo "runs are still incomplete after the last round"; exit 1

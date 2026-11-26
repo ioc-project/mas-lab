@@ -132,7 +132,7 @@ async def test_run_benchmark_mas_route_uses_options(monkeypatch, tmp_path: Path)
         trace_cache_dir=Path("/tmp/traces"),
         data_cache_dir=Path("/tmp/data"),
         output_dir=Path("/tmp/out"),
-        strategy="coverage",
+        scheduler="coverage",
         step_overrides=[{"k": 1}],
         clean_stale=True,
     )
@@ -152,6 +152,6 @@ async def test_run_benchmark_mas_route_uses_options(monkeypatch, tmp_path: Path)
     assert captured["trace_cache_dir"] == Path("/tmp/traces")
     assert captured["data_cache_dir"] == Path("/tmp/data")
     assert captured["output_dir"] == Path("/tmp/out")
-    assert captured["strategy"] == "coverage"
+    assert captured["scheduler"] == "coverage"
     assert captured["step_overrides"] == [{"k": 1}]
     assert captured["clean_stale"] is True

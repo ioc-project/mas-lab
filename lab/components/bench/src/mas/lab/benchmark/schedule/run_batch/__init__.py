@@ -30,6 +30,7 @@ async def _run_mas_benchmark(
     limit_scenarios: Optional[int] = None,
     scenario_id: Optional[str] = None,
     dataset_item: Optional[str] = None,
+    plan_file: Optional[Path] = None,
     single_run: bool = False,
     flavour_name: Optional[str] = None,
     controls: Optional[list[str]] = None,
@@ -38,7 +39,7 @@ async def _run_mas_benchmark(
     trace_cache_dir: Optional[Path] = None,
     data_cache_dir: Optional[Path] = None,
     output_dir: Optional[Path] = None,
-    strategy: Optional[str] = None,
+    scheduler: Optional[str] = None,
     step_overrides: Optional[list] = None,
     pipeline_attachments: Optional[list] = None,
     experiment_overlays: Optional[list] = None,
@@ -69,6 +70,7 @@ async def _run_mas_benchmark(
         limit_scenarios=limit_scenarios,
         scenario_id=scenario_id,
         dataset_item=dataset_item,
+        plan_file=plan_file,
         single_run=single_run,
         flavour_name=flavour_name,
         controls=controls,
@@ -99,7 +101,7 @@ async def _run_mas_benchmark(
             dry_run=True,
             trace_cache_dir=loaded.trace_cache_dir,
         )
-        print_dry_run(loaded)
+        print_dry_run(loaded, scheduler=scheduler)
         return True
 
     prepared = None
@@ -161,7 +163,7 @@ async def _run_mas_benchmark(
                 prepared,
                 progress=progress,
                 force=force,
-                strategy=strategy,
+                scheduler=scheduler,
             )
         except BaseException as exc:
             abort_batch(prepared, exc)

@@ -480,6 +480,30 @@ def test_an_error_return_ends_the_call_with_an_error_status() -> None:
         assert end[0]["status"] == "error"
 
 
+def test_llm_call_end_carries_retry_count_and_error_class() -> None:
+    end = dispatch_boundary(
+        {
+            "kind": "engine.io.return",
+            "correlation_id": 11,
+            "call_id": "LLM_CALL-11",
+            "payload": {
+                "op": "LLM_CALL",
+                "text": "ok",
+                "next_step": "STOP",
+                "retry_attempts": 2,
+                "failure_class": "transient",
+                "failure_code": "RATE_LIMIT",
+            },
+        },
+        ctx=_ctx(),
+    )
+    assert end[0]["kind"] == "llm_call_end"
+    assert end[0]["retry_count"] == 2
+    assert end[0]["retry_attempts"] == 2
+    assert end[0]["error_class"] == "transient"
+    assert end[0]["failure_code"] == "RATE_LIMIT"
+
+
 def _engine(kind: str, cid: int, op: str, call_id: str, **payload: Any) -> dict:
     return {"kind": kind, "correlation_id": cid, "call_id": call_id, "payload": {"op": op, **payload}}
 
@@ -512,3 +536,16 @@ def test_a_check_runs_in_the_visit_and_reads_the_state_of_the_call_it_checks() -
     (end,) = validate
     llm_out = ctx._state_by_call["llm-1"]["state_out"]
     assert end["state_in"] == end["state_out"] == llm_out
+
+
+def test_a_retry_count_that_is_not_a_number_is_left_out() -> None:
+    end = dispatch_boundary(
+        {
+            "kind": "engine.io.return",
+            "correlation_id": 12,
+            "call_id": "LLM_CALL-12",
+            "payload": {"op": "LLM_CALL", "text": "ok", "next_step": "STOP", "retry_attempts": "many"},
+        },
+        ctx=_ctx(),
+    )
+    assert "retry_attempts" not in end[0]

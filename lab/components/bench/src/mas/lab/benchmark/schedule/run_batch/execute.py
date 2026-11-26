@@ -22,23 +22,17 @@ from mas.lab.benchmark.cache.trace_store import (
     write_run_info,
     write_run_result,
 )
-from mas.lab.benchmark.execution import build_execution_plan
-from mas.lab.benchmark.schedule.metadata import execution_as_dict
+from mas.lab.benchmark.execution import build_execution_plan, plan_kwargs
+from mas.lab.benchmark.execution.completeness import result_file_is_complete, run_dir_is_complete
+from mas.lab.benchmark.execution.retry import run_with_retrier
+from mas.lab.benchmark.execution.roles import PlannedRun, resolve_executor, validated_plugin
+from mas.lab.benchmark.execution.wire import select_runs
 from mas.lab.benchmark.schedule.run_batch.load import LoadedExperiment
 from mas.lab.benchmark.schedule.run_batch.prepare import PreparedBatch
 from mas.lab.runners.context import RunContext
 from mas.lab.runners.invoke import invoke_runner
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_LAB_RUN_ATTEMPTS = 3
-DEFAULT_LAB_RETRY_BACKOFF_S = 2.0
-_FATAL_RUN_MARKERS = (
-    "tls certificate verification failed",
-    "http 401",
-    "http 403",
-    "authentication/authorization",
-)
 
 
 def _infra_refs_for_scenario(scenario_id: str, prepared: PreparedBatch) -> list[str]:
@@ -56,71 +50,65 @@ def _infra_refs_for_scenario(scenario_id: str, prepared: PreparedBatch) -> list[
     return refs
 
 
-def lab_run_retry_settings(schedule: Any | None) -> tuple[int, float]:
-    """``schedule.max_attempts`` / ``retry_backoff_s``, with lab defaults."""
-    raw_attempts = getattr(schedule, "max_attempts", None) if schedule is not None else None
-    raw_backoff = getattr(schedule, "retry_backoff_s", None) if schedule is not None else None
-    attempts = DEFAULT_LAB_RUN_ATTEMPTS if raw_attempts is None else int(raw_attempts)
-    backoff = DEFAULT_LAB_RETRY_BACKOFF_S if raw_backoff is None else float(raw_backoff)
-    return max(1, attempts), max(0.0, backoff)
-
-
-def lab_run_error_is_retryable(error: str, *, status: str) -> bool:
-    """True for transient execution failures; false for auth/TLS/config errors."""
-    if status != "error":
-        return False
-    text = (error or "").lower()
-    return not any(marker in text for marker in _FATAL_RUN_MARKERS)
-
-
-def _status_from_runner(result_dict: dict) -> tuple[str, str, str]:
-    output = result_dict.get("content", str(result_dict))
-    if result_dict.get("status") == "error":
-        return "error", output or "execution error", output
-    if output and str(output).startswith("LLM request failed:"):
-        return "error", str(output), output
-    return "ok", "", output
-
-
-async def invoke_lab_run_with_retry(
-    do_run,
+def _run_result_row(
     *,
-    max_attempts: int,
-    backoff_s: float,
-    on_retry=None,
-    before_attempt=None,
-) -> tuple[dict, str, str, str, int]:
-    """Run ``do_run`` up to ``max_attempts``. Returns result, status, error, output, attempts used.
+    scenario_id: str,
+    item: dict,
+    run_idx: int,
+    experiment_id: str,
+    prompt: str,
+    status: str,
+    output: str,
+    error: str,
+    elapsed_ms: float,
+    attempts: int,
+    trace_path: str = "",
+    session_id: str = "",
+    checkpoint_id: str = "",
+    forked_from_checkpoint: str = "",
+    output_length: int | None = None,
+) -> dict:
+    item_id = item.get("id", 0)
+    text = str(output or "")
+    return {
+        "run_id": f"{scenario_id}__item{item_id}__r{run_idx + 1}",
+        "scenario": scenario_id,
+        "item_id": item_id,
+        "run": run_idx + 1,
+        "source_item_id": item.get("source_item_id", item_id),
+        "experiment_id": experiment_id,
+        "session_id": session_id,
+        "checkpoint_id": checkpoint_id,
+        "forked_from_checkpoint": forked_from_checkpoint,
+        "group": item.get("group", ""),
+        "target_agents": ",".join(item.get("target_agents", [])),
+        "prompt": prompt,
+        "status": status,
+        "output": text[:500],
+        "output_length": len(text) if output_length is None else output_length,
+        "trace_path": trace_path,
+        "elapsed_ms": round(float(elapsed_ms), 1),
+        "error": error or "",
+        "attempts": attempts,
+    }
 
-    ``before_attempt`` (async, no arguments) runs before every attempt (``run.pre``
-    steps: reset per-run state). If it raises, the run fails at once with that
-    error and is not retried — the MAS never starts on unprepared state.
+
+def _mirror_result(global_run_dir: Path, run_output_dir: Path) -> None:
+    """Copy the cache entry's ``result.json`` into the run folder.
+
+    The results tree then stands alone: a shard's folder carries its own outcome, with
+    no need for the machine's trace cache (see ``execution/wire.py``).
     """
-    result_dict: dict = {}
-    status, error, output = "error", "not started", ""
-    attempts = max(1, max_attempts)
-    for attempt in range(attempts):
-        if before_attempt is not None:
-            try:
-                await before_attempt()
-            except Exception as exc:
-                return {}, "error", str(exc), "", attempt + 1
-        try:
-            result_dict = await asyncio.to_thread(do_run)
-            status, error, output = _status_from_runner(result_dict)
-        except Exception as exc:
-            result_dict = {}
-            status, error, output = "error", str(exc), ""
-        if status != "error":
-            return result_dict, status, error, output, attempt + 1
-        if attempt >= attempts - 1 or not lab_run_error_is_retryable(error, status=status):
-            return result_dict, status, error, output, attempt + 1
-        if on_retry is not None:
-            on_retry(attempt + 1, attempts, error)
-        delay = backoff_s * (2**attempt)
-        if delay > 0:
-            await asyncio.sleep(delay)
-    return result_dict, status, error, output, attempts
+    source = global_run_dir / "result.json"
+    if not source.is_file():
+        return
+    import shutil
+
+    target = run_output_dir / "result.json"
+    run_output_dir.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".json.tmp")
+    shutil.copyfile(source, tmp)
+    tmp.replace(target)
 
 
 def _clear_failed_attempt_traces(global_run_dir: Path) -> None:
@@ -182,7 +170,7 @@ async def execute_batch(
     *,
     progress: bool = True,
     force: bool = False,
-    strategy: Optional[str] = None,
+    scheduler: Optional[str] = None,
     data_cache_dir: Optional[Path] = None,
 ) -> ExecutionResult:
     """Run all planned (scenario × item × run) executions.
@@ -201,7 +189,7 @@ async def execute_batch(
             exit_stack,
             progress=progress,
             force=force,
-            strategy=strategy,
+            scheduler=scheduler,
             data_cache_dir=data_cache_dir,
         )
     except BaseException:
@@ -216,15 +204,14 @@ async def _execute_batch(
     *,
     progress: bool = True,
     force: bool = False,
-    strategy: Optional[str] = None,
+    scheduler: Optional[str] = None,
     data_cache_dir: Optional[Path] = None,
 ) -> ExecutionResult:
+    from mas.ctl.preload import preload_run_path
     from mas.lab.benchmark.service_manager import ServiceManager as _ServiceManager
     from mas.lab.emulation_resolver import resolve_emulation_plugins
-    from mas.lab.lab.config import ExperimentScheduleSpec
 
     exp = loaded.exp
-    from mas.ctl.preload import preload_run_path
 
     imported = await asyncio.to_thread(preload_run_path)
     if imported:
@@ -279,37 +266,37 @@ async def _execute_batch(
     total_ok = 0
     total_fail = 0
 
-    _schedule = getattr(exp, "schedule", None) or getattr(exp, "execution", None)
-    _effective_strategy = (
-        strategy
-        or (getattr(_schedule, "ordering", None) if _schedule else None)
-        or (getattr(_schedule, "strategy", None) if _schedule else None)
-        or "coverage"
-    )
+    _schedule = exp.schedule
+    _executor = exp.executor
+    _executor_plugin = resolve_executor(_executor.plugin)
+    _retrier = validated_plugin("retrier", exp.retry.plugin, dict(exp.retry.params))
+    _plan_kw = plan_kwargs(exp, plugin_override=scheduler)
+    _effective_scheduler = _plan_kw["schedule"].get("plugin")
     _execution_plan = build_execution_plan(
         prepared.loaded_ids,
         prepared.dataset_items,
         loaded.n_runs,
-        strategy=_effective_strategy,
-        execution=execution_as_dict(exp),
+        declared_scenario_ids=list(loaded.declared_scenario_ids) or None,
+        **_plan_kw,
     )
+    _attempts_before: dict[str, int] = {}
+    if loaded.runs_plan is not None:
+        _execution_plan, _attempts_before = select_runs(_execution_plan, loaded.runs_plan)
 
     from mas.lab.benchmark.environment.attach import validate_environments
 
     validate_environments(exp=exp, plan=_execution_plan)
-    _worker_count = _schedule.worker_processes if isinstance(_schedule, ExperimentScheduleSpec) and _schedule else 1
-    if _worker_count > 1:
+    _worker_processes = _executor.worker_processes
+    if _worker_processes > 1:
         from mas.lab.benchmark.environment.attach import refuse_environment_in_workers
 
         refuse_environment_in_workers(exp=exp, plan=_execution_plan)
 
-    _parallel = max(1, (getattr(_schedule, "parallel_scenarios", 1) if _schedule else 1) or 1)
-    _pause = max(0.0, (getattr(_schedule, "pause_between_runs", 0.0) if _schedule else 0.0) or 0.0)
-    _max_attempts, _retry_backoff = lab_run_retry_settings(_schedule)
-    _worker_schedule = _schedule if isinstance(_schedule, ExperimentScheduleSpec) else None
-    _worker_processes = _worker_schedule.worker_processes if _worker_schedule else 1
-    _worker_max_runs = _worker_schedule.worker_max_runs if _worker_schedule else None
+    _parallel = max(1, _schedule.parallel_scenarios or 1)
+    _pause = max(0.0, _schedule.pause_between_runs or 0.0)
+    _worker_max_runs = _executor.worker_max_runs
     _sem = asyncio.Semaphore(_parallel)
+
     _io_lock = asyncio.Lock()
     _run_pool = None
     _done: dict[tuple, asyncio.Event] = {}
@@ -435,24 +422,21 @@ async def _execute_batch(
         require_cores(_worker_processes)
         require_worker_safe(loaded.pipeline_specs, base_dir=experiment_yaml.parent)
 
-    _emulation = getattr(exp, "bench_emulation", None) or getattr(getattr(exp, "execution", None), "emulation", None)
-    _cache_policy = (
-        getattr(getattr(_emulation, "runtime", None), "cache", "content-addressed")
-        if _emulation
-        else "content-addressed"
-    )
+    _emulation = exp.bench_emulation
+    _cache_policy = _emulation.runtime.cache
 
     if progress:
         print()
         print(f"Running MAS benchmark '{exp.name}'")
-        print(f"  strategy   : {_effective_strategy}")
+        print(f"  schedule   : {_effective_scheduler or 'default'}")
+        print(f"  executor   : {_executor.plugin}")
         n_sc, n_items = len(prepared.loaded_ids), len(prepared.dataset_items)
         print(f"  {n_sc} scenarios × {n_items} items × {loaded.n_runs} run(s) = {len(_execution_plan)} executions")
         from mas.lab.benchmark.execution.plan import skipped_by_scenario
 
-        skipped = skipped_by_scenario(prepared.loaded_ids, prepared.dataset_items, execution=execution_as_dict(exp))
+        skipped = skipped_by_scenario(prepared.loaded_ids, prepared.dataset_items, design=_plan_kw["design"])
         print(f"  {skipped} items skipped by scenario")
-        print(f"  parallel   : {_parallel}   pause: {_pause}s   max_attempts: {_max_attempts}")
+        print(f"  parallel   : {_parallel}   pause: {_pause}s   retry: {exp.retry.plugin} {dict(exp.retry.params)}")
         if _worker_processes > 1:
             print(f"  workers    : {_worker_processes} processes")
         if _emulation:
@@ -466,9 +450,7 @@ async def _execute_batch(
             print(f"  emulation  : {'  '.join(_state_parts)}")
         print()
 
-    _faults_config = getattr(_emulation, "faults", None) if _emulation else None
-    if _faults_config is None:
-        _faults_config = getattr(exp.execution, "faults", None) if exp.execution else None
+    _faults_config = _emulation.faults
     _faults_dict = _faults_config if isinstance(_faults_config, dict) else None
     _emulation_plugins = resolve_emulation_plugins(
         _emulation,
@@ -542,7 +524,6 @@ async def _execute_batch(
             item["inputs"] = inputs
         config, spec_path = prepared.scenario_configs[scenario_id]
         item_id = item.get("id", 0)
-        source_item_id = item.get("source_item_id", item_id)
 
         from mas.lab.inputs import load_run_input, run_input_to_dict
 
@@ -643,21 +624,10 @@ async def _execute_batch(
         # before writing its outcome (also a miss).  A run with status=error
         # may have written a partial events.jsonl — reusing it silently returns
         # wrong/empty results and corrupts downstream evaluation metrics.
-        _global_result_ok = False
         _global_result_path = _global_run_dir / "result.json"
-        if _global_result_path.exists():
-            try:
-                _prior = _json.loads(_global_result_path.read_text(encoding="utf-8"))
-                if _prior.get("status") != "error":
-                    _global_result_ok = True
-                else:
-                    logger.debug(
-                        "Cache miss (prior run failed): hash=%s error=%r",
-                        _run_hash[:12],
-                        _prior.get("error", "")[:80],
-                    )
-            except Exception:
-                logger.debug("Cache miss (result.json unreadable): hash=%s", _run_hash[:12])
+        _global_result_ok = result_file_is_complete(_global_result_path)
+        if _global_result_path.exists() and not _global_result_ok:
+            logger.debug("Cache miss (prior run incomplete): hash=%s", _run_hash[:12])
 
         _global_hit = (
             _use_cache
@@ -678,6 +648,7 @@ async def _execute_batch(
             and not _run_ref_is_stale(run_output_dir, _run_hash)
             and _events_path.exists()
             and _events_path.stat().st_size > 0
+            and run_dir_is_complete(run_output_dir)
         )
         if _cache_policy == "forced" and not _global_hit and not _local_hit:
             error = f"emulation.runtime.cache=forced but no cache entry for hash {_run_hash[:12]}"
@@ -685,27 +656,20 @@ async def _execute_batch(
             async with _io_lock:
                 total_fail += 1
                 results_rows.append(
-                    {
-                        "run_id": run_id,
-                        "scenario": scenario_id,
-                        "item_id": item_id,
-                        "run": run_idx + 1,
-                        "source_item_id": source_item_id,
-                        "experiment_id": exp.name,
-                        "session_id": "",
-                        "checkpoint_id": checkpoint_id,
-                        "forked_from_checkpoint": forked_from_checkpoint,
-                        "group": item.get("group", ""),
-                        "target_agents": ",".join(item.get("target_agents", [])),
-                        "prompt": prompt,
-                        "status": status,
-                        "output": "",
-                        "output_length": 0,
-                        "trace_path": "",
-                        "elapsed_ms": 0.0,
-                        "error": error,
-                        "attempts": 0,
-                    }
+                    _run_result_row(
+                        scenario_id=scenario_id,
+                        item=item,
+                        run_idx=run_idx,
+                        experiment_id=exp.name,
+                        prompt=prompt,
+                        status=status,
+                        output="",
+                        error=error,
+                        elapsed_ms=0.0,
+                        attempts=0,
+                        checkpoint_id=checkpoint_id,
+                        forked_from_checkpoint=forked_from_checkpoint,
+                    )
                 )
             if progress:
                 print(f"  ❌ [{scenario_id}] item={item_id} run={run_idx + 1} (cache=forced, miss)")
@@ -731,6 +695,7 @@ async def _execute_batch(
                 mas_ref=prepared.mas_ref,
                 overlay_ref=prepared.scenario_overlay_refs.get(scenario_id, ""),
             )
+            _mirror_result(_global_run_dir, run_output_dir)
             if progress:
                 print(f"  ⏩  [{scenario_id}] item={item_id} run={run_idx + 1} ({_src}, skipping)")
             if _sc_whatif is not None and getattr(_sc_whatif, "produce_checkpoints", None):
@@ -745,27 +710,22 @@ async def _execute_batch(
             resolved_events = _cached_events if _global_hit else _events_path
             async with _io_lock:
                 results_rows.append(
-                    {
-                        "run_id": run_id,
-                        "scenario": scenario_id,
-                        "item_id": item_id,
-                        "run": run_idx + 1,
-                        "source_item_id": source_item_id,
-                        "experiment_id": exp.name,
-                        "session_id": "",
-                        "checkpoint_id": checkpoint_id,
-                        "forked_from_checkpoint": forked_from_checkpoint,
-                        "group": item.get("group", ""),
-                        "target_agents": ",".join(item.get("target_agents", [])),
-                        "prompt": prompt,
-                        "status": "ok",
-                        "output": "(cached)",
-                        "output_length": 0,
-                        "trace_path": str(resolved_events),
-                        "elapsed_ms": 0.0,
-                        "error": "",
-                        "attempts": 0,
-                    }
+                    _run_result_row(
+                        scenario_id=scenario_id,
+                        item=item,
+                        run_idx=run_idx,
+                        experiment_id=exp.name,
+                        prompt=prompt,
+                        status="ok",
+                        output="(cached)",
+                        error="",
+                        elapsed_ms=0.0,
+                        attempts=0,
+                        trace_path=str(resolved_events),
+                        checkpoint_id=checkpoint_id,
+                        forked_from_checkpoint=forked_from_checkpoint,
+                        output_length=0,
+                    )
                 )
                 total_ok += 1
             begin_run(_v2_key)
@@ -872,15 +832,7 @@ async def _execute_batch(
                     )
 
                     _runner_id = infer_runner_id(
-                        execution_runner=(
-                            getattr(_schedule, "runner", None)
-                            if _schedule
-                            else (
-                                exp.execution.runner
-                                if exp.execution and getattr(exp.execution, "runner", None)
-                                else None
-                            )
-                        ),
+                        execution_runner=_executor.runner,
                         mas_manifest=(Path(_mas_manifest_path) if _mas_manifest_path is not None else None),
                         agent_config=config,
                         flavour=_sc_flavour if isinstance(_sc_flavour, dict) else None,
@@ -1011,15 +963,7 @@ async def _execute_batch(
                     if _bound is not None:
                         # The control this environment generated is part of the flavour the runner sees.
                         _runner_id = infer_runner_id(
-                            execution_runner=(
-                                getattr(_schedule, "runner", None)
-                                if _schedule
-                                else (
-                                    exp.execution.runner
-                                    if exp.execution and getattr(exp.execution, "runner", None)
-                                    else None
-                                )
-                            ),
+                            execution_runner=_executor.runner,
                             mas_manifest=(Path(_mas_manifest_path) if _mas_manifest_path is not None else None),
                             agent_config=config,
                             flavour=_run_flavour if isinstance(_run_flavour, dict) else None,
@@ -1117,26 +1061,23 @@ async def _execute_batch(
                                 logger.debug("run fixture stop failed", exc_info=True)
                             _bound.close()
 
-                def _on_retry(failed_attempt: int, attempts: int, err: str) -> None:
+                def _on_retry(attempt_no: int, err: str) -> None:
                     attempt_reset(_v2_key)
                     _clear_failed_attempt_traces(_global_run_dir)
                     logger.warning(
-                        "lab run %s failed (%s); retrying %s/%s",
+                        "lab run %s failed (%s); retrying after attempt %s",
                         run_id,
                         (err or "")[:160],
-                        failed_attempt + 1,
-                        attempts,
+                        attempt_no,
                     )
                     if progress:
-                        print(
-                            f"  ⚠️  [{scenario_id}] item={item_id} run={run_idx + 1} "
-                            f"retry {failed_attempt + 1}/{attempts}"
-                        )
+                        print(f"  ⚠️  [{scenario_id}] item={item_id} run={run_idx + 1} retry after attempt {attempt_no}")
 
-                result_dict, status, error, output, _attempts_used = await invoke_lab_run_with_retry(
+                _outcome = await run_with_retrier(
+                    _executor_plugin,
+                    _retrier,
                     _do_mas_run,
-                    max_attempts=_max_attempts,
-                    backoff_s=_retry_backoff,
+                    attempts_before=_attempts_before.get((PlannedRun(scenario_id, item, run_idx)).id, 0),
                     on_retry=_on_retry,
                     before_attempt=(
                         (
@@ -1150,6 +1091,8 @@ async def _execute_batch(
                         else None
                     ),
                 )
+                result_dict, status, error = _outcome.result, _outcome.status, _outcome.error
+                output, _attempts_used = _outcome.output, _outcome.attempts
                 write_cache_inputs(
                     _global_run_dir,
                     _run_hash,
@@ -1200,7 +1143,8 @@ async def _execute_batch(
         terminal_run(_v2_key, _term)
         if _live_post is not None:
             await _live_post.on_terminal(_v2_key, _term)
-        write_run_result(_global_run_dir, status, elapsed_ms, error or "")
+        write_run_result(_global_run_dir, status, elapsed_ms, error or "", attempts=_attempts_used)
+        _mirror_result(_global_run_dir, run_output_dir)
         write_run_info(
             _global_run_dir,
             run_output_dir,
@@ -1216,33 +1160,28 @@ async def _execute_batch(
         )
         async with _io_lock:
             results_rows.append(
-                {
-                    "run_id": run_id,
-                    "scenario": scenario_id,
-                    "item_id": item_id,
-                    "run": run_idx + 1,
-                    "source_item_id": source_item_id,
-                    "experiment_id": exp.name,
-                    "session_id": result_dict.get("session_id", ""),
-                    "checkpoint_id": checkpoint_id,
-                    "forked_from_checkpoint": forked_from_checkpoint,
-                    "group": item.get("group", ""),
-                    "target_agents": ",".join(item.get("target_agents", [])),
-                    "prompt": prompt,
-                    "status": status,
-                    "output": str(output or "")[:500],
-                    "output_length": len(str(output or "")),
-                    "trace_path": trace_path,
-                    "elapsed_ms": round(elapsed_ms, 1),
-                    "error": error or "",
-                    "attempts": _attempts_used,
-                }
+                _run_result_row(
+                    scenario_id=scenario_id,
+                    item=item,
+                    run_idx=run_idx,
+                    experiment_id=exp.name,
+                    prompt=prompt,
+                    status=status,
+                    output=str(output or ""),
+                    error=error or "",
+                    elapsed_ms=elapsed_ms,
+                    attempts=_attempts_used,
+                    trace_path=trace_path,
+                    session_id=result_dict.get("session_id", ""),
+                    checkpoint_id=checkpoint_id,
+                    forked_from_checkpoint=forked_from_checkpoint,
+                )
             )
 
         if progress:
             tag = "✅" if status == "ok" else "❌"
             print(f"  {tag} [{scenario_id}] item={item_id} run={run_idx + 1} ({elapsed_ms:.0f}ms)")
-        if _sc_whatif is not None and status == "ok" and getattr(_sc_whatif, "produce_checkpoints", None):
+        if _sc_whatif is not None and status == "ok" and _sc_whatif.produce_checkpoints:
             from mas.lab.benchmark.schedule.whatif import checkpoint_key, publish_named_checkpoints
 
             publish_named_checkpoints(
@@ -1264,27 +1203,18 @@ async def _execute_batch(
                 async with _io_lock:
                     total_fail += 1
                     results_rows.append(
-                        {
-                            "run_id": f"{sid}__item{item_id}__r{ridx + 1}",
-                            "scenario": sid,
-                            "item_id": item_id,
-                            "run": ridx + 1,
-                            "source_item_id": itm.get("source_item_id", item_id),
-                            "experiment_id": exp.name,
-                            "session_id": "",
-                            "checkpoint_id": "",
-                            "forked_from_checkpoint": "",
-                            "group": itm.get("group", ""),
-                            "target_agents": ",".join(itm.get("target_agents", [])),
-                            "prompt": "",
-                            "status": "error",
-                            "output": "",
-                            "output_length": 0,
-                            "trace_path": "",
-                            "elapsed_ms": 0.0,
-                            "error": str(exc),
-                            "attempts": 0,
-                        }
+                        _run_result_row(
+                            scenario_id=sid,
+                            item=itm,
+                            run_idx=ridx,
+                            experiment_id=exp.name,
+                            prompt="",
+                            status="error",
+                            output="",
+                            error=str(exc),
+                            elapsed_ms=0.0,
+                            attempts=0,
+                        )
                     )
                 if progress:
                     print(f"  ❌ [{sid}] item={item_id} run={ridx + 1} ({exc})")
@@ -1309,7 +1239,7 @@ async def _execute_batch(
                 _worker_processes,
                 max_runs=int(_worker_max_runs or 0),
                 on_event=_live_sink.emit,
-                timeout_s=float(_schedule.timeout or 300),
+                timeout_s=float(_executor.timeout or 300),
             )
         await _dispatch_all()
 

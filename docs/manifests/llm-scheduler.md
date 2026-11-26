@@ -49,6 +49,12 @@ multithreaded and multiprocess workers cannot DDoS the provider.
 | `timeout_s` | `300` | Wait for a slot before `TimeoutError`. |
 | `state_path` | `$XDG_CACHE_HOME/mas/llm_scheduler.json` | Shared JSON + sibling `.lock`. Unix uses `flock`; Windows is process-local. Crashed holders drop when the pid dies. Waiters raise `TimeoutError` after `timeout_s`. |
 
+A refused call (HTTP 429 / rate limit, or a call the retry layer already
+re-issued) lowers the in-flight cap; a clean call raises it back toward
+`max_in_flight`. A streak of refusals pauses the bucket for `cooldown_s`.
+That is what a gateway or load balancer sees. `retries: 0` on the retry
+layer turns the same refusal into a classified failure of the call.
+
 `keys` chooses the policy grain:
 
 | `keys` | Effect |

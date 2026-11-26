@@ -246,7 +246,37 @@ def test_schedule_max_attempts_validates() -> None:
     data = _canonical()
     data["experiment"]["schedule"] = {"max_attempts": 3, "retry_backoff_s": 2.0}
     warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings
+
+
+def test_retry_block_validates() -> None:
+    data = _canonical()
+    data["experiment"]["retry"] = {"plugin": "native", "params": {"max_attempts": 3, "backoff_s": 2.0}}
+    data["experiment"]["analyzer"] = {"plugin": "native"}
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
     assert warnings == []
+
+
+def test_executor_refuses_max_attempts() -> None:
+    data = _canonical()
+    data["experiment"]["executor"] = {"plugin": "native", "max_attempts": 3}
+    with pytest.raises(ManifestValidationError):
+        validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+
+
+def test_schedule_plugin_validates() -> None:
+    data = _canonical()
+    data["experiment"]["schedule"] = {"plugin": "coverage", "params": {}}
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings == []
+
+
+def test_legacy_schedule_ordering_still_validates() -> None:
+    data = _canonical()
+    data["experiment"]["schedule"] = {"ordering": "depth"}
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings
+    assert all("deprecated" in msg for msg in warnings)
 
 
 def test_execution_max_attempts_zero_fails_schema() -> None:
@@ -258,9 +288,11 @@ def test_execution_max_attempts_zero_fails_schema() -> None:
 
 def test_one_factor_design_validates_on_canonical_and_legacy_execution() -> None:
     design = {
-        "mode": "one_factor",
-        "pin_scenarios": ["baseline"],
-        "vary": {"axis": "item", "values": ["item-1"]},
+        "plugin": "one_factor",
+        "params": {
+            "pin_scenarios": ["baseline"],
+            "vary": {"axis": "item", "values": ["item-1"]},
+        },
     }
     canonical = _canonical()
     canonical["experiment"]["design"] = design
@@ -273,6 +305,18 @@ def test_one_factor_design_validates_on_canonical_and_legacy_execution() -> None
     assert any("experiment.execution" in msg for msg in warnings)
 
 
+def test_legacy_design_mode_still_validates() -> None:
+    data = _canonical()
+    data["experiment"]["design"] = {
+        "mode": "one_factor",
+        "pin_scenarios": ["baseline"],
+        "vary": {"axis": "item", "values": ["item-1"]},
+    }
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings
+    assert all("deprecated" in msg for msg in warnings)
+
+
 def test_one_factor_vary_rejects_unknown_axis() -> None:
     data = _canonical()
     data["experiment"]["design"] = {
@@ -283,35 +327,18 @@ def test_one_factor_vary_rejects_unknown_axis() -> None:
         validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
 
 
-def test_one_factor_without_vary_fails_schema() -> None:
-    data = _canonical()
-    data["experiment"]["design"] = {"mode": "one_factor"}
-    with pytest.raises(ManifestValidationError, match="vary"):
-        validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
-
-
-def test_cartesian_rejects_one_factor_keys() -> None:
-    data = _canonical()
-    data["experiment"]["design"] = {
-        "mode": "cartesian",
-        "vary": {"axis": "item", "values": ["item-1"]},
-    }
-    with pytest.raises(ManifestValidationError):
-        validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
-
-
 def test_dead_pin_key_fails_schema() -> None:
     data = _canonical()
-    data["experiment"]["design"] = {"mode": "cartesian", "pin": {"scenarios": ["baseline"]}}
+    data["experiment"]["design"] = {"plugin": "cartesian", "pin": {"scenarios": ["baseline"]}}
     with pytest.raises(ManifestValidationError, match="pin"):
         validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
 
 
-def test_coupled_without_couplings_fails_schema() -> None:
+def test_design_plugin_params_validate() -> None:
     data = _canonical()
-    data["experiment"]["design"] = {"mode": "coupled"}
-    with pytest.raises(ManifestValidationError, match="couplings"):
-        validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    data["experiment"]["design"] = {"plugin": "cartesian", "max_executions": 10, "params": {}}
+    warnings = validate_manifest(data, source="experiment.yaml", kind="experiment", strict=True, resolve_refs=False)
+    assert warnings == []
 
 
 def test_environment_fixture_env_and_timer_keys_validate() -> None:

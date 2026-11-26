@@ -21,7 +21,11 @@ List the calls to named tools (`--tool NAME`, repeatable) with their inputs.
 
 ## OPTIONS
 
-See `mas-lab telemetry calls --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_FILE` | Positional argument. |
+| `--tool` | Tool name to list (repeatable). |
+| `--json` | Emit JSON instead of text. |
 
 ## SEE ALSO
 

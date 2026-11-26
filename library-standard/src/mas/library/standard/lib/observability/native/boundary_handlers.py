@@ -201,6 +201,19 @@ def _boundary_engine_io_return(
             rec["max_tokens"] = payload["max_tokens"]
         if payload.get("truncation_retries"):
             rec["truncation_retries"] = payload["truncation_retries"]
+        retry_attempts = payload.get("retry_attempts") or 0
+        try:
+            retry_attempts = int(retry_attempts)
+        except (TypeError, ValueError):
+            retry_attempts = 0
+        if retry_attempts:
+            rec["retry_attempts"] = retry_attempts
+            rec["retry_count"] = retry_attempts
+        if payload.get("failure_class"):
+            rec["error_class"] = payload["failure_class"]
+            rec["failure_class"] = payload["failure_class"]
+        if payload.get("failure_code"):
+            rec["failure_code"] = payload["failure_code"]
         tool_calls = payload.get("tool_calls")
         if isinstance(tool_calls, list) and tool_calls:
             rec["tool_calls"] = list(tool_calls)

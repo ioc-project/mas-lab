@@ -60,7 +60,9 @@ async def test_v2_scope_gate() -> None:
     assert item_step.ran == 0
     await sched.mark_run_terminal(RunKey("e", "s", "item1", "r2"), "failed")
     await asyncio.wait_for(sched.drain(), timeout=2)
-    assert run_a.ran == 1 and run_b.ran == 1
+    assert run_a.ran == 1
+    assert run_b.ran == 0
+    assert nodes[1].status == "skipped"
     assert item_step.ran == 1
 
 

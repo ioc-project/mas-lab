@@ -36,19 +36,19 @@ def _load(tmp_path: Path, body: str) -> MASExperimentConfig:
 def test_new_shape_parses_without_scheduler_fields_in_design(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n    n_runs: 4\n  design:\n    mode: cartesian\n    max_executions: 50\n",
+        "  run:\n    n_runs: 4\n  design:\n    plugin: cartesian\n    max_executions: 50\n",
     )
     assert cfg.n_runs == 4
-    assert cfg.design.mode == "cartesian"
+    assert cfg.design.plugin == "cartesian"
     assert cfg.design.max_executions == 50
-    assert cfg.schedule.ordering == "coverage"
+    assert cfg.schedule.plugin is None
     assert "execution:" not in cfg._path.read_text()
 
 
 def test_schedule_ordering_changes_plan_not_n_runs(tmp_path: Path) -> None:
     items = [{"id": "a"}, {"id": "b"}]
-    coverage = build_execution_plan(["s1", "s2"], items, 2, strategy="coverage")
-    depth = build_execution_plan(["s1", "s2"], items, 2, strategy="depth")
+    coverage = build_execution_plan(["s1", "s2"], items, 2, schedule={"plugin": "coverage"})
+    depth = build_execution_plan(["s1", "s2"], items, 2, schedule={"plugin": "depth"})
     assert len(coverage) == len(depth) == 8
     assert coverage[0][2] == 0 and coverage[1][2] == 0
     assert depth[0] == ("s1", {"id": "a"}, 0)
@@ -57,18 +57,19 @@ def test_schedule_ordering_changes_plan_not_n_runs(tmp_path: Path) -> None:
 
     cfg = _load(
         tmp_path,
-        "  run:\n    n_runs: 2\n  schedule:\n    ordering: depth\n    parallel_scenarios: 9\n",
+        "  run:\n    n_runs: 2\n  schedule:\n    plugin: depth\n    parallel_scenarios: 9\n",
     )
     assert cfg.n_runs == 2
     assert cfg.schedule.parallel_scenarios == 9
-    plan = build_execution_plan(cfg.scenario_ids(), items, cfg.n_runs, strategy=cfg.schedule.ordering)
+    assert cfg.schedule.plugin == "depth"
+    plan = build_execution_plan(cfg.scenario_ids(), items, cfg.n_runs, schedule=cfg.schedule)
     assert plan[1] == ("s1", {"id": "a"}, 1)
 
 
-def test_design_max_executions_changes_which_cells_are_legal(tmp_path: Path) -> None:
+def test_design_max_executions_changes_which_runs_are_legal(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n    n_runs: 3\n  design:\n    mode: cartesian\n    max_executions: 2\n",
+        "  run:\n    n_runs: 3\n  design:\n    plugin: cartesian\n    max_executions: 2\n",
     )
     with pytest.raises(RuntimeError, match="design.max_executions=2"):
         build_execution_plan(
@@ -79,29 +80,34 @@ def test_design_max_executions_changes_which_cells_are_legal(tmp_path: Path) -> 
         )
 
 
-def test_new_keys_win_over_legacy_execution(tmp_path: Path) -> None:
+def test_same_key_in_execution_and_schedule_is_an_error(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="not both"):
+        _load(
+            tmp_path,
+            "  run:\n"
+            "    n_runs: 2\n"
+            "  execution:\n"
+            "    parallel_scenarios: 3\n"
+            "    strategy: depth\n"
+            "  schedule:\n"
+            "    parallel_scenarios: 11\n"
+            "    plugin: coverage\n",
+        )
+
+
+def test_disjoint_legacy_execution_and_schedule_keys_merge(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
-        "  run:\n"
-        "    n_runs: 2\n"
-        "  execution:\n"
-        "    parallel_scenarios: 3\n"
-        "    strategy: depth\n"
-        "  schedule:\n"
-        "    parallel_scenarios: 11\n"
-        "    ordering: coverage\n",
+        "  run:\n    n_runs: 2\n  execution:\n    timeout: 12\n  schedule:\n    plugin: coverage\n",
     )
-    assert cfg.schedule.parallel_scenarios == 11
-    assert cfg.schedule.ordering == "coverage"
-    assert cfg.execution.parallel_scenarios == 11
+    assert cfg.schedule.plugin == "coverage"
+    assert cfg.executor.timeout == 12
     assert cfg.n_runs == 2
 
 
-def test_legacy_max_attempts_lands_on_schedule(tmp_path: Path) -> None:
+def test_legacy_max_attempts_lands_on_retry(tmp_path: Path) -> None:
     cfg = _load(
         tmp_path,
         "  run:\n    n_runs: 1\n  execution:\n    max_attempts: 1\n    retry_backoff_s: 0\n",
     )
-    assert cfg.schedule.max_attempts == 1
-    assert cfg.schedule.retry_backoff_s == 0.0
-    assert cfg.execution.max_attempts == 1
+    assert cfg.retry.params == {"max_attempts": 1, "backoff_s": 0}

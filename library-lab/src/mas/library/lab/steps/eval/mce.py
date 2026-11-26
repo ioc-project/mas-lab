@@ -240,11 +240,25 @@ class EvalMceStep(PipelineStep):
     ]
 
     async def execute(self, ctx: ExecutionContext) -> StepOutput:
+        from mas.lab.benchmark.execution.completeness import (
+            STAGE_LIVE,
+            current_run_complete,
+            run_dir_is_complete,
+            stage_mode_of,
+        )
         from mas.library.eval.mce.catalog import ALL_SESSION_METRICS
         from mas.library.eval.mce.runner import build_metrics_document
 
         config = self.config
         run_dir = run_dir_from_ctx(ctx, config)
+        if stage_mode_of(self) != STAGE_LIVE:
+            result_path = (Path(run_dir) / "result.json") if run_dir else None
+            known_error = result_path is not None and result_path.is_file() and not run_dir_is_complete(run_dir)
+            if not current_run_complete() or known_error:
+                return StepOutput(
+                    data={"total": 0, "computed": 0, "skipped": 1, "errors": 0},
+                    metadata={"skipped": True, "reason": "incomplete"},
+                )
         events_raw = config.get("events_path") or config.get("trace_path")
         events_path = Path(str(events_raw)).expanduser().resolve() if events_raw else resolve_run_events(ctx, config)
         if events_path is None or not events_path.exists():

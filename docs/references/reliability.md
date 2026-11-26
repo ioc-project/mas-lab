@@ -24,7 +24,7 @@ Two layers share one taxonomy: `transient`, `unavailable`, `application`, `fatal
 |-------|--------|----------------|
 | **Infra** | retry layer around llm and tool calls | Re-issues the same call (`RetryPolicy` and the retry loop live in `library-standard`, `mas.library.standard.lib.retry`, shared by the layer and the eval judge calls). After the budget is spent, an optional **circuit breaker** layer acts on `unavailable`. |
 | **Governance** | Ingress, after the call returns (the `_end` hook) | `error_policy` maps the typed failure onto `allow`, `retry`, `block`, or `skip`. Plugin: `retry_on_error`. |
-| **Lab** | `mas-lab benchmark run` | Re-issues a failed scenario, item, and run (`schedule.max_attempts`, default 3). Independent of `n_runs`. |
+| **Lab** | `mas-lab benchmark run` | Re-issues a failed scenario, item, and run (`retry.params.max_attempts`, default 3). Independent of `n_runs`. |
 
 - Application tool errors stay a `TOOL_RESULT` (working memory).
 - Exhausted LLM failures stay `ERROR`.
@@ -62,7 +62,7 @@ For ordinary chat and LLM HTTP, the runtime retries a dropped socket, connect-re
 | `error_policy.*` | **unset** until `retry_on_error` is installed |
 | `error_recovery_plugin` | unset |
 | `max_gov_retries` | `2` |
-| Lab run `max_attempts` | `3` (`experiment.schedule.max_attempts`; set `1` to disable) |
+| Lab run `max_attempts` | `3` (`experiment.retry.params.max_attempts`; set `1` to disable) |
 | `budget` governance plugin | not named (no call-count ceiling) |
 
 ### `with-hardened`

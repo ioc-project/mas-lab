@@ -20,7 +20,9 @@ Print span / trace / boundary counts. Inspection only — no pipeline YAML.
 
 ## OPTIONS
 
-See `mas-lab telemetry inspect --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `SPANS_FILE` | Positional argument. |
 
 ## SEE ALSO
 

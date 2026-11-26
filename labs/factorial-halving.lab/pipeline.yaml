@@ -1,0 +1,18 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+pipeline:
+  name: factorial-halving
+  description: >
+    After one round over a 2×2 factorial space, keep the strongest half
+    of the scenarios. Offline: scores are the fixture, not a live judge.
+  max_scheduled_batches: 4
+  steps:
+    - name: keep-strongest
+      type: next_runs
+      mode: batch
+      config:
+        strategy: successive_halving
+        keep_fraction: 0.5
+        experiment: ./experiment.yaml
+        scores_path: ./fixtures/round1-scores.json
+        plan_path: ./output/round2-runs.json

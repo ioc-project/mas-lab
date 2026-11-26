@@ -11,6 +11,7 @@ import pytest
 from mas.lab.benchmark.dataset import Dataset
 from mas.lab.benchmark.execution.plan import build_execution_plan, skipped_by_scenario
 from mas.lab.benchmark.schedule.run_batch.load import print_dry_run
+from mas.lab.lab.config.execution import ExperimentExecutorSpec, ExperimentScheduleSpec
 
 SCENARIOS = ["bare", "guarded"]
 
@@ -88,7 +89,10 @@ def test_a_non_string_scenarios_entry_is_an_error():
 
 def test_coupled_mode_honors_the_field():
     items = _items(["bare"])
-    design = {"mode": "coupled", "couplings": [{"scenario": "guarded", "items": ["control"]}]}
+    design = {
+        "plugin": "coupled",
+        "params": {"couplings": [{"scenario": "guarded", "items": ["control"]}]},
+    }
     plan = build_execution_plan(SCENARIOS, items, 1, design=design)
     assert plan == []
     assert skipped_by_scenario(SCENARIOS, items, design=design) == 1
@@ -96,7 +100,7 @@ def test_coupled_mode_honors_the_field():
 
 def test_dry_run_reports_the_skip_count(capsys):
     loaded = SimpleNamespace(
-        exp=SimpleNamespace(name="e", mas=None),
+        exp=SimpleNamespace(name="e", mas=None, design=None, schedule=None, executor=ExperimentExecutorSpec()),
         configs_dir=None,
         scenario_ids=SCENARIOS,
         dataset_items=_items(["bare"]),
@@ -106,6 +110,29 @@ def test_dry_run_reports_the_skip_count(capsys):
     print_dry_run(loaded)
     out = capsys.readouterr().out
     assert "1 items skipped by scenario" in out and "Total      : 3 executions" in out
+    assert "Scheduler  : default" in out
+    assert "Executor   : native" in out
+
+
+def test_dry_run_prints_schedule_plugin_and_honours_scheduler(capsys):
+    loaded = SimpleNamespace(
+        exp=SimpleNamespace(
+            name="e",
+            mas=None,
+            design=None,
+            schedule=ExperimentScheduleSpec(plugin="coverage"),
+            executor=ExperimentExecutorSpec(),
+        ),
+        configs_dir=None,
+        scenario_ids=SCENARIOS,
+        dataset_items=_items(),
+        n_runs=1,
+        pipeline_specs=[],
+    )
+    print_dry_run(loaded)
+    assert "Scheduler  : coverage" in capsys.readouterr().out
+    print_dry_run(loaded, scheduler="depth")
+    assert "Scheduler  : depth" in capsys.readouterr().out
 
 
 def test_dry_run_coupled_total_follows_the_named_pairs(capsys):
@@ -113,10 +140,12 @@ def test_dry_run_coupled_total_follows_the_named_pairs(capsys):
         exp=SimpleNamespace(
             name="e",
             mas=None,
-            design=SimpleNamespace(
-                as_plan_dict=lambda: {"mode": "coupled", "couplings": [{"scenario": "guarded", "items": ["control"]}]}
-            ),
-            execution=None,
+            schedule=None,
+            executor=ExperimentExecutorSpec(),
+            design={
+                "plugin": "coupled",
+                "params": {"couplings": [{"scenario": "guarded", "items": ["control"]}]},
+            },
         ),
         configs_dir=None,
         scenario_ids=SCENARIOS,
@@ -148,7 +177,13 @@ def test_dry_run_reports_a_refused_manifest_instead_of_failing(tmp_path: Path, c
     (tmp_path / "mas.yaml").write_text("kind: mas\n", encoding="utf-8")
     (tmp_path / "app.yaml").write_text("kind: Applicaton\n", encoding="utf-8")
     loaded = SimpleNamespace(
-        exp=SimpleNamespace(name="x", mas=SimpleNamespace(manifest=tmp_path / "app.yaml"), execution=None),
+        exp=SimpleNamespace(
+            name="x",
+            mas=SimpleNamespace(manifest=tmp_path / "app.yaml"),
+            design=None,
+            schedule=None,
+            executor=ExperimentExecutorSpec(),
+        ),
         configs_dir=None,
         scenario_ids=["a"],
         dataset_items=[{"id": "i"}],
@@ -168,9 +203,34 @@ def test_a_blank_scenarios_string_is_refused():
 
 def test_dry_run_survives_an_invalid_design(tmp_path: Path, capsys):
     loaded = SimpleNamespace(
-        exp=SimpleNamespace(name="x", mas=None, execution={"design": {"mode": "bogus"}}),
+        exp=SimpleNamespace(
+            name="x",
+            mas=None,
+            design={"plugin": "bogus"},
+            schedule=None,
+            executor=ExperimentExecutorSpec(),
+        ),
         configs_dir=None,
         scenario_ids=["a"],
+        dataset_items=[{"id": "i"}],
+        n_runs=1,
+        pipeline_specs=[],
+    )
+    print_dry_run(loaded)
+    assert "refused" in capsys.readouterr().out
+
+
+def test_dry_run_survives_a_max_executions_guard(capsys):
+    loaded = SimpleNamespace(
+        exp=SimpleNamespace(
+            name="x",
+            mas=None,
+            design={"plugin": "cartesian", "max_executions": 1},
+            schedule=None,
+            executor=ExperimentExecutorSpec(),
+        ),
+        configs_dir=None,
+        scenario_ids=["a", "b"],
         dataset_items=[{"id": "i"}],
         n_runs=1,
         pipeline_specs=[],

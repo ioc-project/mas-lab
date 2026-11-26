@@ -4,7 +4,17 @@
 
 from __future__ import annotations
 
-_MODES = frozenset({"cartesian", "coupled", "one_factor"})
+from typing import Any
+
+from mas.lab.benchmark.execution.roles import (
+    DesignContext,
+    PlannedRun,
+    ScenarioGenerator,
+    ScheduleContext,
+    resolve_scenario_generator,
+    resolve_scheduler,
+)
+from mas.lab.lab.config.execution import ExperimentDesignSpec, ExperimentScheduleSpec
 
 
 def _declared_scenarios(item: dict) -> set[str] | None:
@@ -65,23 +75,55 @@ def item_applies(item: dict, scenario_id: str) -> bool:
     return declared is None or str(scenario_id).strip() in declared
 
 
+def design_plan_dict(design: ExperimentDesignSpec | dict | None) -> dict[str, Any]:
+    """Normalised design mapping for :func:`build_execution_plan`."""
+    if design is None:
+        return {}
+    if isinstance(design, ExperimentDesignSpec):
+        return design.as_plan_dict()
+    if isinstance(design, dict):
+        return dict(design)
+    raise TypeError(f"design must be ExperimentDesignSpec or dict, not {type(design).__name__}")
+
+
+def schedule_plan_dict(
+    schedule: ExperimentScheduleSpec | dict | None,
+    *,
+    plugin_override: str | None = None,
+) -> dict[str, Any]:
+    """Normalised schedule mapping for :func:`build_execution_plan`.
+
+    ``plugin_override`` is the CLI ``--scheduler`` value (``--strategy`` alias): it becomes ``schedule.plugin``.
+    """
+    if isinstance(schedule, ExperimentScheduleSpec):
+        data = dict(schedule.as_plan_dict())
+    elif isinstance(schedule, dict):
+        data = dict(schedule)
+    elif schedule is None:
+        data = {}
+    else:
+        raise TypeError(f"schedule must be ExperimentScheduleSpec or dict, not {type(schedule).__name__}")
+    if plugin_override:
+        data["plugin"] = plugin_override
+    return data
+
+
+def plan_kwargs(exp: Any, *, plugin_override: str | None = None) -> dict[str, Any]:
+    """``design`` / ``schedule`` kwargs for :func:`build_execution_plan` from a loaded experiment."""
+    return {
+        "design": design_plan_dict(exp.design),
+        "schedule": schedule_plan_dict(exp.schedule, plugin_override=plugin_override),
+    }
+
+
 def skipped_by_scenario(
     scenario_ids: list,
     dataset_items: list,
     *,
-    execution: dict | None = None,
-    strategy: str = "coverage",
-    design: dict | None = None,
+    design: dict | ExperimentDesignSpec | None = None,
 ) -> int:
     """Count of unique (scenario, item) pairs the items' ``scenarios`` lists leave out of the plan."""
-    raw = _raw_plan(
-        scenario_ids,
-        dataset_items,
-        1,
-        execution=execution,
-        strategy=strategy,
-        design=design,
-    )
+    raw = _generate(scenario_ids, dataset_items, 1, design=design_plan_dict(design))[1]
     seen: set[tuple[str, int]] = set()
     skipped = 0
     for sid, item, _ in raw:
@@ -99,160 +141,75 @@ def build_execution_plan(
     dataset_items: list,
     n_runs: int,
     *,
-    execution: dict | None = None,
-    strategy: str = "coverage",
-    design: dict | None = None,
-) -> list[tuple[str, dict, int]]:
-    """Return ordered ``(scenario_id, item, run_idx)`` triples."""
-    plan = _raw_plan(
+    design: dict | ExperimentDesignSpec | None = None,
+    schedule: dict | ExperimentScheduleSpec | None = None,
+    declared_scenario_ids: list | None = None,
+) -> list[PlannedRun]:
+    """Return ordered ``(scenario_id, item, run_idx)`` runs.
+
+    The generator sees ``declared_scenario_ids`` (every scenario the experiment
+    declares) so a narrowed run (``--scenario-id``, a shard) never turns a valid
+    design into an unknown-scenario error; runs outside ``scenario_ids`` are
+    dropped afterwards.
+    """
+    design_dict = design_plan_dict(design)
+    schedule_dict = schedule_plan_dict(schedule)
+    generator, plan = _generate(
         scenario_ids,
         dataset_items,
         n_runs,
-        execution=execution,
-        strategy=strategy,
-        design=design,
+        design=design_dict,
+        declared_scenario_ids=declared_scenario_ids,
     )
-    plan = [(sid, item, run_idx) for sid, item, run_idx in plan if item_applies(item, sid)]
-    execution = execution or {}
-    design = design or execution.get("design") or {}
-    enforce_max_executions(len(plan), execution, design=design)
-    return plan
+    present = {str(sid) for sid in scenario_ids}
+    plan = [run for run in plan if run.scenario_id in present and item_applies(run.item, run.scenario_id)]
+    enforce_max_executions(len(plan), design_dict)
+    scheduler_id = scheduler_id_for(generator, schedule_dict)
+    scheduler = resolve_scheduler(scheduler_id)
+    params = dict(schedule_dict.get("params") or {})
+    scheduler.validate_params(params)
+    parallel = schedule_dict.get("parallel_scenarios")
+    try:
+        cap = max(1, int(parallel)) if parallel is not None else 4
+    except (TypeError, ValueError):
+        cap = 4
+    return scheduler.order(
+        plan,
+        ScheduleContext(params=params, scenario_ids=list(scenario_ids), parallel_scenarios=cap),
+    )
 
 
-def _raw_plan(
+def _generate(
     scenario_ids: list,
     dataset_items: list,
     n_runs: int,
     *,
-    execution: dict | None = None,
-    strategy: str = "coverage",
-    design: dict | None = None,
-) -> list[tuple[str, dict, int]]:
-    execution = execution or {}
-    design = design or execution.get("design") or {}
-    mode = design.get("mode", "cartesian")
-    if mode not in _MODES:
-        raise ValueError(f"design.mode {mode!r} is not one of {sorted(_MODES)}")
-    if mode == "coupled":
-        return _build_coupled_plan(design.get("couplings"), dataset_items, n_runs)
-    if mode == "one_factor":
-        return _build_one_factor_plan(design, scenario_ids, dataset_items, n_runs)
-    return _build_cartesian_plan(scenario_ids, dataset_items, n_runs, strategy)
-
-
-def _build_cartesian_plan(
-    scenario_ids: list,
-    dataset_items: list,
-    n_runs: int,
-    strategy: str,
-) -> list[tuple[str, dict, int]]:
-    if strategy == "depth":
-        return [
-            (scenario_id, item, run_idx)
-            for scenario_id in scenario_ids
-            for item in dataset_items
-            for run_idx in range(n_runs)
-        ]
-    return [
-        (scenario_id, item, run_idx)
-        for run_idx in range(n_runs)
-        for scenario_id in scenario_ids
-        for item in dataset_items
-    ]
-
-
-def _items_by_id(dataset_items: list) -> dict:
-    return {str(i.get("id")): i for i in dataset_items}
-
-
-def _require_ids(requested: list, available: set[str], *, kind: str) -> list[str]:
-    ids = [str(x) for x in requested]
-    missing = [i for i in ids if i not in available]
-    if missing:
-        raise ValueError(f"design references unknown {kind}: {missing}")
-    return ids
-
-
-def _build_coupled_plan(
-    couplings: list[dict] | None,
-    dataset_items: list,
-    n_runs: int,
-) -> list[tuple[str, dict, int]]:
-    if not couplings:
-        raise ValueError("design.mode is coupled but design.couplings is missing or empty")
-    items_by_id = _items_by_id(dataset_items)
-    plan: list[tuple[str, dict, int]] = []
-    for pair in couplings:
-        scenario_id = pair.get("scenario")
-        if not scenario_id:
-            raise ValueError("design.couplings entry is missing scenario")
-        item_ids = pair.get("items")
-        if item_ids is None:
-            selected = dataset_items
-        else:
-            selected = [items_by_id[iid] for iid in _require_ids(item_ids, set(items_by_id), kind="item")]
-        for run_idx in range(n_runs):
-            for item in selected:
-                plan.append((scenario_id, item, run_idx))
-    return plan
-
-
-def _build_one_factor_plan(
     design: dict,
-    scenario_ids: list,
-    dataset_items: list,
-    n_runs: int,
-) -> list[tuple[str, dict, int]]:
-    """Vary one axis in ``design.vary``; pin others with pin_scenarios / pin_items."""
-    vary = design.get("vary") or {}
-    axis = vary.get("axis")
-    values = vary.get("values") or []
-    if axis not in {"scenario", "item"} or not values:
-        raise ValueError(
-            "design.mode is one_factor; design.vary must set axis (scenario|item) and a non-empty values list"
-        )
-
-    scenario_set = {str(s) for s in scenario_ids}
-    items_by_id = _items_by_id(dataset_items)
-    pinned_scenarios = _require_ids(
-        design.get("pin_scenarios") or scenario_ids,
-        scenario_set,
-        kind="scenario",
+    declared_scenario_ids: list | None = None,
+) -> tuple[ScenarioGenerator, list[PlannedRun]]:
+    plugin_id = str(design.get("plugin") or "cartesian")
+    params = dict(design.get("params") or {})
+    generator = resolve_scenario_generator(plugin_id)
+    generator.validate_params(params)
+    ctx = DesignContext(
+        scenario_ids=list(declared_scenario_ids or scenario_ids),
+        dataset_items=list(dataset_items),
+        n_runs=int(n_runs),
+        params=params,
     )
-    pinned_items = design.get("pin_items")
-    if pinned_items is not None:
-        base_items = [items_by_id[iid] for iid in _require_ids(pinned_items, set(items_by_id), kind="item")]
-    else:
-        base_items = dataset_items
-
-    plan: list[tuple[str, dict, int]] = []
-    if axis == "scenario":
-        for scenario_id in _require_ids(values, set(pinned_scenarios), kind="scenario"):
-            for run_idx in range(n_runs):
-                for item in base_items:
-                    plan.append((scenario_id, item, run_idx))
-    else:
-        for item_id in _require_ids(values, set(items_by_id), kind="item"):
-            item = items_by_id[item_id]
-            for scenario_id in pinned_scenarios:
-                for run_idx in range(n_runs):
-                    plan.append((scenario_id, item, run_idx))
-    return plan
+    return generator, list(generator.generate(ctx))
 
 
-def enforce_max_executions(
-    plan_len: int,
-    execution: dict | None = None,
-    *,
-    design: dict | None = None,
-) -> None:
-    if design is None:
-        if not execution:
-            return
-        design = execution.get("design")
-    if not isinstance(design, dict):
-        return
-    max_executions = design.get("max_executions")
+def scheduler_id_for(generator: ScenarioGenerator, schedule: dict) -> str:
+    explicit = schedule.get("plugin")
+    if explicit:
+        return str(explicit)
+    return generator.default_scheduler or "coverage"
+
+
+def enforce_max_executions(plan_len: int, design: dict | ExperimentDesignSpec | None = None) -> None:
+    design_dict = design_plan_dict(design)
+    max_executions = design_dict.get("max_executions")
     if max_executions is None:
         return
     limit = int(max_executions)

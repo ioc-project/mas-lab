@@ -56,6 +56,8 @@ coverage.json
 **/output/*.jsonl
 **/output/benchmark
 **/output/meta.json
+**/output/round*-runs.json
+**/output-batches/
 **/output/current_run_id.txt
 **/output/*/
 .tutorial-cache/

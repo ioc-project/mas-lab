@@ -23,14 +23,21 @@ that level completes:
 `n_runs` repeats each scenario and item pair. Models are not deterministic, so one
 run proves nothing. Repeating gives you the **variance**, instead of assuming it.
 
-The experiment's `design` chooses which scenario and item pairs to run:
+The experiment's `design` names a **scenario generator** plugin that chooses which
+scenario and item pairs to run:
 
-| Mode | Cells run |
+| Plugin | Runs run |
 |---|---|
-| `cartesian` | Every scenario against every item |
+| `cartesian` (default) | Every scenario against every item |
 | `coupled` | Only the listed (scenario, items) pairs |
 | `one_factor` | Sweep one axis, scenarios or items, while the other is pinned |
+| `factorial` | Product of named factors, selecting among declared scenario ids |
 
+A lab-local library can register another generator and name it with `design.plugin`.
+`schedule.plugin` names the walk order (`coverage`, `depth`, `as_generated`, or a
+lab-local scheduler). Omit it and the generator's default is used.
+`executor.plugin` names how each run is invoked (`native`, or a lab-local
+executor). Timeout, retries, and workers live there.
 Use `one_factor` to vary one thing at a time. Set `design.max_executions` to stop a
 plan that is larger than you intended. Set `dataset.limit` for a quick smoke run.
 

@@ -41,7 +41,7 @@ def test_retry_policy_every_knob_parses() -> None:
 
 def test_retry_policy_unknown_field_raises() -> None:
     with pytest.raises(SpecBindingError, match="unknown field"):
-        RetryPolicy.from_mapping({"retries": 3}, field_name="retry")
+        RetryPolicy.from_mapping({"tries": 3}, field_name="retry")
 
 
 def test_llm_default_retries_unavailable() -> None:

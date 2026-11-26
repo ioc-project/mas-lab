@@ -11,7 +11,10 @@ from mas.lab.manifests import load_experiment_data
 
 from .execution import (
     EmulationSpec,
+    ExperimentAnalyzerSpec,
     ExperimentDesignSpec,
+    ExperimentExecutorSpec,
+    ExperimentRetrySpec,
     ExperimentScheduleSpec,
     MASExecutionSpec,
     ReplaySpec,
@@ -40,10 +43,19 @@ class MASExperimentConfig(MASRunBase):
     """Batch experiment configuration for running a MAS across scenarios."""
 
     schedule: ExperimentScheduleSpec = field(default_factory=ExperimentScheduleSpec)
-    """How the bench walks the design matrix (parallelism, ordering, runner)."""
+    """How the bench walks the design matrix (ordering, parallelism, pacing)."""
 
     design: ExperimentDesignSpec = field(default_factory=ExperimentDesignSpec)
-    """What conditions are compared (mode, couplings, cartesian guard)."""
+    """What conditions are compared (scenario generator plugin, cartesian guard)."""
+
+    executor: ExperimentExecutorSpec = field(default_factory=ExperimentExecutorSpec)
+    """How each run is invoked (retry, timeout, workers, application runner)."""
+
+    retry: ExperimentRetrySpec = field(default_factory=ExperimentRetrySpec)
+    """Whether a failed run runs again (retrier plugin)."""
+
+    analyzer: ExperimentAnalyzerSpec = field(default_factory=ExperimentAnalyzerSpec)
+    """Who reads the results tree (analyzer plugin)."""
 
     bench_emulation: EmulationSpec = field(default_factory=EmulationSpec)
     """Mock/replay/trace-cache posture held constant unless declared a factor."""
@@ -96,7 +108,9 @@ class MASExperimentConfig(MASRunBase):
 
         Dual-read: a top-level ``execution:`` mapping still loads, with a
         structured deprecation warning, and is mapped onto ``schedule`` /
-        ``design`` / ``bench_emulation``. New keys win when both are present.
+        ``design`` / ``executor`` / ``bench_emulation``. The same host key in
+        leftover ``execution:`` and the new block is an error. Disjoint keys
+        still merge.
         """
         exp_data = data.get("experiment", data)
         base_dir = path.parent
@@ -121,15 +135,62 @@ class MASExperimentConfig(MASRunBase):
 
         mapped = split_legacy_execution(legacy) if isinstance(legacy, dict) else {}
 
-        schedule_src = dict(mapped.get("schedule") or {})
-        if "schedule" in exp_data and isinstance(exp_data["schedule"], dict):
-            schedule_src.update(exp_data["schedule"])
-        schedule = ExperimentScheduleSpec.from_dict(schedule_src)
+        from mas.lab.lab.config.normalize import (
+            combine_executor_sources,
+            exclusive_merge,
+            peel_executor_keys,
+            peel_retry_keys,
+        )
 
-        design_src = dict(mapped.get("design") or {})
-        if "design" in exp_data and isinstance(exp_data["design"], dict):
-            design_src.update(exp_data["design"])
-        design = ExperimentDesignSpec.from_dict(design_src)
+        mapped_schedule = dict(mapped.get("schedule") or {})
+        explicit_schedule = dict(exp_data["schedule"]) if isinstance(exp_data.get("schedule"), dict) else {}
+        mapped_schedule, mapped_sched_exec = peel_executor_keys(mapped_schedule)
+        explicit_schedule, peeled_executor = peel_executor_keys(explicit_schedule)
+        explicit_schedule, peeled_retry = peel_retry_keys(explicit_schedule)
+        schedule = ExperimentScheduleSpec.from_dict(
+            exclusive_merge(mapped_schedule, explicit_schedule, what="execution and schedule"),
+            where=str(path),
+        )
+
+        legacy_executor = exclusive_merge(
+            dict(mapped.get("executor") or {}),
+            exclusive_merge(mapped_sched_exec, peeled_executor, what="execution and schedule"),
+            what="execution and schedule",
+        )
+        explicit_executor = dict(exp_data["executor"]) if isinstance(exp_data.get("executor"), dict) else {}
+        executor = ExperimentExecutorSpec.from_dict(
+            combine_executor_sources(peeled=legacy_executor, explicit=explicit_executor),
+            where=str(path),
+        )
+        if peeled_executor or mapped_sched_exec or peeled_retry:
+            warn_deprecated("experiment.schedule.executor", where=str(path))
+
+        explicit_retry = dict(exp_data["retry"]) if isinstance(exp_data.get("retry"), dict) else {}
+        legacy_retry = exclusive_merge(
+            dict((mapped.get("retry") or {}).get("params") or {}), peeled_retry, what="execution and schedule"
+        )
+        retry = ExperimentRetrySpec.from_dict(
+            {
+                **explicit_retry,
+                "params": exclusive_merge(
+                    legacy_retry, dict(explicit_retry.get("params") or {}), what="legacy execution/schedule and retry"
+                ),
+            },
+            where=str(path),
+        )
+        analyzer = ExperimentAnalyzerSpec.from_dict(
+            exp_data["analyzer"] if isinstance(exp_data.get("analyzer"), dict) else None,
+            where=str(path),
+        )
+
+        design = ExperimentDesignSpec.from_dict(
+            exclusive_merge(
+                dict(mapped.get("design") or {}),
+                dict(exp_data["design"]) if isinstance(exp_data.get("design"), dict) else {},
+                what="execution and design",
+            ),
+            where=str(path),
+        )
 
         emu_src = dict(mapped.get("bench_emulation") or {})
         if "bench_emulation" in exp_data and isinstance(exp_data["bench_emulation"], dict):
@@ -147,6 +208,7 @@ class MASExperimentConfig(MASRunBase):
         execution = MASExecutionSpec.from_split(
             schedule=schedule,
             design=design,
+            executor=executor,
             bench_emulation=bench_emulation,
             replay=replay,
             n_runs=n_runs,
@@ -165,6 +227,9 @@ class MASExperimentConfig(MASRunBase):
             **base,
             schedule=schedule,
             design=design,
+            executor=executor,
+            retry=retry,
+            analyzer=analyzer,
             bench_emulation=bench_emulation,
             replay=replay,
             execution=execution,

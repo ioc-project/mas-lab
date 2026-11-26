@@ -45,6 +45,13 @@ from mas.runtime.secrets.process import child_env
 @click.option("--limit-scenarios", type=int, default=None, help="Limit to first N scenarios.")
 @click.option("--scenario-id", default=None, help="Run only the scenario with this ID.")
 @click.option("--dataset-item", default=None, help="Run only the dataset item with this ID.")
+@click.option(
+    "--run-plan",
+    "plan_file",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="Run only the runs a run-plan file names (see `mas-lab benchmark runs plan`); a CI shard.",
+)
 @click.option("--sample-scenarios", type=int, default=None, help="Randomly sample N scenarios.")
 @click.option("--single-run", is_flag=True, default=False, help="Run exactly 1 scenario for quick pipeline testing.")
 @click.option("-o", "--output-dir", type=Path, default=None, help="Output directory for benchmark results.")
@@ -87,15 +94,9 @@ from mas.runtime.secrets.process import child_env
     ),
 )
 @click.option(
-    "--strategy",
-    type=click.Choice(["coverage", "depth"], case_sensitive=False),
+    "--scheduler",
     default=None,
-    help=(
-        "Execution ordering (overrides YAML schedule.ordering). "
-        "coverage (default): breadth-first — every condition gets one run before "
-        "any gets a second run, maximising coverage after partial execution. "
-        "depth: depth-first — complete all runs for each condition before moving on."
-    ),
+    help="Registered scheduler id; overrides YAML schedule.plugin.",
 )
 @click.option(
     "--set",
@@ -166,6 +167,7 @@ def run_cmd(
     sample_scenarios: int | None,
     scenario_id: str | None,
     dataset_item: str | None,
+    plan_file: Path | None,
     single_run: bool,
     output_dir: Path | None,
     trace_cache_dir: Path | None,
@@ -174,7 +176,7 @@ def run_cmd(
     flavour: str | None,
     controls: tuple[str, ...],
     infra: str | None,
-    strategy: str | None,
+    scheduler: str | None,
     step_overrides: tuple[str, ...],
     pipeline_attachments: tuple[str, ...],
     experiment_overlays: tuple[str, ...],
@@ -189,6 +191,7 @@ def run_cmd(
 
     Use ``-b``/``--background`` to submit and exit immediately with the worker id.
     """
+    plugin_override = scheduler
     if dry_run and not background:
         from mas.lab.benchmark.engine import _is_mas_experiment_yaml
         from mas.lab.benchmark.worker import run_benchmark_sync
@@ -203,6 +206,7 @@ def run_cmd(
                 limit_scenarios=limit_scenarios,
                 scenario_id=scenario_id,
                 dataset_item=dataset_item,
+                plan_file=plan_file,
                 sample_scenarios=sample_scenarios,
                 single_run=single_run,
                 output_dir=output_dir,
@@ -212,7 +216,7 @@ def run_cmd(
                 flavour_name=flavour or "local",
                 controls=list(controls),
                 infra_name=infra,
-                strategy=strategy,
+                scheduler=plugin_override,
                 step_overrides=list(step_overrides),
                 pipeline_attachments=list(pipeline_attachments),
                 experiment_overlays=list(experiment_overlays),
@@ -234,6 +238,7 @@ def run_cmd(
         "limit_scenarios": limit_scenarios,
         "scenario_id": scenario_id,
         "dataset_item": dataset_item,
+        "plan_file": str(plan_file.resolve()) if plan_file else None,
         "sample_scenarios": sample_scenarios,
         "single_run": single_run,
         "output_dir": str(output_dir) if output_dir else None,
@@ -243,7 +248,7 @@ def run_cmd(
         "flavour_name": flavour,
         "controls": list(controls),
         "infra_name": infra,
-        "strategy": strategy,
+        "plugin_override": plugin_override,
         "step_overrides": list(step_overrides),
         "pipeline_attachments": list(pipeline_attachments),
         "experiment_overlays": list(experiment_overlays),

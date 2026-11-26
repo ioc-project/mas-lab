@@ -161,6 +161,31 @@ def test_retry_policy_coerces_honor_flag_like_jitter() -> None:
     assert policy.honor_retry_after is False
 
 
+def test_retries_zero_is_one_attempt() -> None:
+    policy = RetryPolicy.from_mapping({"retries": 0}, field_name="retry")
+    assert policy.max_attempts == 1
+
+
+def test_retries_and_max_attempts_together_is_an_error() -> None:
+    with pytest.raises(SpecBindingError, match="not both"):
+        RetryPolicy.from_mapping({"retries": 0, "max_attempts": 2}, field_name="retry")
+
+
+def test_retries_zero_does_not_retry_a_429(clock: list[float]) -> None:
+    n = {"c": 0}
+
+    def boom() -> str:
+        n["c"] += 1
+        raise _transient(None)
+
+    policy = RetryPolicy.from_mapping({"retries": 0, "backoff_s": 0, "jitter": False}, field_name="retry")
+    with pytest.raises(ClassifiedFailure) as excinfo:
+        call_with_retry(boom, policy=policy, classify=lambda exc: exc, idempotent=True)
+    assert excinfo.value.code == "HTTP_429"
+    assert n["c"] == 1
+    assert clock == []
+
+
 def test_context_length_failure_is_never_retried(clock: list[float]) -> None:
     response = httpx.Response(
         400,

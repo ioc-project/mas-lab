@@ -38,6 +38,8 @@ class LoadedExperiment:
     controls: tuple[str, ...] = ()
     declared_scenario_ids: tuple[str, ...] = ()
     """Every scenario the experiment declares, before ``--scenario`` / limits narrow ``scenario_ids``."""
+    runs_plan: Optional[dict] = None
+    """A run-plan document (``--run-plan``): run only the runs it names."""
 
 
 def load_experiment(
@@ -48,6 +50,7 @@ def load_experiment(
     limit_scenarios: Optional[int] = None,
     scenario_id: Optional[str] = None,
     dataset_item: Optional[str] = None,
+    plan_file: Optional[Path] = None,
     single_run: bool = False,
     flavour_name: Optional[str] = None,
     controls: Optional[list[str]] = None,
@@ -230,6 +233,16 @@ def load_experiment(
         explicit=exp.checkpoints_explicit,
     )
 
+    runs_plan = None
+    if plan_file is not None:
+        from mas.lab.benchmark.execution.wire import read_plan
+
+        try:
+            runs_plan = read_plan(plan_file)
+        except (OSError, ValueError) as exc:
+            logger.error("--run-plan: %s", exc)
+            return None
+
     n_runs = max_runs if max_runs is not None else getattr(exp, "n_runs", None)
     if n_runs is None:
         n_runs = exp.execution.n_runs if exp.execution else 1
@@ -255,6 +268,7 @@ def load_experiment(
         flavour_name=flavour_name,
         controls=tuple(controls or ()),
         declared_scenario_ids=tuple(all_scenario_ids),
+        runs_plan=runs_plan,
         infra_name=infra_name,
         n_runs=n_runs,
         trace_cache_dir=trace_cache_dir,
@@ -367,19 +381,24 @@ def _load_dataset_items(exp: Any) -> list:
     return dataset_items
 
 
-def print_dry_run(loaded: LoadedExperiment) -> None:
+def print_dry_run(loaded: LoadedExperiment, *, scheduler: str | None = None) -> None:
     """Print dry-run summary to stdout."""
     exp = loaded.exp
-    from mas.lab.benchmark.execution.plan import build_execution_plan, skipped_by_scenario
-    from mas.lab.benchmark.schedule.metadata import execution_as_dict
+    from mas.lab.benchmark.execution.plan import build_execution_plan, plan_kwargs, skipped_by_scenario
 
-    execution = execution_as_dict(exp)
+    plan_kw = plan_kwargs(exp, plugin_override=scheduler)
+    schedule = plan_kw["schedule"]
     try:
         total: int | str = len(
-            build_execution_plan(loaded.scenario_ids, loaded.dataset_items, loaded.n_runs, execution=execution)
+            build_execution_plan(
+                loaded.scenario_ids,
+                loaded.dataset_items,
+                loaded.n_runs,
+                **plan_kw,
+            )
         )
-        skipped: int | str = skipped_by_scenario(loaded.scenario_ids, loaded.dataset_items, execution=execution)
-    except ValueError as exc:  # a dry run reports a plan the run would refuse instead of failing on it
+        skipped: int | str = skipped_by_scenario(loaded.scenario_ids, loaded.dataset_items, design=plan_kw["design"])
+    except (ValueError, RuntimeError) as exc:  # a dry run reports a plan the run would refuse instead of failing on it
         total = skipped = f"refused ({exc})"
     print()
     print("=" * 70)
@@ -397,6 +416,8 @@ def print_dry_run(loaded: LoadedExperiment) -> None:
     print(f"Scenarios  : {loaded.scenario_ids}")
     print(f"Dataset    : {len(loaded.dataset_items)} items")
     print(f"Runs/item  : {loaded.n_runs}")
+    print(f"Scheduler  : {(schedule or {}).get('plugin') or 'default'}")
+    print(f"Executor   : {exp.executor.plugin}")
     print(f"Skipped    : {skipped} items skipped by scenario")
     print(f"Total      : {total} executions")
     _pipeline_specs = loaded.pipeline_specs
