@@ -235,6 +235,18 @@ def test_interpolation_is_single_pass() -> None:
         vars_.interpolate("{missing}")
 
 
+def test_run_variables_name_the_run_a_trigger_fires_for() -> None:
+    from mas.lab.benchmark.environment.attach import run_variables
+    from mas.lab.benchmark.pipeline.keys import RunKey
+
+    run = RunCoordinates(experiment="exp", scenario="arm", item="item3", run="r2", attempt=1)
+    got = run_variables(run, RunKey("exp", "arm", "item3", "r2", 1))
+    assert got["run.key"] == "exp/arm/item3/r2#1"
+    vars_ = Variables(got)
+    assert vars_.interpolate("${run.key} ${item.id}") == "exp/arm/item3/r2#1 item3"
+    assert "run.key" not in run_variables(run, None)
+
+
 def test_url_allow_list_requires_http() -> None:
     assert assert_url_allowed("http://127.0.0.1:9/x")
     for bad in ("ftp://127.0.0.1/x", "file:///etc/passwd", "gopher://localhost/"):

@@ -259,6 +259,24 @@ class BoundRun:
                 get_environment_hub().unbind(self._key, self.env)
 
 
+def run_variables(run: RunCoordinates, key: RunKey | None) -> dict[str, str]:
+    """The run variables of a trigger's actions: experiment, scenario, item and run ids, and ``run.key``.
+
+    ``run.key`` is the id of the run's event stream (``experiment/scenario/item/run#attempt``), the same string a
+    shared service sees on the run's own requests, so one action can name the run it fires for.
+    """
+    found = {
+        "experiment.id": run.experiment,
+        "scenario.id": run.scenario,
+        "item.id": run.item,
+        "run.id": run.run,
+        "run.attempt": str(run.attempt),
+    }
+    if key is not None:
+        found["run.key"] = key.stream_id()
+    return found
+
+
 def bind_run_environment(
     *,
     spec: EnvironmentSpec,
@@ -282,7 +300,7 @@ def bind_run_environment(
         on_record=publish_environment_record,
         control=control,
         session_id=session_id,
-        vars=Variables(dict(fixtures.vars)),
+        vars=Variables({**fixtures.vars, **run_variables(run, key)}),
     )
     token = set_environment_port(env)
     bound = BoundRun(env, token, key, None)
