@@ -5,6 +5,7 @@ failure is one line that does not repeat the server's answer."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -43,7 +44,7 @@ COMMANDS = [["apps", "list"], ["sessions", "list"], ["traces", "list"], ["dump",
 def test_the_password_is_not_an_option(command: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
     # kills: a plaintext ClickHouse password taken on argv
     result = _invoke([*command, "--password", "pw"], 9, monkeypatch)
-    assert result.exit_code == 2 and "No such option: --password" in result.output
+    assert result.exit_code == 2 and re.search(r"No such option:? '?--password", result.output)
 
 
 @pytest.mark.parametrize("command", COMMANDS)

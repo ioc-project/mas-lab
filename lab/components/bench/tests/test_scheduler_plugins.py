@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -141,4 +142,4 @@ def test_strategy_flag_is_gone() -> None:
 
     result = CliRunner().invoke(run_cmd, ["x.yaml", "--strategy", "coverage"])
     assert result.exit_code != 0
-    assert "No such option: --strategy" in result.output
+    assert re.search(r"No such option:? '?--strategy", result.output)

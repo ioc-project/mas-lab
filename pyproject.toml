@@ -70,6 +70,13 @@ members = [
     "lab/components/controller",
 ]
 
+[tool.uv]
+# Two third-party caps are lifted here until their owners do:
+# - deepeval declares click<8.4.0 (4.3.6 still does) but only uses click for its own CLI, which this repository does not
+#   run; huggingface-hub 2 needs click>=8.4.2.
+# - slima2a 0.9.3 (the newest release) pins a2a-sdk==1.2.3; its slimrpc binding runs on a2a-sdk 1.3 in the library-ioa suite.
+override-dependencies = ["click>=8.4.2,<9", "a2a-sdk>=1.3,<2"]
+
 [tool.uv.sources]
 mas-lab-runtime = { workspace = true }
 mas-lab-ctl         = { workspace = true }
