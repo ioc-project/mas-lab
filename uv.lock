@@ -2085,16 +2085,16 @@ wheels = [
 
 [[package]]
 name = "ioc-scope-norm"
-version = "1.0.0"
+version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ioc-scope-ontology" },
     { name = "neo4j" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a9/1d/7b0d0490ec711af8ed1d87f85747ecade1dd4ee0a7af720bbcbebb5892e2/ioc_scope_norm-1.0.0.tar.gz", hash = "sha256:6ebb66eedea0c47cfb364c89b0ad05d4d67d762f9b3e1cdcd2a8af8c279bf421", size = 161295, upload-time = "2026-11-05T18:40:02.363Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/81/c08cdc052a45a8650cf8d0349db7739e3011e79e6ae9e097dbf58a1f891d/ioc_scope_norm-1.2.0.tar.gz", hash = "sha256:4776b3f07b53a2b5f33cb7fff35a14339bacec206f8a579c2568ecf707ca9956", size = 161324, upload-time = "2026-11-25T22:46:54.083Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/ca/e8ec4e8b83fdda32c59ca601129cbad9be462520d584e16694871121bcf7/ioc_scope_norm-1.0.0-py3-none-any.whl", hash = "sha256:f0afe432634f1b1d59be303ee0895f211c7e98d408713087a036bf304cd265f8", size = 38645, upload-time = "2026-11-05T18:40:00.987Z" },
+    { url = "https://files.pythonhosted.org/packages/1b/0b/8b396cbb3574b68fb34ec75caaa135cb7866fe58de95f617705e1bfca0fb/ioc_scope_norm-1.2.0-py3-none-any.whl", hash = "sha256:5d8b56f34e637f3dd83c38286754443b1ac4b73b682407a8c96dbf30d93a2f96", size = 38673, upload-time = "2026-11-25T22:46:52.912Z" },
 ]
 
 [[package]]
