@@ -1142,11 +1142,13 @@ async def _execute_batch(
         trace_path = str(_cached_events)
         elapsed_ms = (_time.monotonic() - t0) * 1000
         _term = "ok" if status == "ok" else "failed"
+        # The result is on disk before the run is announced as terminal, so whoever reacts to the event
+        # (a live stage, a post step) finds result.json.
+        write_run_result(_global_run_dir, status, elapsed_ms, error or "", attempts=_attempts_used)
+        _mirror_result(_global_run_dir, run_output_dir)
         terminal_run(_v2_key, _term)
         if _live_post is not None:
             await _live_post.on_terminal(_v2_key, _term)
-        write_run_result(_global_run_dir, status, elapsed_ms, error or "", attempts=_attempts_used)
-        _mirror_result(_global_run_dir, run_output_dir)
         write_run_info(
             _global_run_dir,
             run_output_dir,

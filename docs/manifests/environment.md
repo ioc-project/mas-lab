@@ -157,6 +157,29 @@ trigger is refused when the environment compiles.
 without holding the engine lock, so a step that calls the control API cannot
 deadlock against the run.
 
+## Template variables
+
+A fixture command and a step's `config` may use `${name}`. A value is substituted once and never scanned
+again; an unknown name is an error.
+
+| Variable | Value |
+| --- | --- |
+| `fixture.<name>.port`, `.url`, `.host`, `.data_dir` | The named fixture, once it is up. |
+| `experiment.id`, `scenario.id` | The experiment name and the scenario id. |
+| `item.id`, `run.id`, `run.attempt` | The item (`item<N>`, N the item's `id` in the dataset), the repeat (`r1`, `r2`, ...) and the attempt. |
+| `run.key` | The id of the run's event stream: `experiment/scenario/item/run#attempt`. |
+
+The run variables are set for a run's triggers and timers, so one action can name the run it fires for: a service shared by
+several runs (an issuer, a payments server) learns from `run.key` whose credential to revoke.
+
+```yaml
+do:
+  - type: http_call
+    config: {method: POST, url: "http://127.0.0.1:9000/revoke", json: {run: "${run.key}"}, expect_status: 200}
+```
+
+`run.key` contains `/` and `#`, so send it in a JSON body, not in a URL.
+
 ## Environment steps
 
 | Type | Does |
