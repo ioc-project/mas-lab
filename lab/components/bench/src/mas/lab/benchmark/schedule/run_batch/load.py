@@ -36,10 +36,32 @@ class LoadedExperiment:
     n_runs: int
     trace_cache_dir: Optional[Path]
     controls: tuple[str, ...] = ()
+    run_overrides: tuple[str, ...] = ()
+    """``experiment.overrides`` then the CLI ``--override`` values aimed at ``.mas``, ``.agent`` or ``.infra``;
+    every run of every scenario applies them, as ``mas-ctl run-mas --override`` does."""
     declared_scenario_ids: tuple[str, ...] = ()
     """Every scenario the experiment declares, before ``--scenario`` / limits narrow ``scenario_ids``."""
     runs_plan: Optional[dict] = None
     """A run-plan document (``--run-plan``): run only the runs it names."""
+
+
+_RUN_OVERRIDE_ROOTS = frozenset({"mas", "agent", "infra"})
+
+
+def _run_overrides(raw: dict, from_cli: list[str]) -> tuple[str, ...]:
+    """The overrides every run applies: ``experiment.overrides``, then the CLI ones. Each is checked now."""
+    from mas.ctl.overrides import parse_override
+
+    body = raw.get("experiment") if isinstance(raw.get("experiment"), dict) else {}
+    declared = body.get("overrides") or []
+    if not isinstance(declared, list) or not all(isinstance(item, str) for item in declared):
+        raise ValueError("experiment.overrides must be a list of PATH=VALUE strings")
+    out = [*declared, *from_cli]
+    for source in out:
+        root = parse_override(source).path.root
+        if root not in _RUN_OVERRIDE_ROOTS:
+            raise ValueError(f"override {source!r}: a run override starts with .mas, .agent or .infra, not {root!r}")
+    return tuple(out)
 
 
 def load_experiment(
@@ -77,10 +99,13 @@ def load_experiment(
 
         raw = load_yaml_file(experiment_yaml)
 
+        run_overrides_cli: list[str] = []
         if overrides:
-            from mas.ctl.overrides import apply_cli_overrides
+            from mas.ctl.overrides import apply_cli_overrides, overrides_for_root, parse_override
 
-            raw = apply_cli_overrides(raw, tuple(overrides), root="experiment")
+            on_experiment = overrides_for_root(tuple(overrides), "experiment")
+            run_overrides_cli = [o for o in overrides if parse_override(o).path.root != "experiment"]
+            raw = apply_cli_overrides(raw, on_experiment, root="experiment")
 
         if experiment_overlays:
             from mas.lab.benchmark.execution.experiment_overlay import (
@@ -96,6 +121,7 @@ def load_experiment(
         if pipeline_attachments:
             raw = merge_pipeline_attachments(raw, pipeline_attachments)
 
+        run_overrides = _run_overrides(raw, run_overrides_cli)
         check_manifest(raw, source=str(experiment_yaml))
         check_manifest(parse_step_overrides(step_overrides), source="--set")
         validate_manifest(
@@ -267,6 +293,7 @@ def load_experiment(
         flavour=_flavour,
         flavour_name=flavour_name,
         controls=tuple(controls or ()),
+        run_overrides=run_overrides,
         declared_scenario_ids=tuple(all_scenario_ids),
         runs_plan=runs_plan,
         infra_name=infra_name,

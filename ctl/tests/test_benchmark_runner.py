@@ -75,7 +75,7 @@ def test_mas_bench_runner_passes_pattern_plugin_id_from_manifest(tmp_path: Path)
     assert options.pattern_plugin_id == "cot@v1"
 
 
-def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
+def _demo_compose(tmp_path: Path) -> tuple[Path, ComposeResult]:
     mas_path = tmp_path / "workflow.yaml"
     mas_path.write_text(
         "kind: mas\nmetadata:\n  name: demo\nspec:\n  workflow:\n    entry: alpha\n",
@@ -112,6 +112,11 @@ def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
         plan=PlacementPlan(),
     )
 
+    return mas_path, compose
+
+
+def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
+    mas_path, compose = _demo_compose(tmp_path)
     with patch("mas.ctl.benchmark.runner.compose_run", return_value=compose) as compose_run:
         with patch("mas.ctl.benchmark.runner.instantiate_runtime") as inst:
             inst.return_value = (object(), None)
@@ -124,6 +129,29 @@ def test_mas_bench_compose_called_once_for_mas_kind(tmp_path: Path):
                     output_dir=tmp_path / "out",
                 )
     assert compose_run.call_count == 1
+    assert compose_run.call_args.args[0].overrides == []
+
+
+def test_mas_bench_runner_composes_with_the_run_overrides(tmp_path: Path):
+    """``experiment.overrides`` reach the compose of every run: the lab can set an endpoint field or a model."""
+    mas_path, compose = _demo_compose(tmp_path)
+    run_overrides = [
+        ".infra.spec.models.defaults.llm=qwen2.5:7b-instruct",
+        ".mas.agent[alpha].spec.models[0].extra.k=1",
+    ]
+    with patch("mas.ctl.benchmark.runner.compose_run", return_value=compose) as compose_run:
+        with patch("mas.ctl.benchmark.runner.instantiate_runtime") as inst:
+            inst.return_value = (object(), None)
+            with patch.object(MasBenchRunner, "_run_controller_turns") as turns:
+                turns.return_value = RunResult(content="ok")
+                MasBenchRunner().run(
+                    "hello",
+                    config=compose.mas_config,
+                    spec_path=mas_path,
+                    output_dir=tmp_path / "out",
+                    overrides=run_overrides,
+                )
+    assert compose_run.call_args.args[0].overrides == run_overrides
 
 
 def test_mas_bench_runner_attaches_cli_controls(tmp_path: Path):

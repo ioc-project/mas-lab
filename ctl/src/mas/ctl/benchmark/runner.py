@@ -285,6 +285,7 @@ class MasBenchRunner:
         experiment_default_model = kwargs.get("experiment_default_model")
         experiment_model_slots = kwargs.get("experiment_model_slots")
         controls = list(kwargs.get("controls") or ())
+        run_overrides = list(kwargs.get("overrides") or ())
         batch_cache = kwargs.get("batch_cache")
         if not experiment_default_model and isinstance(experiment_model_slots, dict):
             from mas.runtime.spec.model_ref import SLOT_MAIN, slot_model
@@ -317,6 +318,7 @@ class MasBenchRunner:
                     tool_fixtures=tool_fixtures,
                     run_params=run_params,
                     controls=controls,
+                    overrides=run_overrides,
                     batch_cache=batch_cache,
                 )
             except ChainStartError as exc:
@@ -406,6 +408,7 @@ class MasBenchRunner:
         tool_fixtures: Any = None,
         run_params: dict[str, Any] | None = None,
         controls: Sequence[str] = (),
+        overrides: Sequence[str] = (),
         batch_cache: Any = None,
     ) -> RunResult | _ControllerTarget:
         entry_manifest = config
@@ -480,6 +483,7 @@ class MasBenchRunner:
                 workspace_root=workspace_root,
                 overlay_paths=overlay_paths,
                 infra_refs=infra_refs,
+                overrides=list(overrides),
                 validate=False,
                 cache=batch_cache,
             )

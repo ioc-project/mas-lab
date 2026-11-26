@@ -109,6 +109,20 @@ application:
 One of `app` or `manifest` is required.
 Prefer `app: library:id@version` for shared apps. Relative `manifest:` paths still work.
 
+### Run-wide overrides
+
+Use `overrides` for a change that belongs to the whole lab and to no scenario: an endpoint setting, a model, a request field.
+
+```yaml
+experiment:
+  overrides:
+    # a LiteLLM gateway caches identical requests; ask it not to, for every worker
+    - .mas.agent[worker].spec.models[0].extra.cache.no-cache=true
+    - .infra.spec.models.defaults.llm=qwen2.5:7b-instruct
+```
+
+The same strings work on the command line: `mas-lab benchmark run experiment.yaml --override '.infra.spec.models.defaults.llm=gemma4'`. A bad path fails before any run starts. Overrides apply to runs of a MAS; a standalone agent run ignores `.mas` and `.infra` paths.
+
 ### Scenarios
 
 A **scenario** is one column of the result matrix: a named setup built from overlay stacks.
@@ -284,6 +298,7 @@ See [summarization.md](summarization.md) for the full chain.
 | `description` | none | Free text shown in reports. |
 | `metadata` | none | Free-form reproducibility notes (model, dataset version, ...). Not interpreted. |
 | `default_flavour` | `local` | Runtime flavour used when the CLI passes no `--flavour`. See [flavour.md](flavour.md). |
+| `overrides` | none | List of `PATH=VALUE` strings that every run of every scenario applies, in the grammar of `mas-ctl run-mas --override`; a path starts with `.mas`, `.agent` or `.infra`. They apply before a scenario's overlays, so a scenario can supersede them. `mas-lab benchmark run --override '.infra....=V'` adds to the list; a path under `experiment:` still patches this file. See [Run-wide overrides](#run-wide-overrides). |
 | `default_infra` | none | Infra file used by `service_start` / `service_stop` when the CLI passes no `--infra`. For those steps this is a `kind: ServiceBundle` under `<experiment_dir>/infra/` ([infra.md](infra.md)). LLM `--infra-ref` is a different flag. |
 | `checkpoints` | one fresh start | Starting-state axis. See [Checkpoint axis](#checkpoint-axis). |
 | `evaluation` | none | `method` (required when the block is present): `user_emulation`, `llm_judge`, `metrics`, or `trace_only` (collect trajectories without scoring). Optional `model` (judge) and free-form `config`. |
