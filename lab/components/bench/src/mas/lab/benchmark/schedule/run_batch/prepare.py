@@ -65,6 +65,12 @@ def _resolve_run_infra_refs(loaded: LoadedExperiment) -> list[str]:
     return [ref]
 
 
+def _ref_path(ref: str, base: Path) -> str:
+    """A scenario's infra ref as a path: absolute as written, relative to the experiment file otherwise."""
+    path = Path(ref)
+    return str(path if path.is_absolute() else (base / path).resolve())
+
+
 @dataclass
 class PreparedBatch:
     """Runtime state after output and scenario preparation."""
@@ -388,7 +394,14 @@ async def prepare_batch(
         overlays_dir=loaded.configs_dir,
         overlay_base_dir=loaded.experiment_yaml.parent,
         infra_refs=infra_refs,
-        scenario_infra_refs=dict((demo_ui or {}).get("scenario_infra_refs") or {}),
+        scenario_infra_refs={
+            **{
+                str(sc.id): [_ref_path(ref, loaded.experiment_yaml.parent) for ref in sc.infra_refs]
+                for sc in loaded.exp.scenarios
+                if sc.infra_refs
+            },
+            **dict((demo_ui or {}).get("scenario_infra_refs") or {}),
+        },
         dataset_items=dataset_items,
         fixture_registry=fixture_registry,
     )
