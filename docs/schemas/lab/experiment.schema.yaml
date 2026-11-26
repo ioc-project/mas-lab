@@ -276,6 +276,14 @@ properties:
                 pattern: "^[A-Za-z0-9_-]+$"
               description: >
                 session_checkpoints ids this scenario publishes.
+            infra_refs:
+              type: array
+              items:
+                type: string
+                minLength: 1
+              description: >
+                Infra files (relative to the experiment file) this scenario's
+                runs load instead of the workspace infra_refs.
             debug:
               $ref: "#/$defs/debug_spec"
 

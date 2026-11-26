@@ -148,6 +148,7 @@ scenarios:
 | `description` | no | Label shown in reports. |
 | `tags` | no | Grouping and filtering labels. |
 | `flavour` | no | Per-scenario flavour name or path. A **flavour** is the glue that links the logic spec to the infra (its `bind`); see [flavour.md](flavour.md). |
+| `infra_refs` | no | Infra files (`ToolServerRegistry`, `Identity`, ...) this scenario's runs load instead of the workspace `infra_refs`; a relative path is relative to the experiment file. Use it when the scenarios differ in their infra rows, for example a tool server with and without an identity layer. A scenario without it keeps the workspace files. |
 
 When `overlays` is omitted, the scenario `id` is used as the single `logic` overlay.
 `overlays` must be a mapping. A bare list is rejected.

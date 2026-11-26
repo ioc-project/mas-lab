@@ -110,6 +110,9 @@ class MASScenarioSpec:
     produce_checkpoints: List[str] = field(default_factory=list)
     """Checkpoint ids this scenario publishes (``experiment.session_checkpoints``)."""
 
+    infra_refs: List[str] = field(default_factory=list)
+    """Infra files this scenario's runs load instead of the workspace ``infra_refs`` (relative to the experiment)."""
+
     debug: Optional[Dict[str, Any]] = None
     """Structured checkpoint/pause trigger, or a raw gdb ``script`` override."""
 
@@ -160,6 +163,7 @@ class MASScenarioSpec:
             resume_from=resume_from,
             resume_index=resume_index,
             produce_checkpoints=_str_list(data.get("produce_checkpoints"), "produce_checkpoints"),
+            infra_refs=_str_list(data.get("infra_refs"), "infra_refs"),
             debug=_debug_block(data.get("debug")),
         )
 
