@@ -16,7 +16,7 @@ outcomes are incomplete:
 - an error status
 - a timeout
 - a lost worker
-- a failure inside the run that the run's own output hides (`LLM request failed:`)
+- a failure inside the run that the run's own output hides (`LLM request failed:`, or a `[send] agent …` failure including `via <protocol> failed` and `not available on bus`). A send that failed on an `llm_cache miss` is not that: the peer never ran, and the caller may continue.
 
 `result.json` records `status: ok` only for a complete run. A resumed
 batch re-runs runs left in `error`. Local leftover `events.jsonl` without

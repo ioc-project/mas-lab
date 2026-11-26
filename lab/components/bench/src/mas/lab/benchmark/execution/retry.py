@@ -23,6 +23,31 @@ _FATAL_RUN_MARKERS = (
     "authentication/authorization",
     "malformed spec",
 )
+# A failed model call, or a failed send to a peer, comes back as text. A caller that collates its
+# peers' replies (a fan-out pattern) puts that text inside its own output, so it can be anywhere
+# in the content. The three ``[send] agent`` forms are the strings ``SendTool.asend`` returns
+# on AgentCommError (``via <protocol> failed``), KeyError (``not available on bus``), and
+# RuntimeError (``failed`` with no protocol). A send that failed because the LLM replay cache
+# missed is not a peer that failed its task: the caller may continue, which replay labs do.
+_SEND_AGENT_FAILED = re.compile(r"\[send\] agent '[^']*'(?: via \S+)? failed:")
+_SEND_AGENT_MISSING = re.compile(r"\[send\] agent '[^']*' not available on bus")
+_CACHE_MISS = "llm_cache miss"
+
+
+def hidden_peer_failure(output: str) -> bool:
+    """True when the run's text hides a failed model call or a failed send to a peer."""
+    text = str(output)
+    if "LLM request failed:" in text:
+        return True
+    if _SEND_AGENT_MISSING.search(text):
+        return True
+    for match in _SEND_AGENT_FAILED.finditer(text):
+        rest = text[match.end() : match.end() + 400]
+        if _CACHE_MISS not in rest:
+            return True
+    return False
+
+
 _RETRY_AFTER_MS_RE = re.compile(r"retry-after-ms[:\s]+([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
 _RETRY_AFTER_RE = re.compile(r"retry-after[:\s]+([0-9]+(?:\.[0-9]+)?)", re.IGNORECASE)
 
@@ -52,7 +77,7 @@ def runner_outcome(result_dict: dict) -> tuple[str, str, str]:
     output = result_dict.get("content", str(result_dict))
     if result_dict.get("status") == "error":
         return "error", output or "execution error", output
-    if output and str(output).startswith("LLM request failed:"):
+    if output and hidden_peer_failure(str(output)):
         return "error", str(output), output
     return "ok", "", output
 
