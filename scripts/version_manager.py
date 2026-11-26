@@ -7,9 +7,7 @@ Multi-package versioning script for the MAS Lab monorepo.
 Each package has its own version tracked in its pyproject.toml.
 The root VERSION file is the source of truth for coordinated releases.
 
-Packages: short key → pyproject.toml (wheel name is [project].name there).
-  runtime, ctl, library, samples, skills, eval, lab-library, ioa, kg,
-  telemetry, lab, core, bench, controller
+Packages: the wheel name → its pyproject.toml (see PACKAGES). An unknown name is an error.
 
 Usage:
   python scripts/version_manager.py get [package]         # Get version
@@ -19,8 +17,8 @@ Usage:
   python scripts/version_manager.py bump <type> [package] # Bump version
   python scripts/version_manager.py set <version> [package] # Set version
 
-    package: mas-lab-runtime | mas-lab-ctl | mas-lab-library-standard | mas-lab-library-samples | 
-             mas-lab-library-skills | mas-lab-library-eval | mas-lab-library-lab | mas-lab-library-ioa | 
+    package: mas-lab-runtime | mas-lab-ctl | mas-lab-library-standard | mas-lab-library-samples |
+             mas-lab-library-skills | mas-lab-library-eval | mas-lab-library-lab | mas-lab-library-ioa |
              mas-lab-library-kg | mas-lab-library-telemetry | mas-lab | mas-lab-component-core |
              mas-lab-component-bench | mas-lab-component-controller | all
   type:    rc | patch | minor | major
@@ -137,9 +135,9 @@ def bump_version(bump_type: str, pkg: str = "all") -> None:
         new_v = format_version(c)
         write_pyproject_version(p, new_v)
     # Update root VERSION with the lab version
-    lab_v = read_pyproject_version("lab")
-    VERSION_FILE.write_text(lab_v + "\n")
-    print(f"  ✅ VERSION: {lab_v}")
+    root_v = read_pyproject_version("mas-lab")
+    VERSION_FILE.write_text(root_v + "\n")
+    print(f"  ✅ VERSION: {root_v}")
 
 
 def set_version(version: str, pkg: str = "all") -> None:
@@ -152,7 +150,7 @@ def set_version(version: str, pkg: str = "all") -> None:
     print(f"  ✅ VERSION: {version}")
 
 
-def get_full(pkg: str = "lab") -> str:
+def get_full(pkg: str = "mas-lab") -> str:
     v = read_pyproject_version(pkg)
     c = parse_version(v)
     if c["prerelease"]:
@@ -162,7 +160,7 @@ def get_full(pkg: str = "lab") -> str:
     return v
 
 
-def get_rolling(pkg: str = "lab") -> str:
+def get_rolling(pkg: str = "mas-lab") -> str:
     """Return rolling version for main snapshots: X.Y.Z+g<sha>."""
     v = read_pyproject_version(pkg)
     sha = get_git_sha()
@@ -190,7 +188,7 @@ def main() -> None:
         print(__doc__)
         sys.exit(1)
 
-    cmd, pkg = args[0], args[1] if len(args) > 1 else "lab"
+    cmd, pkg = args[0], args[1] if len(args) > 1 else "mas-lab"
 
     try:
         if cmd == "get":
@@ -198,11 +196,11 @@ def main() -> None:
                 for p in PACKAGES:
                     print(f"{p}={read_pyproject_version(p)}")
             else:
-                print(read_pyproject_version(pkg if pkg in PACKAGES else "lab"))
+                print(read_pyproject_version(pkg))
         elif cmd == "get-full":
-            print(get_full(pkg if pkg in PACKAGES else "lab"))
+            print(get_full(pkg))
         elif cmd == "get-rolling":
-            print(get_rolling(pkg if pkg in PACKAGES else "lab"))
+            print(get_rolling(pkg))
         elif cmd == "check":
             check_versions()
         elif cmd == "bump":

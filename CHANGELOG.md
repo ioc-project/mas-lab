@@ -16,6 +16,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Fixed
 
+- The Rolling Packages workflow and the release tag step name packages the way `scripts/version_manager.py` keys them (`mas-lab-component-bench`, not `bench`; `mas-lab`, not `lab`), so the rolling build stops failing with `KeyError: 'lab'`. An unknown package name is an error instead of a silent fallback; a test keeps the workflows and the script in step.
 - A failed model call (`LLM request failed:`) or a failed send to a peer (`[send] agent … failed` / `not available on bus`) anywhere in a run's output fails the run, not only when that text is the whole output. A 401 or 403 stays non-retryable. A send that failed on an `llm_cache miss` does not.
 
 ### Added
