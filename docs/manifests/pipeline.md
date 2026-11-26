@@ -10,7 +10,7 @@ A **pipeline** is an ordered list of **pipeline steps** attached as `pre:` or `p
 A pipeline step is one processor, for example `extract_trace_stats` or `plotnine`.
 A run is one execution of the MAS for a scenario, a dataset item, and a repeat index. It writes `events.jsonl`.
 `pre:` runs before that level (no telemetry yet). `post:` reads artifacts the level produced: one run, or a group of runs (metrics, then a figure).
-`run.post` may fold events as they arrive (`on_batch`) or wait until the run is done (`execute`). Both are `post`. YAML `realtime:` selects the mode when a class implements both handlers; execute-only is enough for non-realtime. Converter `realtime:` and leftover `role: batch` are not this axis.
+`run.post` may fold events as they arrive (`on_batch`) or wait until the run is done (`execute`). Both are `post`. YAML `mode:` is `batch` (complete runs only), `live` (events as they come), or `mixed` (live fold plus a completeness gate). `realtime:` still selects fold vs wait when `mode` is omitted. Converter `realtime:` and leftover `role: batch` are not this axis. See [completeness](completeness.md) and [pipeline assembly](pipeline-assembly.md).
 Write a pipeline when you need to turn raw run output into tables, plots, or scores.
 
 Two file formats exist. Do not mix them in one file.

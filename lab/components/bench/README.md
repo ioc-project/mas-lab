@@ -54,8 +54,8 @@ experiment:
       - {name: gather-scenario, type: gather_level, in: df, out: df, depends_on: [gather-item]}
   post:
     - {name: gather-experiment, type: gather_level, in: df, out: df, depends_on: [gather-scenario]}
-  execution:
-    strategy: coverage
+  schedule:
+    plugin: coverage
 ```
 
 ## Commands
@@ -72,7 +72,7 @@ mas-lab benchmark run experiment.yaml --single-run     # 1 scenario, handy for C
 mas-lab benchmark run experiment.yaml --limit-scenarios 10
 mas-lab benchmark run experiment.yaml --sample-scenarios 20 --seed 42
 mas-lab benchmark run experiment.yaml --max-runs 3
-mas-lab benchmark run experiment.yaml --strategy depth # depth-first (default: coverage)
+mas-lab benchmark run experiment.yaml --scheduler depth # depth-first (default: coverage)
 mas-lab benchmark run experiment.yaml -o /tmp/results
 ```
 
@@ -90,7 +90,7 @@ mas-lab benchmark run experiment.yaml -o /tmp/results
 | `--trace-cache` | `$XDG_CACHE_HOME/mas/traces` | Override trace-cache directory |
 | `--force-lock` | off | Break existing lock |
 | `--flavour` | `local` | Runtime flavour YAML name |
-| `--strategy` | `coverage` | `coverage` (breadth-first) or `depth` (depth-first) |
+| `--scheduler` | YAML `schedule.plugin` | Any registered scheduler id (`coverage`, `depth`, `as_generated`, or a lab-local plugin) |
 
 ### Other `benchmark` commands
 

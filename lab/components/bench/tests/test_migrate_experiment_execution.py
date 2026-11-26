@@ -33,7 +33,7 @@ def test_split_legacy_execution_maps_fields() -> None:
         }
     )
     assert mapped["schedule"]["parallel_scenarios"] == 8
-    assert mapped["schedule"]["ordering"] == "depth"
+    assert mapped["schedule"]["plugin"] == "depth"
     assert "n_runs" not in mapped.get("schedule", {})
     assert mapped["design"]["mode"] == "coupled"
     assert mapped["bench_emulation"]["runtime"]["cache"] == "disabled"
@@ -63,8 +63,10 @@ def test_codemod_rewrites_fixture(tmp_path: Path) -> None:
     expected = {
         "schedule": {
             "parallel_scenarios": 2,
+            "plugin": "coverage",
+        },
+        "executor": {
             "timeout": 300,
-            "ordering": "coverage",
         },
         "bench_emulation": {"runtime": {"cache": "disabled"}},
     }
@@ -74,6 +76,7 @@ def test_codemod_rewrites_fixture(tmp_path: Path) -> None:
     exp = data["experiment"]
     assert "execution" not in exp
     assert exp["schedule"] == expected["schedule"]
+    assert exp["executor"] == expected["executor"]
     assert exp["bench_emulation"] == expected["bench_emulation"]
     assert exp["run"]["n_runs"] == 3
     assert "Copyright" in before.read_text(encoding="utf-8")
@@ -88,7 +91,7 @@ def test_discover_includes_library_samples() -> None:
 def test_codemod_is_noop_without_execution(tmp_path: Path) -> None:
     path = tmp_path / "experiment.yaml"
     path.write_text(
-        "experiment:\n  name: already-migrated\n  schedule:\n    ordering: coverage\n",
+        "experiment:\n  name: already-migrated\n  schedule:\n    plugin: coverage\n",
         encoding="utf-8",
     )
     mod = _load_script()

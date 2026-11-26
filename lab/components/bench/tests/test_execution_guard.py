@@ -17,12 +17,12 @@ def test_build_execution_plan_coverage_order():
 
 
 def test_enforce_max_executions_ok():
-    enforce_max_executions(4, {"design": {"max_executions": 10}})
+    enforce_max_executions(4, {"max_executions": 10})
 
 
 def test_enforce_max_executions_raises():
     with pytest.raises(RuntimeError, match="max_executions=2"):
-        enforce_max_executions(4, {"design": {"max_executions": 2}})
+        enforce_max_executions(4, {"max_executions": 2})
 
 
 def test_enforce_max_executions_no_design():

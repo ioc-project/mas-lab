@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from mas.lab.runners.constants import DEFAULT_LAB_RUNNER_ID
 
@@ -256,30 +256,113 @@ class EmulationSpec:
 class ExperimentScheduleSpec:
     """How mas-lab walks the design matrix.
 
-    Changing these fields never changes the meaning of a result cell — only
+    Changing these fields never changes the meaning of a result run — only
     wall time, resource usage, and failure modes during collection.
+    Timeout, retries, workers, and the application runner live on
+    :class:`ExperimentExecutorSpec`.
     """
+
+    plugin: Optional[str] = None
+    """Registered ``scheduler`` plugin id. Omitted, the generator's default_scheduler."""
+
+    params: Dict[str, Any] = field(default_factory=dict)
+    """Plugin attributes (validated by the scheduler)."""
 
     parallel_scenarios: int = 4
     """Maximum number of concurrent MAS runs."""
 
-    timeout: int = 300
-    """Per-run timeout in seconds."""
-
-    max_attempts: int = 3
-    """Re-issue a failed scenario×item×run this many times (including the first)."""
-
-    retry_backoff_s: float = 2.0
-    """Base delay in seconds before the first lab-level reattempt (then ×2)."""
-
     pause_between_runs: float = 1.0
     """Pause in seconds between runs to let resources settle."""
 
-    ordering: str = "coverage"
-    """Walk order: ``coverage`` (breadth-first) or ``depth`` (depth-first)."""
+    def as_plan_dict(self) -> Dict[str, Any]:
+        """Shape consumed by :func:`mas.lab.benchmark.execution.plan.build_execution_plan`."""
+        data: Dict[str, Any] = {"params": dict(self.params), "parallel_scenarios": self.parallel_scenarios}
+        if self.plugin:
+            data["plugin"] = self.plugin
+        return data
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], *, where: str = "experiment") -> "ExperimentScheduleSpec":
+        from mas.lab.benchmark.execution.roles import validated_plugin
+        from mas.lab.lab.config.normalize import normalize_schedule, peel_executor_keys
+
+        schedule_src, leftover = peel_executor_keys(dict(data or {}))
+        if leftover:
+            names = ", ".join(sorted(leftover))
+            raise ValueError(f"schedule no longer holds {names}; put them under experiment.executor")
+        normalized = normalize_schedule(schedule_src, where=where)
+        plugin = normalized.get("plugin")
+        params = dict(normalized.get("params") or {})
+        if plugin:
+            validated_plugin("scheduler", str(plugin), params)
+        return cls(
+            plugin=str(plugin) if plugin else None,
+            params=params,
+            parallel_scenarios=normalized.get("parallel_scenarios", 4),
+            pause_between_runs=normalized.get("pause_between_runs", 1.0),
+        )
+
+
+@dataclass
+class _PluginBlock:
+    """A ``{plugin, params}`` block naming one registered role plugin (default ``native``)."""
+
+    BLOCK: ClassVar[str]
+    """Experiment key, for messages."""
+    ROLE: ClassVar[str]
+    """Plugin type the ``plugin`` id is resolved in."""
+
+    plugin: str = "native"
+    params: Dict[str, Any] = field(default_factory=dict)
+    """Plugin attributes, validated by the plugin at config load."""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None, *, where: str = "experiment"):
+        from mas.lab.benchmark.execution.roles import validated_plugin
+        from mas.lab.lab.config.normalize import normalize_plugin_block
+
+        block = normalize_plugin_block(data, what=cls.BLOCK, where=where, default="native")
+        validated_plugin(cls.ROLE, block["plugin"], block["params"])
+        return cls(plugin=block["plugin"], params=dict(block["params"]))
+
+
+@dataclass
+class ExperimentRetrySpec(_PluginBlock):
+    """Whether a failed run runs again. The executor runs a run once; the retrier decides about
+    another attempt, in this process or in a later CI round. ``native``: ``max_attempts``, ``backoff_s``."""
+
+    BLOCK: ClassVar[str] = "retry"
+    ROLE: ClassVar[str] = "retrier"
+
+
+@dataclass
+class ExperimentAnalyzerSpec(_PluginBlock):
+    """Which analyzer reads the results tree (default ``native``: a completeness summary)."""
+
+    BLOCK: ClassVar[str] = "analyzer"
+    ROLE: ClassVar[str] = "analyzer"
+
+
+@dataclass
+class ExperimentExecutorSpec:
+    """How each planned run is invoked (retry, timeout, workers, runner).
+
+    Distinct from the application runner id: ``runner`` picks how one MAS is
+    started inside a run. ``plugin`` names the lab executor (default ``native``).
+    The batch host still owns cache, resume, and result.json.
+    """
+
+    plugin: str = "native"
+    """Registered ``executor`` plugin id."""
+
+    params: Dict[str, Any] = field(default_factory=dict)
+    """Plugin attributes (validated by the executor)."""
+
+    timeout: int = 300
+    """Per-run timeout in seconds (worker pool)."""
 
     runner: str = DEFAULT_LAB_RUNNER_ID
-    """Application runner registry id."""
+    """Application runner registry id. Not the executor plugin id."""
 
     reset_state: bool = False
     """Reset emulation/runtime state between runs when true."""
@@ -290,30 +373,27 @@ class ExperimentScheduleSpec:
     worker_max_runs: Optional[int] = None
     """Recycle each worker after this many runs. ``None`` keeps the worker for the batch."""
 
-    @property
-    def strategy(self) -> str:
-        """Deprecated alias for :attr:`ordering`."""
-        return self.ordering
-
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentScheduleSpec":
+    def from_dict(cls, data: Dict[str, Any] | None, *, where: str = "experiment") -> "ExperimentExecutorSpec":
+        from mas.lab.benchmark.execution.roles import validated_plugin
         from mas.lab.benchmark.schedule.run_batch.workers import validate_worker_max_runs, validate_worker_processes
+        from mas.lab.lab.config.normalize import normalize_executor
 
-        ordering = data.get("ordering", data.get("strategy", "coverage"))
+        normalized = normalize_executor(data, where=where)
+        plugin = str(normalized.get("plugin") or "native")
+        params = dict(normalized.get("params") or {})
+        validated_plugin("executor", plugin, params)
+        timeout_raw = 300 if normalized.get("timeout") is None else normalized["timeout"]
+        if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, int) or timeout_raw < 1:
+            raise ValueError(f"executor.timeout must be an integer >= 1, got {timeout_raw!r}")
         return cls(
-            parallel_scenarios=data.get("parallel_scenarios", 4),
-            timeout=data.get("timeout", 300),
-            max_attempts=max(1, int(data["max_attempts"] if data.get("max_attempts") is not None else 3)),
-            retry_backoff_s=max(
-                0.0,
-                float(data["retry_backoff_s"] if data.get("retry_backoff_s") is not None else 2.0),
-            ),
-            pause_between_runs=data.get("pause_between_runs", 1.0),
-            ordering=ordering or "coverage",
-            runner=data.get("runner", DEFAULT_LAB_RUNNER_ID),
-            reset_state=bool(data.get("reset_state", False)),
-            worker_processes=validate_worker_processes(data.get("worker_processes", 1)),
-            worker_max_runs=validate_worker_max_runs(data.get("worker_max_runs")),
+            plugin=plugin,
+            params=params,
+            timeout=timeout_raw,
+            runner=str(normalized.get("runner") or DEFAULT_LAB_RUNNER_ID),
+            reset_state=bool(normalized.get("reset_state", False)),
+            worker_processes=validate_worker_processes(normalized.get("worker_processes", 1)),
+            worker_max_runs=validate_worker_max_runs(normalized.get("worker_max_runs")),
         )
 
 
@@ -322,47 +402,38 @@ class ExperimentDesignSpec:
     """What conditions are being compared.
 
     Lives next to ``scenarios[]``, dataset, evaluation, and ``run.n_runs``.
-    Changing these fields *does* change the label or meaning of a result cell.
+    Changing these fields *does* change the label or meaning of a result run.
     """
 
-    mode: str = "cartesian"
-    """``cartesian``, ``coupled``, or ``one_factor``."""
+    plugin: str = "cartesian"
+    """Registered ``scenario_generator`` plugin id."""
 
     max_executions: Optional[int] = None
     """Fail when the planned grid exceeds this limit."""
 
-    couplings: List[Dict[str, Any]] = field(default_factory=list)
-    vary: Optional[Dict[str, Any]] = None
-    pin_scenarios: Optional[List[str]] = None
-    pin_items: Optional[List[Any]] = None
+    params: Dict[str, Any] = field(default_factory=dict)
+    """Plugin attributes (validated by the generator)."""
 
     def as_plan_dict(self) -> Dict[str, Any]:
         """Shape consumed by :func:`mas.lab.benchmark.execution.plan.build_execution_plan`."""
-        data: Dict[str, Any] = {"mode": self.mode}
+        data: Dict[str, Any] = {"plugin": self.plugin, "params": dict(self.params)}
         if self.max_executions is not None:
             data["max_executions"] = self.max_executions
-        if self.couplings:
-            data["couplings"] = self.couplings
-        if self.vary:
-            data["vary"] = self.vary
-        if self.pin_scenarios is not None:
-            data["pin_scenarios"] = self.pin_scenarios
-        if self.pin_items is not None:
-            data["pin_items"] = self.pin_items
         return data
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "ExperimentDesignSpec":
-        data = data or {}
-        if "pin" in data:
-            raise ValueError("design.pin is not read; use pin_scenarios / pin_items with one_factor")
+    def from_dict(cls, data: Optional[Dict[str, Any]], *, where: str = "experiment") -> "ExperimentDesignSpec":
+        from mas.lab.benchmark.execution.roles import validated_plugin
+        from mas.lab.lab.config.normalize import normalize_design
+
+        normalized = normalize_design(data, where=where)
+        plugin = str(normalized.get("plugin") or "cartesian")
+        params = dict(normalized.get("params") or {})
+        validated_plugin("scenario_generator", plugin, params)
         return cls(
-            mode=data.get("mode", "cartesian"),
-            max_executions=data.get("max_executions"),
-            couplings=list(data.get("couplings") or []),
-            vary=data.get("vary"),
-            pin_scenarios=data.get("pin_scenarios"),
-            pin_items=data.get("pin_items"),
+            plugin=plugin,
+            max_executions=normalized.get("max_executions"),
+            params=params,
         )
 
 
@@ -371,25 +442,30 @@ def split_legacy_execution(execution: Dict[str, Any]) -> Dict[str, Any]:
 
     ``n_runs`` is dropped — replication belongs under ``run.n_runs``.
     """
+    from mas.lab.lab.config.normalize import EXECUTOR_HOST_KEYS, peel_retry_keys
+
     out: Dict[str, Any] = {}
     schedule: Dict[str, Any] = {}
-    for key in (
-        "parallel_scenarios",
-        "timeout",
-        "pause_between_runs",
-        "runner",
-        "reset_state",
-        "max_attempts",
-        "retry_backoff_s",
-    ):
+    executor: Dict[str, Any] = {}
+    for key in ("parallel_scenarios", "pause_between_runs"):
         if key in execution:
             schedule[key] = execution[key]
-    if "ordering" in execution:
-        schedule["ordering"] = execution["ordering"]
+    for key in EXECUTOR_HOST_KEYS:
+        if key in execution:
+            executor[key] = execution[key]
+    if "plugin" in execution:
+        schedule["plugin"] = execution["plugin"]
+    elif "ordering" in execution:
+        schedule["plugin"] = execution["ordering"]
     elif "strategy" in execution:
-        schedule["ordering"] = execution["strategy"]
+        schedule["plugin"] = execution["strategy"]
     if schedule:
         out["schedule"] = schedule
+    if executor:
+        out["executor"] = executor
+    _, retry_params = peel_retry_keys(execution)
+    if retry_params:
+        out["retry"] = {"params": retry_params}
     if execution.get("design"):
         out["design"] = execution["design"]
     emulation = dict(execution.get("emulation") or {})
@@ -411,7 +487,7 @@ def split_legacy_execution(execution: Dict[str, Any]) -> Dict[str, Any]:
 class MASExecutionSpec:
     """Compatibility view of split schedule / design / bench emulation.
 
-    Prefer ``MASExperimentConfig.schedule``, ``.design``, and
+    Prefer ``MASExperimentConfig.schedule``, ``.design``, ``.executor``, and
     ``.bench_emulation``.  This object is synthesized during dual-read so
     leftover consumers of ``exp.execution`` keep working for one release.
     """
@@ -425,22 +501,11 @@ class MASExecutionSpec:
     timeout: int = 300
     """Per-run timeout in seconds."""
 
-    max_attempts: int = 3
-    """Re-issue a failed scenario×item×run this many times (including the first).
-
-    Independent of ``run.n_runs`` (statistical repeats). Default 3 so an
-    LLM HTTP failure can recover after in-call retries are spent. Set 1 to
-    disable lab-level reattempts.
-    """
-
-    retry_backoff_s: float = 2.0
-    """Base delay in seconds before the first lab-level reattempt (then ×2)."""
-
     pause_between_runs: float = 1.0
     """Pause in seconds between runs to let resources settle."""
 
-    strategy: str = "coverage"
-    """Deprecated alias of ``schedule.ordering``."""
+    scheduler: Optional[str] = None
+    """Walk plugin id from ``schedule.plugin`` (compat view)."""
 
     runner: str = DEFAULT_LAB_RUNNER_ID
     """Application runner registry id."""
@@ -449,7 +514,7 @@ class MASExecutionSpec:
     """Reset emulation/runtime state between runs when true."""
 
     design: Optional[Dict[str, Any]] = None
-    """Experiment design mode (cartesian, coupled, one_factor) and guards."""
+    """Experiment design (scenario generator plugin, params, guards)."""
 
     replay: Optional["ReplaySpec"] = None
     """Multi-turn replay configuration.  When set, dataset items with a
@@ -470,18 +535,13 @@ class MASExecutionSpec:
     def from_dict(cls, data: Dict[str, Any]) -> "MASExecutionSpec":
         replay_data = data.get("replay")
         emulation_data = data.get("emulation", {})
-        strategy = data.get("strategy", data.get("ordering", "coverage"))
+        scheduler = data.get("strategy", data.get("ordering", data.get("plugin")))
         return cls(
             n_runs=data.get("n_runs", 3),
             parallel_scenarios=data.get("parallel_scenarios", 4),
             timeout=data.get("timeout", 300),
-            max_attempts=max(1, int(data["max_attempts"] if data.get("max_attempts") is not None else 3)),
-            retry_backoff_s=max(
-                0.0,
-                float(data["retry_backoff_s"] if data.get("retry_backoff_s") is not None else 2.0),
-            ),
             pause_between_runs=data.get("pause_between_runs", 1.0),
-            strategy=strategy or "coverage",
+            scheduler=scheduler or None,
             runner=data.get("runner", DEFAULT_LAB_RUNNER_ID),
             reset_state=bool(data.get("reset_state", False)),
             design=data.get("design"),
@@ -496,6 +556,7 @@ class MASExecutionSpec:
         *,
         schedule: ExperimentScheduleSpec,
         design: ExperimentDesignSpec,
+        executor: "ExperimentExecutorSpec",
         bench_emulation: EmulationSpec,
         replay: Optional["ReplaySpec"],
         n_runs: int,
@@ -503,13 +564,11 @@ class MASExecutionSpec:
         return cls(
             n_runs=n_runs,
             parallel_scenarios=schedule.parallel_scenarios,
-            timeout=schedule.timeout,
-            max_attempts=schedule.max_attempts,
-            retry_backoff_s=schedule.retry_backoff_s,
+            timeout=executor.timeout,
             pause_between_runs=schedule.pause_between_runs,
-            strategy=schedule.ordering,
-            runner=schedule.runner,
-            reset_state=schedule.reset_state,
+            scheduler=schedule.plugin,
+            runner=executor.runner,
+            reset_state=executor.reset_state,
             design=design.as_plan_dict(),
             replay=replay,
             emulation=bench_emulation,

@@ -48,9 +48,9 @@ Details: [multi-scenario-format.md](multi-scenario-format.md).
 
 Use `n_runs > 1` when **pipeline steps** report confidence intervals.
 
-The scheduler reattempts a failed scenario×item×run by default. The default is `schedule.max_attempts: 3`, independent of `n_runs`. The older `execution:` block is deprecated.
+The scheduler reattempts a failed scenario×item×run by default. The default is `retry.params.max_attempts: 3`, independent of `n_runs`. The older `execution:` block is deprecated.
 
-Reattempts cover LLM HTTP failures after in-call retries run out. Auth and TLS failures are not retried. Set `max_attempts: 1` to fail the slot on the first error.
+Reattempts cover LLM HTTP failures after in-call retries run out. Auth and TLS failures are not retried. Set `retry.params.max_attempts: 1` to fail the slot on the first error.
 
 ## Level hooks for figures
 

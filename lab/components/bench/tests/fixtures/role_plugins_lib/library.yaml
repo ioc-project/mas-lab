@@ -1,0 +1,25 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Library
+name: role_plugins_lib
+description: Test library that ships a scenario generator, a scheduler, and a retrier.
+
+types:
+  - scenario_generator
+  - scheduler
+  - retrier
+
+plugins:
+  - type: scenario_generator
+    name: only_scenario
+    module: role_plugins_lib.only_scenario
+    class: OnlyScenarioGenerator
+  - type: scheduler
+    name: longest_first
+    module: role_plugins_lib.longest_first
+    class: LongestFirstScheduler
+  - type: retrier
+    name: never
+    module: role_plugins_lib.never
+    class: NeverRetrier

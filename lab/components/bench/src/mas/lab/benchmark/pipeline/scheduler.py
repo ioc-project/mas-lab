@@ -35,6 +35,7 @@ class Node:
     result: Any = None
     input_digests: list[str] = field(default_factory=list)
     ctx: Any = None
+    run_complete: bool = True
 
 
 @dataclass
@@ -125,9 +126,7 @@ class Scheduler:
 
     async def _fire_parent(self, gate_id: str, scope: str) -> None:
         for node in self.nodes.values():
-            if node.parent == gate_id or (
-                node.scope in {scope, "test", "item"} and node.parent == gate_id
-            ):
+            if node.parent == gate_id or (node.scope in {scope, "test", "item"} and node.parent == gate_id):
                 await self._maybe_start(node)
         if scope == "item" and gate_id.startswith("item:"):
             scenario = gate_id.split(":", 1)[1].split("/")[0]
@@ -163,7 +162,24 @@ class Scheduler:
     async def _maybe_start(self, node: Node, child_status: str | None = None) -> None:
         if node.status not in {"pending"}:
             return
+        from mas.lab.benchmark.execution.completeness import (
+            STAGE_BATCH,
+            child_is_complete,
+            stage_mode_of,
+        )
         from mas.lab.benchmark.pipeline.fanout import folds_batches, wait_for_start
+
+        if child_status is not None and node.scope == "run":
+            node.run_complete = child_is_complete(child_status)
+            mode = stage_mode_of(node.step)
+            if not node.run_complete and mode == STAGE_BATCH:
+                node.status = "skipped"
+                # Its output does not exist: whatever reads it must not run on nothing.
+                self._failed.add(node.name)
+                self._started[node.name].set()
+                self._done[node.name].set()
+                self._kick_dependents(node.name)
+                return
 
         fold_run = folds_batches(node.step) and node.scope == "run" and node.key is not None
         if node.parent and not fold_run:
@@ -182,6 +198,7 @@ class Scheduler:
                 await event.wait()
             if dep in self._failed:
                 node.status = "skipped"
+                self._failed.add(node.name)
                 self._started[node.name].set()
                 self._done[node.name].set()
                 self._kick_dependents(node.name)
@@ -195,13 +212,19 @@ class Scheduler:
         if type_lim > 1:
             type_key = str(node.step.type or node.name)
             type_sem = self._type_sems.setdefault(type_key, asyncio.Semaphore(type_lim))
-        async with self._max_active:
-            async with sem:
-                if type_sem is not None:
-                    async with type_sem:
+        from mas.lab.benchmark.execution.completeness import bind_run_complete, reset_run_complete
+
+        token = bind_run_complete(node.run_complete)
+        try:
+            async with self._max_active:
+                async with sem:
+                    if type_sem is not None:
+                        async with type_sem:
+                            await self._run_body(node)
+                    else:
                         await self._run_body(node)
-                else:
-                    await self._run_body(node)
+        finally:
+            reset_run_complete(token)
         self._done[node.name].set()
         self._kick_dependents(node.name)
 
@@ -246,9 +269,7 @@ class Scheduler:
                 ctx,
                 key=node.key,
             )
-        return await node.adapter.execute(
-            ctx, key=node.key or RunKey("e", "s", "i", "r1")
-        )
+        return await node.adapter.execute(ctx, key=node.key or RunKey("e", "s", "i", "r1"))
 
     def _kick_dependents(self, name: str) -> None:
         for other in self.nodes.values():

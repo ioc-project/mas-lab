@@ -4,7 +4,7 @@ experiment:
   name: revocation
   description: >
     After tool result 2, revoke the credential at the issuer. The virtual
-    wait cell then advances 21s so the payments cache refreshes to denied.
+    wait run then advances 21s so the payments cache refreshes to denied.
   default_flavour: local
   models:
     main: scripted
@@ -23,7 +23,9 @@ experiment:
     n_runs: 1
   schedule:
     parallel_scenarios: 1
-    max_attempts: 1
+  retry:
+    params:
+      max_attempts: 1
   environment:
     clock:
       kind: virtual

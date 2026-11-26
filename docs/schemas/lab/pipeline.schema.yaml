@@ -43,6 +43,13 @@ properties:
         type: integer
         minimum: 1
         default: 8
+      max_scheduled_batches:
+        type: integer
+        minimum: 1
+        default: 8
+        description: >
+          Bound on how many experiment batches one pipeline may start
+          (schedule_experiment). A runaway loop stops here.
         description: >
           Global cap on in-flight scheduler nodes. Independent of per-step
           concurrency. Standalone CLI defaults to parallel=true (this cap);
@@ -155,6 +162,14 @@ properties:
                 class has only execute (non-realtime) or only on_batch
                 (realtime). Converter realtime: on events_to_otel is a
                 different flag. This is a step key, not a figure config key.
+            mode:
+              type: string
+              enum: [batch, live, mixed]
+              description: >
+                Stage mode. batch: complete runs only, re-executed on
+                failure. live: events as they come, no completeness
+                guarantee. mixed: live fold, completeness gate before a
+                batch persist. Omit to infer from realtime / on_batch.
             resource:
               type: string
               enum: [cpu, io, net, judge]

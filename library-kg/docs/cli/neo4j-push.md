@@ -20,7 +20,18 @@ Alias of `mas-lab kg push`.
 
 ## OPTIONS
 
-See `mas-lab kg neo4j-push --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `KG_PATH` | Positional argument. |
+| `--uri` | — |
+| `--username` | — |
+| `--database` | — |
+| `--app-name` | — |
+| `--infra` | — |
+| `--batch-size` | — |
+| `--enable-extension-layer` | Enable optional ontology extension layer(s) on push. Repeat option. |
+| `--clear-session` | — |
+| `--dry-run` | — |
 
 ## PIPELINE
 

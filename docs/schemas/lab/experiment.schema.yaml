@@ -426,17 +426,34 @@ properties:
       design:
         $ref: "#/$defs/experiment_design"
         description: >
-          Experimental design mode and cartesian guard. Changing these fields
-          changes the meaning of a result cell. Replication count lives under
-          run.n_runs, not here.
+          Scenario generator (plugin + params) and cartesian guard. Changing
+          these fields changes the meaning of a result run. Replication
+          count lives under run.n_runs, not here.
 
       # ── Schedule (how the bench walks the matrix) ─────────────────────────
       schedule:
         $ref: "#/$defs/experiment_schedule"
         description: >
-          Bench progression only — parallelism, timeouts, ordering, runner.
-          Never changes what a result cell means, only wall time / resource
-          usage / failure modes.
+          Bench progression only — scheduler plugin, parallelism, pacing.
+          Never changes what a result run means, only wall time.
+
+      executor:
+        $ref: "#/$defs/experiment_executor"
+        description: >
+          How each planned run is invoked — retry, timeout, workers, and
+          the application runner. Distinct from schedule.plugin (order)
+          and from the application runner registry.
+
+      retry:
+        $ref: "#/$defs/experiment_retry"
+        description: >
+          Whether a failed run runs again: a retrier plugin and its params. The
+          executor runs a run once; this decides about another attempt, in this
+          process or in a later CI round (`mas-lab benchmark runs retry`).
+
+      analyzer:
+        $ref: "#/$defs/experiment_analyzer"
+        description: "Who reads the results tree (analyzer plugin). Never runs a run."
 
       # ── Bench emulation (held constant unless a declared factor) ──────────
       bench_emulation:
@@ -505,13 +522,14 @@ properties:
             default: 1.0
           strategy:
             type: string
-            enum: [coverage, depth]
-            default: "coverage"
+            enum: [coverage, depth, as_generated]
             deprecated: true
-            description: "Deprecated alias of schedule.ordering."
+            description: "Deprecated alias of schedule.plugin."
           ordering:
             type: string
-            enum: [coverage, depth]
+            enum: [coverage, depth, as_generated]
+            deprecated: true
+            description: "Deprecated alias of schedule.plugin."
           runner:
             type: string
             minLength: 1
@@ -731,21 +749,32 @@ $defs:
     type: object
     additionalProperties: false
     description: >
-      How to pick cells from scenarios × dataset items. cartesian = full
-      product; coupled = listed pairs; one_factor = vary one of those two
-      axes. Other study axes (checkpoints, overlays, models, infra) are
-      not combinators here.
+      How to pick runs from scenarios × dataset items. plugin names a
+      registered scenario_generator (cartesian = full product; coupled =
+      listed pairs; one_factor = vary one of those two axes; or a
+      third-party generator). Other study axes (checkpoints, overlays,
+      models, infra) are not combinators here.
     properties:
-      mode:
+      plugin:
         type: string
-        enum: [cartesian, coupled, one_factor]
+        minLength: 1
         default: cartesian
+        description: "Registered scenario_generator plugin id."
       max_executions:
         type: integer
         minimum: 1
-        description: "Fail when scenarios × items × n_runs exceeds this limit."
+        description: "Fail when scenarios × items × n_runs exceeds this limit. Core guard, every generator."
+      params:
+        type: object
+        additionalProperties: true
+        description: "Plugin attributes, validated by the generator at config load."
+      mode:
+        type: string
+        deprecated: true
+        description: "Deprecated alias of plugin. Rewritten at load."
       couplings:
         type: array
+        deprecated: true
         minItems: 1
         items:
           type: object
@@ -758,9 +787,10 @@ $defs:
               type: array
       vary:
         type: object
+        deprecated: true
         additionalProperties: false
         required: [axis, values]
-        description: "one_factor only: which scenario/item axis to sweep."
+        description: "Deprecated top-level one_factor key; use params.vary."
         properties:
           axis:
             type: string
@@ -770,66 +800,38 @@ $defs:
             minItems: 1
       pin_scenarios:
         type: array
+        deprecated: true
         minItems: 1
         items:
           type: string
-        description: "one_factor: scenarios held constant. Omit to use every scenario."
+        description: "Deprecated top-level one_factor key; use params.pin_scenarios."
       pin_items:
         type: array
+        deprecated: true
         minItems: 1
-        description: "one_factor: item ids held constant. Omit to use every item."
-    allOf:
-      - if:
-          properties:
-            mode: { const: one_factor }
-          required: [mode]
-        then:
-          required: [vary]
-        else:
-          not:
-            anyOf:
-              - required: [vary]
-              - required: [pin_scenarios]
-              - required: [pin_items]
-      - if:
-          properties:
-            mode: { const: coupled }
-          required: [mode]
-        then:
-          required: [couplings]
-        else:
-          not:
-            required: [couplings]
+        description: "Deprecated top-level one_factor key; use params.pin_items."
 
   experiment_schedule:
     type: object
     additionalProperties: false
-    description: "Bench progression — parallelism, timeouts, ordering, runner."
+    description: "Bench progression — scheduler plugin, parallelism, pacing."
     properties:
+      plugin:
+        type: string
+        minLength: 1
+        description: >
+          Registered scheduler plugin id. Omit to use the generator's
+          default_scheduler (coverage for cartesian, as_generated for
+          coupled and one_factor).
+      params:
+        type: object
+        additionalProperties: true
+        description: "Scheduler plugin attributes, validated at config load."
       parallel_scenarios:
         type: integer
         minimum: 1
         default: 4
         description: "Max concurrent MAS runs."
-      timeout:
-        type: integer
-        minimum: 1
-        default: 300
-        description: "Per-run timeout in seconds."
-      max_attempts:
-        type: integer
-        minimum: 1
-        default: 3
-        description: >
-          Re-issue a failed scenario×item×run this many times (including
-          the first try). Independent of run.n_runs. Default 3. Set 1 to disable.
-      retry_backoff_s:
-        type: number
-        minimum: 0
-        default: 2.0
-        description: >
-          Base delay in seconds before the first lab-level reattempt;
-          doubles on each subsequent reattempt.
       pause_between_runs:
         type: number
         minimum: 0
@@ -837,24 +839,110 @@ $defs:
         description: "Sleep in seconds between runs (let resources settle)."
       ordering:
         type: string
-        enum: [coverage, depth]
-        default: "coverage"
-        description: >
-          Walk order.
-          'coverage' (default): breadth-first — one round across all conditions before the next.
-          'depth': depth-first — finish all n_runs for one condition before moving on.
+        enum: [coverage, depth, as_generated]
+        deprecated: true
+        description: "Deprecated alias of schedule.plugin. Rewritten at load."
       strategy:
         type: string
-        enum: [coverage, depth]
+        enum: [coverage, depth, as_generated]
         deprecated: true
-        description: "Deprecated alias of ordering (dual-read)."
+        description: "Deprecated alias of schedule.plugin. Rewritten at load."
+      timeout:
+        type: integer
+        minimum: 1
+        default: 300
+        deprecated: true
+        description: "Deprecated; use executor.timeout. Still rewritten at load."
+      max_attempts:
+        type: integer
+        minimum: 1
+        default: 3
+        deprecated: true
+        description: "Deprecated; use retry.params.max_attempts. Still rewritten at load."
+      retry_backoff_s:
+        type: number
+        minimum: 0
+        default: 2.0
+        deprecated: true
+        description: "Deprecated; use retry.params.backoff_s. Still rewritten at load."
+      runner:
+        type: string
+        minLength: 1
+        default: native
+        deprecated: true
+        description: "Deprecated; use executor.runner. Still rewritten at load."
+      reset_state:
+        type: boolean
+        deprecated: true
+        description: "Deprecated; use executor.reset_state. Still rewritten at load."
+      worker_processes:
+        type: integer
+        minimum: 1
+        default: 1
+        deprecated: true
+        description: "Deprecated; use executor.worker_processes. Still rewritten at load."
+      worker_max_runs:
+        type: integer
+        minimum: 1
+        deprecated: true
+        description: "Deprecated; use executor.worker_max_runs. Still rewritten at load."
+
+  experiment_retry:
+    type: object
+    additionalProperties: false
+    properties:
+      plugin:
+        type: string
+        minLength: 1
+        default: native
+        description: Registered retrier plugin id. Omit to use native.
+      params:
+        type: object
+        additionalProperties: true
+        description: >
+          Retrier attributes, validated at config load. `native`: `max_attempts`
+          (total tries, the first included; default 3; 1 disables retry) and
+          `backoff_s` (base delay, doubled each time; default 2.0).
+
+  experiment_analyzer:
+    type: object
+    additionalProperties: false
+    properties:
+      plugin:
+        type: string
+        minLength: 1
+        default: native
+        description: Registered analyzer plugin id. Omit to use native (a completeness summary).
+      params:
+        type: object
+        additionalProperties: true
+
+  experiment_executor:
+    type: object
+    additionalProperties: false
+    description: "How each run is invoked once — timeout, workers, application runner. Retry is the retry block."
+    properties:
+      plugin:
+        type: string
+        minLength: 1
+        default: native
+        description: Registered executor plugin id. Omit to use native.
+      params:
+        type: object
+        additionalProperties: true
+        description: "Executor plugin attributes, validated at config load."
+      timeout:
+        type: integer
+        minimum: 1
+        default: 300
+        description: "Per-run timeout in seconds (worker pool)."
       runner:
         type: string
         minLength: 1
         default: native
         description: >
-          Lab adapter id (mas.lab.runners entry point). Optional override —
-          when omitted, inferred from application.app / mas.manifest
+          Lab adapter id (mas.lab.runners entry point). Not the executor
+          plugin id. When omitted, inferred from application.app / mas.manifest
           spec.framework.default_adapter or agent spec.framework_adapter.
       reset_state:
         type: boolean
@@ -1140,6 +1228,13 @@ $defs:
           until every input has arrived. Omit when the class has only
           execute or only on_batch. This is a step key, not a figure
           config key.
+      mode:
+        type: string
+        enum: [batch, live, mixed]
+        description: >
+          Stage mode. batch: complete runs only. live: events as they
+          come. mixed: live fold plus a completeness gate before batch
+          persist. Omit to infer from realtime / on_batch.
       config:
         type: object
         additionalProperties: true

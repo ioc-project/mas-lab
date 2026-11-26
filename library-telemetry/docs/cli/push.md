@@ -31,13 +31,13 @@ Same work as pipeline `telemetry:export-otel-collector` (`export_otel`).
 
 | Flag | Meaning |
 |------|------|
-| `TRACE_FILE` | Positional argument. |
-| `--endpoint`, `-e` | OTLP HTTP collector endpoint (must accept POST /v1/traces JSON). |
-| `--service-name`, `-s` | service.name resource attribute. |
-| `--batch-size` | Number of spans per HTTP request. |
-| `--app-name` | Override service.name resource attribute (takes precedence over --service-name). Useful to tag a re-exported trace with a distinct app identity, e.g. 'mas-lab-import-test-001'. Default: no override. |
-| `--dry-run` | Convert and print a summary but do not send anything. |
-| `--json-output` | Print result as JSON (useful for scripting). |
+| `SPANS_FILE` | Positional argument. |
+| `--endpoint` | — |
+| `--infra` | — |
+| `--app-name` | — |
+| `--dry-run` | — |
+| `--shift-to-now` | Translate timestamps so the earliest span is now (relative gaps kept). |
+| `--new-session-id` | Rewrite session.id to a new UUID so SCOPE treats this as a new session. |
 
 ## PIPELINE
 

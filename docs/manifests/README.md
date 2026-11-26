@@ -54,7 +54,7 @@ config.yaml       <- project defaults (flavour, infra_refs, .env path)
 | **World around a run** | `environment:` on the experiment, scenario, or dataset item (not a `kind`) | [environment.md](environment.md) · [dataset.md](dataset.md#10-world-around-the-item-environment) |
 | **Engine tuning** | `RuntimeEngine` | [runtime-engine.md](runtime-engine.md) · [execution.md](execution.md) (removed agent `spec.execution`) |
 | **Model data** | LLM model catalog (shipped data file, not a kind) | [llm-model-catalog.md](llm-model-catalog.md) |
-| **Experiment** | `experiment:` root | [experiment.md](experiment.md) |
+| **Experiment** | `experiment:` root | [experiment.md](experiment.md) · [scenario-generator.md](scenario-generator.md) · [scheduler.md](scheduler.md) · [executor.md](executor.md) · [completeness.md](completeness.md) · [pipeline-assembly.md](pipeline-assembly.md) |
 | **Inputs** | `Dataset` (`apiVersion: lab/v1`); optional item `environment:` overlay | [dataset.md](dataset.md) · [dataset-migration.md](dataset-migration.md) · [environment.md](environment.md) |
 | **Processing** | `pipeline:` root / `kind: Pipeline` | [pipeline.md](pipeline.md) |
 | **Lab folder** | `lab:` root (`lab-config.yaml`) | [lab.md](lab.md) |

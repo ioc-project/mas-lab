@@ -30,7 +30,7 @@ from mas.lab.benchmark.schedule.run_batch.workers import (
     validate_worker_processes,
 )
 from mas.lab.inputs import RunInput
-from mas.lab.lab.config import ExperimentScheduleSpec, MASExperimentConfig
+from mas.lab.lab.config import ExperimentExecutorSpec, MASExperimentConfig
 
 # A job whose run fails inside the worker with a runner error: the worker answered, it did not die.
 _DEATH_ERRORS = {"worker died", "worker timed out", "worker pool closed"}
@@ -77,21 +77,21 @@ class _Unsafe(PipelineStep):
         return None
 
 
-def test_schedule_defaults_to_one_worker_process() -> None:
-    spec = ExperimentScheduleSpec.from_dict({})
+def test_executor_defaults_to_one_worker_process() -> None:
+    spec = ExperimentExecutorSpec.from_dict({})
     assert spec.worker_processes == 1
     assert spec.worker_max_runs is None
 
 
-def test_schedule_parses_worker_fields() -> None:
-    spec = ExperimentScheduleSpec.from_dict({"worker_processes": 1, "worker_max_runs": 7})
+def test_executor_parses_worker_fields() -> None:
+    spec = ExperimentExecutorSpec.from_dict({"worker_processes": 1, "worker_max_runs": 7})
     assert spec.worker_processes == 1
     assert spec.worker_max_runs == 7
 
 
 def test_a_worker_count_above_this_machines_cores_still_parses() -> None:
     """An experiment that loads on a big machine must load on a small one; the run decides."""
-    spec = ExperimentScheduleSpec.from_dict({"worker_processes": cpu_count() + 100})
+    spec = ExperimentExecutorSpec.from_dict({"worker_processes": cpu_count() + 100})
     assert spec.worker_processes == cpu_count() + 100
 
 
@@ -105,17 +105,17 @@ def test_the_run_refuses_a_worker_count_above_the_cores_and_names_them() -> None
 
 
 @pytest.mark.parametrize("bad", [0, -1, 1.5, "2", True, None])
-def test_the_schedule_parse_checks_worker_processes_structure(bad: object) -> None:
+def test_the_executor_parse_checks_worker_processes_structure(bad: object) -> None:
     with pytest.raises(ValueError, match="worker_processes"):
-        ExperimentScheduleSpec.from_dict({"worker_processes": bad})
+        ExperimentExecutorSpec.from_dict({"worker_processes": bad})
     with pytest.raises(ValueError, match="worker_processes"):
         validate_worker_processes(bad)
 
 
 @pytest.mark.parametrize("bad", [0, -3, 2.5, "x", False])
-def test_the_schedule_parse_checks_worker_max_runs_structure(bad: object) -> None:
+def test_the_executor_parse_checks_worker_max_runs_structure(bad: object) -> None:
     with pytest.raises(ValueError, match="worker_max_runs"):
-        ExperimentScheduleSpec.from_dict({"worker_max_runs": bad})
+        ExperimentExecutorSpec.from_dict({"worker_max_runs": bad})
     assert validate_worker_max_runs(None) is None
 
 
@@ -621,9 +621,9 @@ def test_experiment_yaml_worker_processes(tmp_path: Path) -> None:
         "    - id: s1\n"
         "  run:\n"
         "    n_runs: 1\n"
-        "  schedule:\n"
+        "  executor:\n"
         "    worker_processes: 1\n",
         encoding="utf-8",
     )
     cfg = MASExperimentConfig.from_yaml(path)
-    assert cfg.schedule.worker_processes == 1
+    assert cfg.executor.worker_processes == 1

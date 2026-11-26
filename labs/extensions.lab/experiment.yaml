@@ -123,10 +123,12 @@ experiment:
   # ------------------------------------------------------------------
   schedule:
     parallel_scenarios: 3
-    timeout: 300
     pause_between_runs: 1.0
+    plugin: coverage
+  executor:
+    plugin: native
+    timeout: 300
     reset_state: true
-    ordering: coverage
   bench_emulation:
     infra:
       llm: live
@@ -142,7 +144,7 @@ experiment:
   # Step 3 — compute-ci:           95% CI (Student's t, n=3) per scenario × group.
   #                                In-memory + ci_summary.csv for paper tables.
   # Step 4 — ci-figure:            Paper figure — faceted by metric × query group,
-  #                                3 bars per cell (baseline / active / passive),
+  #                                3 bars per run (baseline / active / passive),
   #                                error bars from CI bounds.
   # Step 5 — extract-trajectories: Index all run traces → trajectories.jsonl.
   # Step 6 — trajectory-plots:     Render one multilevel HTML trajectory per

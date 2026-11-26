@@ -133,6 +133,12 @@ class ObsEnvelopeMachine:
                         }
                         if getattr(ev, "truncation_retries", 0):
                             ret_kwargs["truncation_retries"] = ev.truncation_retries
+                        if getattr(ev, "retry_attempts", 0):
+                            ret_kwargs["retry_attempts"] = ev.retry_attempts
+                        if getattr(ev, "failure_class", ""):
+                            ret_kwargs["failure_class"] = ev.failure_class
+                        if getattr(ev, "failure_code", ""):
+                            ret_kwargs["failure_code"] = ev.failure_code
                         if ctx.scheduled_op == "LLM_CALL":
                             tool_calls = _llm_return_tool_calls(ev)
                             if tool_calls:

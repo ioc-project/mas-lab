@@ -33,7 +33,7 @@ plugins:
 | `PluginEntry` | `registry/__init__.py` | One registered plugin: URN, description, variants, shortcuts, attributes |
 | `VariantInfo` | `registry/__init__.py` | One implementation of a plugin (`module`, `class_name`, `version`, optional `requires` / `extra`) |
 | `PluginRegistry` | `registry/__init__.py` | Process-wide singleton (`get_registry()`) holding all entries, aliases, and known types |
-| Known type | `PluginRegistry._known_types` | A category string (`"design_pattern"`, `"step"`, `"codec"`, ...) the registry accepts |
+| Known type | `PluginRegistry._known_types` | A category string (`"design_pattern"`, `"step"`, `"codec"`, `"scenario_generator"`, `"scheduler"`, `"executor"`, ...) the registry accepts |
 | Manifest | Usually `library.yaml`, or `*.plugins.yaml` for split libraries | YAML declaring `types:`, `plugins:`, `aliases:`, `defaults:`; parsed by `bootstrap._parse_generic_manifest` |
 
 ## Manifest schema

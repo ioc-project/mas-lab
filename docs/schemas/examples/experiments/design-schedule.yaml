@@ -7,7 +7,7 @@ experiment:
   description: >
     Demonstrates the split of the former experiment.execution grab-bag.
     run.n_runs and design: define what is compared. schedule: only walks
-    the matrix. bench_emulation: is held constant across cells.
+    the matrix. bench_emulation: is held constant across runs.
   application:
     manifest: ./mas.yaml
     configs_dir: ./overlays
@@ -19,13 +19,16 @@ experiment:
   run:
     n_runs: 3
   design:
-    mode: cartesian
+    plugin: cartesian
     max_executions: 200
+    params: {}
   schedule:
     parallel_scenarios: 4
-    timeout: 300
     pause_between_runs: 1.0
-    ordering: coverage
+    plugin: coverage
+  executor:
+    plugin: native
+    timeout: 300
   bench_emulation:
     infra:
       llm: live

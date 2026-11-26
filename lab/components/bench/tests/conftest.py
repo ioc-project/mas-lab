@@ -5,9 +5,12 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytest_plugins = ["mas.runtime.hostenv_pytest", "lab_secret_state"]
 
@@ -42,3 +45,32 @@ def _clear_library_discovery_caches():
     clear_library_discovery_cache()
     unregister_lab_dirs()
     clear_library_plugin_registration()
+
+
+@contextmanager
+def loaded_role_plugins_lib() -> Iterator[None]:
+    """Register the test library that ships extra generator/scheduler/executor plugins."""
+    from mas.runtime.registry import get_registry
+    from mas.runtime.registry.bootstrap import register_manifest_data
+
+    lib = _TESTS_DIR / "fixtures" / "role_plugins_lib"
+    registry = get_registry()
+    snapshot = registry.snapshot()
+    data = yaml.safe_load((lib / "library.yaml").read_text(encoding="utf-8"))
+    parent = str(lib)
+    added = parent not in sys.path
+    if added:
+        sys.path.insert(0, parent)
+    try:
+        register_manifest_data(registry, data, source=lib / "library.yaml")
+        yield
+    finally:
+        registry.restore(snapshot)
+        if added and parent in sys.path:
+            sys.path.remove(parent)
+
+
+@pytest.fixture
+def role_plugins_lib() -> Iterator[None]:
+    with loaded_role_plugins_lib():
+        yield

@@ -6,6 +6,7 @@ Callers must keep loading the old shape. Warn once per (code, where) so a
 250-item dataset does not flood the log. Docs URLs are the published site;
 the source path is in the message so a local checkout still works.
 """
+
 from __future__ import annotations
 
 import logging
@@ -61,7 +62,19 @@ NOTICES: Dict[str, Tuple[str, str]] = {
     ),
     "experiment.execution": (
         "manifests/experiment.md#design-vs-schedule",
-        "use experiment.design, experiment.schedule, and experiment.bench_emulation",
+        "use experiment.design, experiment.schedule, experiment.executor, and experiment.bench_emulation",
+    ),
+    "experiment.design.mode": (
+        "manifests/experiment.md#design",
+        "use design.plugin and design.params",
+    ),
+    "experiment.schedule.ordering": (
+        "manifests/experiment.md#schedule",
+        "use schedule.plugin",
+    ),
+    "experiment.schedule.executor": (
+        "manifests/experiment.md#executor",
+        "use experiment.executor for timeout, workers, and runner, and experiment.retry for max_attempts",
     ),
 }
 

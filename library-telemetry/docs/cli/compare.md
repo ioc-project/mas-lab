@@ -20,7 +20,11 @@ Structural parity of a reference spans file vs a candidate. Same `compare_otel_s
 
 ## OPTIONS
 
-See `mas-lab telemetry compare --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `REFERENCE` | Positional argument. |
+| `CANDIDATE` | Positional argument. |
+| `--strict`, `--no-strict` | — |
 
 ## PIPELINE
 

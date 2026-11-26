@@ -40,7 +40,8 @@ Batch orchestration for `mas-lab benchmark run` lives on the experiment manifest
 The deprecated `experiment.execution` block is split into three keys:
 
 - `experiment.design`: what the experiment compares.
-- `experiment.schedule`: parallelism, timeouts, ordering, and retries.
+- `experiment.schedule`: scheduler plugin, parallelism, and pacing.
+- `experiment.executor`: timeout, retries, workers, and the application runner.
 - `experiment.bench_emulation`: the trace-cache posture (how runs reuse stored traces).
 
 None of them replaces `RuntimeEngine`. See [Design vs schedule](experiment.md#design-vs-schedule).

@@ -1,6 +1,7 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
 """``mas-lab benchmark follow`` command."""
+
 from __future__ import annotations
 
 import json as _json
@@ -12,14 +13,10 @@ import click
 
 @click.command("follow")
 @click.argument("experiment_yaml", type=Path, metavar="EXPERIMENT_YAML", required=False)
-@click.option("--interval", type=float, default=5.0, show_default=True,
-              help="Polling interval in seconds.")
-@click.option("--once", is_flag=True, default=False,
-              help="Print a single progress snapshot and exit immediately.")
-@click.option("-o", "--output-dir", type=Path, default=None,
-              help="Override the experiment output directory.")
-def follow_cmd(experiment_yaml: Path | None, interval: float, once: bool,
-               output_dir: Path | None) -> None:
+@click.option("--interval", type=float, default=5.0, show_default=True, help="Polling interval in seconds.")
+@click.option("--once", is_flag=True, default=False, help="Print a single progress snapshot and exit immediately.")
+@click.option("-o", "--output-dir", type=Path, default=None, help="Override the experiment output directory.")
+def follow_cmd(experiment_yaml: Path | None, interval: float, once: bool, output_dir: Path | None) -> None:
     """Watch live progress of a running benchmark.
 
     Polls run_info.json files under the experiment output directory and
@@ -43,6 +40,7 @@ def follow_cmd(experiment_yaml: Path | None, interval: float, once: bool,
             raise click.ClickException(f"Experiment YAML not found: {experiment_yaml}")
 
         from mas.lab.lab.config import MASExperimentConfig
+
         exp = MASExperimentConfig.from_yaml(experiment_yaml)
 
         dataset_items: list = []
@@ -56,9 +54,7 @@ def follow_cmd(experiment_yaml: Path | None, interval: float, once: bool,
         if not dataset_items:
             dataset_items = [{}]
 
-        n_runs: int = getattr(exp, "n_runs", None) or (
-            (exp.execution.n_runs if exp.execution else 1) or 1
-        )
+        n_runs: int = getattr(exp, "n_runs", None) or ((exp.execution.n_runs if exp.execution else 1) or 1)
         n_scenarios: int = len(exp.scenario_ids())
         total = n_scenarios * len(dataset_items) * n_runs
 
@@ -67,9 +63,7 @@ def follow_cmd(experiment_yaml: Path | None, interval: float, once: bool,
         _out = output_dir
 
     if _out is None:
-        raise click.ClickException(
-            "Cannot determine output directory — pass EXPERIMENT_YAML or use -o/--output-dir."
-        )
+        raise click.ClickException("Cannot determine output directory — pass EXPERIMENT_YAML or use -o/--output-dir.")
 
     _out = Path(_out).expanduser().resolve()
     if not _out.exists():

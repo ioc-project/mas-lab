@@ -134,8 +134,8 @@ def test_wall_timers_event_chain_and_gdb_script_run_through_the_batch(tmp_path: 
     env = config["experiment"]["environment"]
     env["clock"] = {"kind": "wall"}
     env["timers"] = [
-        {"id": "tick", "at": "0.2s", "do": [{"type": "emit", "config": {"name": "tick"}}]},
-        {"id": "later", "after": "tick", "delay": "0.1s", "do": [{"type": "emit", "config": {"name": "later"}}]},
+        {"id": "tick", "at": "0.05s", "do": [{"type": "emit", "config": {"name": "tick"}}]},
+        {"id": "later", "after": "tick", "delay": "0.05s", "do": [{"type": "emit", "config": {"name": "later"}}]},
     ]
     env["triggers"] = [
         {

@@ -85,14 +85,15 @@ Do not mix the two.
 
 ## Couplings
 
-`experiment.design.mode: coupled` binds each `scenario` to a dataset item **`id`** (see [experiment.md](experiment.md#design)):
+`experiment.design.plugin: coupled` binds each `scenario` to a dataset item **`id`** (see [experiment.md](experiment.md#design)):
 
 ```yaml
 design:
-  mode: coupled
-  couplings:
-    - scenario: order-42-refund
-      items: [order-42-refund]
+  plugin: coupled
+  params:
+    couplings:
+      - scenario: order-42-refund
+        items: [order-42-refund]
 ```
 
 Do not rename item ids when you migrate.

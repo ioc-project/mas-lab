@@ -20,7 +20,15 @@ Read a session or run KG back from Neo4j. Same `neo4j_dump` step as `kg:neo4j-du
 
 ## OPTIONS
 
-See `mas-lab kg dump --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `--session-id` | — |
+| `--run-id` | — |
+| `--output`, `-o` | — |
+| `--infra` | — |
+| `--uri` | — |
+| `--username` | — |
+| `--database` | — |
 
 ## PIPELINE
 

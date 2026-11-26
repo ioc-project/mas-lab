@@ -25,6 +25,7 @@ class BenchmarkRunOptions:
     limit_scenarios: int | None = None
     scenario_id: str | None = None
     dataset_item: str | None = None
+    plan_file: Path | None = None
     sample_scenarios: int | None = None
     single_run: bool = False
     output_dir: Path | None = None
@@ -34,7 +35,7 @@ class BenchmarkRunOptions:
     infra_name: str | None = None
     trace_cache_dir: Path | None = None
     data_cache_dir: Path | None = None
-    strategy: str | None = None
+    scheduler: str | None = None
     step_overrides: list = field(default_factory=list)
     pipeline_attachments: list = field(default_factory=list)
     experiment_overlays: list = field(default_factory=list)
@@ -59,6 +60,7 @@ class BenchmarkRunOptions:
             limit_scenarios=spec.get("limit_scenarios"),
             scenario_id=spec.get("scenario_id"),
             dataset_item=spec.get("dataset_item"),
+            plan_file=_path("plan_file"),
             sample_scenarios=spec.get("sample_scenarios"),
             single_run=spec.get("single_run", False),
             output_dir=_path("output_dir"),
@@ -68,7 +70,7 @@ class BenchmarkRunOptions:
             flavour_name=spec.get("flavour_name"),
             controls=list(spec.get("controls") or []),
             infra_name=spec.get("infra_name"),
-            strategy=spec.get("strategy"),
+            scheduler=spec.get("plugin_override"),
             step_overrides=spec.get("step_overrides") or [],
             pipeline_attachments=spec.get("pipeline_attachments") or [],
             experiment_overlays=spec.get("experiment_overlays") or [],
@@ -159,6 +161,7 @@ async def run_benchmark(
         limit_scenarios=opts.limit_scenarios,
         scenario_id=opts.scenario_id,
         dataset_item=opts.dataset_item,
+        plan_file=opts.plan_file,
         single_run=opts.single_run,
         flavour_name=opts.flavour_name,
         controls=opts.controls,
@@ -167,7 +170,7 @@ async def run_benchmark(
         trace_cache_dir=opts.trace_cache_dir,
         data_cache_dir=opts.data_cache_dir,
         output_dir=opts.output_dir,
-        strategy=opts.strategy,
+        scheduler=opts.scheduler,
         step_overrides=opts.step_overrides,
         pipeline_attachments=opts.pipeline_attachments,
         experiment_overlays=opts.experiment_overlays,

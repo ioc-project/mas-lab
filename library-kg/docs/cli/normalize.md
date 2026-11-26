@@ -20,7 +20,20 @@ Build a KG document from native `events.jsonl` (or `--otel` spans). Same steps a
 
 ## OPTIONS
 
-See `mas-lab kg normalize --help` for the current flag list (Click help is the source of truth).
+| Flag | Meaning |
+|------|------|
+| `EVENTS_PATH` | Positional argument. |
+| `--otel` | — |
+| `--run-id` | — |
+| `--session-id` | — |
+| `--split-session-id`, `--no-split-session-id` | — |
+| `--app-name` | Override Session.appName in normalized output. |
+| `--output-dir` | — |
+| `--output`, `-o` | — |
+| `--ontology-path` | — |
+| `--dry-run` | — |
+| `--categories` | Comma-separated opt-in categories added to the core output: capabilities, annotations, worker, thinking, or all (default: none). |
+| `--all-attributes`, `--no-all-attributes` | Keep native-only node fields. Default keeps SCOPE attributes only. |
 
 ## PIPELINE
 

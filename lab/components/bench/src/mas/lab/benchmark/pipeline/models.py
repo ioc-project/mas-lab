@@ -35,6 +35,7 @@ _STEP_KNOWN_KEYS: frozenset = frozenset(
         "refresh",
         "batch",
         "realtime",
+        "mode",
     }
 )
 
@@ -47,6 +48,7 @@ _CONFIG_KNOWN_KEYS: frozenset = frozenset(
         "output",
         "steps",
         "max_active",
+        "max_scheduled_batches",
     }
 )
 
@@ -93,6 +95,7 @@ class PipelineConfig:
     description: str = ""
     output: Dict[str, Any] = field(default_factory=lambda: {"base_dir": "./output"})
     max_active: int = 8
+    max_scheduled_batches: int = 8
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> PipelineConfig:
@@ -102,6 +105,7 @@ class PipelineConfig:
             description=data.get("description", ""),
             output=data.get("output", {"base_dir": "./output"}),
             max_active=max(1, int(data.get("max_active") or 8)),
+            max_scheduled_batches=max(1, int(data.get("max_scheduled_batches") or 8)),
         )
 
 

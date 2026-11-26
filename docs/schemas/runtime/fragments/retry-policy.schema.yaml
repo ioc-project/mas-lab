@@ -13,6 +13,10 @@ properties:
     type: integer
     minimum: 1
     description: Total tries including the first call.
+  retries:
+    type: integer
+    minimum: 0
+    description: "Extra tries after the first call (`retries: 0` is `max_attempts: 1`). Do not set both."
   backoff_s:
     type: number
     minimum: 0

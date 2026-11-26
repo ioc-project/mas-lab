@@ -62,13 +62,14 @@ def run_benchmark_sync(
     limit_scenarios: Optional[int] = None,
     scenario_id: Optional[str] = None,
     dataset_item: Optional[str] = None,
+    plan_file: Optional[str | Path] = None,
     sample_scenarios: Optional[int] = None,
     single_run: bool = False,
     output_dir: Optional[str | Path] = None,
     trace_cache_dir: Optional[str | Path] = None,
     data_cache_dir: Optional[str | Path] = None,
     force_lock: bool = False,
-    strategy: Optional[str] = None,
+    scheduler: Optional[str] = None,
     infra_name: Optional[str] = None,
     step_overrides: Optional[list] = None,
     pipeline_attachments: Optional[list] = None,
@@ -107,10 +108,8 @@ def run_benchmark_sync(
         Override trace-cache directory.
     force_lock:
         Force-break an existing run lock.
-    strategy:
-        Execution ordering: ``"coverage"`` (breadth-first) or ``"depth"``
-        (depth-first).  Overrides YAML ``schedule.ordering`` (legacy
-        ``execution.strategy`` still accepted during dual-read).
+    scheduler:
+        Scheduler plugin id. Overrides YAML ``schedule.plugin``.
     log_sink:
         Optional callable that receives log lines (str) emitted during the
         run — useful for routing output to the UI job log buffer.
@@ -136,13 +135,14 @@ def run_benchmark_sync(
             limit_scenarios=limit_scenarios,
             scenario_id=scenario_id,
             dataset_item=dataset_item,
+            plan_file=Path(plan_file) if plan_file else None,
             sample_scenarios=sample_scenarios,
             single_run=single_run,
             output_dir=Path(output_dir) if output_dir else None,
             trace_cache_dir=Path(trace_cache_dir) if trace_cache_dir else None,
             data_cache_dir=Path(data_cache_dir) if data_cache_dir else None,
             force_lock=force_lock,
-            strategy=strategy,
+            scheduler=scheduler,
             infra_name=infra_name,
             step_overrides=step_overrides or [],
             pipeline_attachments=pipeline_attachments or [],

@@ -61,6 +61,10 @@ def _handle_request(payload: dict) -> dict:
         "submit_benchmark": lambda p: _api.submit_benchmark(p),
         "submit_application": lambda p: _api.submit_application(p),
         "submit_pipeline": lambda p: _api.submit_pipeline(p),
+        "schedule_batch": lambda p: _api.schedule_batch(p),
+        "get_batch": lambda p: _api.get_batch(p["batch_id"]),
+        "stop_batch": lambda p: _api.stop_batch(p["batch_id"]),
+        "next_runs": lambda p: _api.next_runs(p),
         "list_libraries": lambda _p: _api.list_libraries(),
         "list_runtime_runners": lambda _p: _api.list_runtime_runners(),
     }

@@ -184,6 +184,28 @@ def test_experiment_dataset_path_without_name_still_loads(tmp_path: Path) -> Non
     assert config.dataset == dataset_path.resolve()
 
 
+def test_experiment_config_generate_uses_n_runs_field_not_execution_dict(tmp_path: Path) -> None:
+    from mas.lab.benchmark.experiment import AgentSpec, FlavourSpec
+
+    dataset = tmp_path / "d.yaml"
+    dataset.write_text(
+        "kind: Dataset\nspec:\n  items:\n    - id: a\n      inputs:\n        user: hi\n",
+        encoding="utf-8",
+    )
+    cfg = ExperimentConfig(
+        name="nruns",
+        description="",
+        dataset=dataset,
+        flavours=[FlavourSpec(name="local")],
+        execution={"n_runs": 9},
+        n_runs=2,
+        agent=AgentSpec(base_manifest=tmp_path / "agent.yaml", scenarios={"s": {"pattern": "x"}}),
+    )
+    slots = cfg.generate_scenarios()
+    assert len(slots) == 2
+    assert {slot["run_id"] for slot in slots} == {1, 2}
+
+
 def test_former_ioc_dataset_still_loads_and_new_envelope_is_preferred(tmp_path: Path, caplog) -> None:
     former = tmp_path / "former.yaml"
     former.write_text(
@@ -260,6 +282,15 @@ def test_docs_url_design_vs_schedule_fragment() -> None:
     )
 
 
+def test_warn_deprecated_design_mode_once_per_where(caplog) -> None:
+    with caplog.at_level(logging.WARNING, logger="mas.lab.deprecations"):
+        warn_deprecated("experiment.design.mode", where="a.yaml")
+        warn_deprecated("experiment.design.mode", where="a.yaml")
+        warn_deprecated("experiment.design.mode", where="b.yaml")
+    assert caplog.text.count("experiment.design.mode") == 2
+    assert "design.plugin" in caplog.text
+
+
 def test_warn_deprecated_execution_once_per_where(caplog) -> None:
     with caplog.at_level(logging.WARNING, logger="mas.lab.deprecations"):
         warn_deprecated("experiment.execution", where="a.yaml")
@@ -294,9 +325,9 @@ def test_legacy_execution_warns_once_and_maps(tmp_path: Path, caplog) -> None:
     assert caplog.text.count("experiment.execution") == 1
     assert "https://ioc-project.github.io/mas-lab/manifests/experiment/#design-vs-schedule" in caplog.text
     assert cfg.schedule.parallel_scenarios == 8
-    assert cfg.schedule.ordering == "depth"
+    assert cfg.schedule.plugin == "depth"
     assert cfg.bench_emulation.runtime.cache == "disabled"
-    assert cfg.execution.strategy == "depth"
+    assert cfg.execution.scheduler == "depth"
 
 
 def test_new_shape_does_not_warn(tmp_path: Path, caplog) -> None:
@@ -304,7 +335,7 @@ def test_new_shape_does_not_warn(tmp_path: Path, caplog) -> None:
         tmp_path,
         "  schedule:\n"
         "    parallel_scenarios: 1\n"
-        "    ordering: coverage\n"
+        "    plugin: coverage\n"
         "  bench_emulation:\n"
         "    runtime:\n"
         "      cache: forced\n",

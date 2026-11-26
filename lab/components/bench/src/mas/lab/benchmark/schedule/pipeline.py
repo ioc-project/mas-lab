@@ -287,6 +287,8 @@ def _step_dict(spec: Any, name: str, cfg: dict[str, Any], deps: list[str]) -> di
     }
     if spec.realtime is not None:
         out["realtime"] = bool(spec.realtime)
+    if getattr(spec, "mode", None):
+        out["mode"] = str(spec.mode)
     return out
 
 

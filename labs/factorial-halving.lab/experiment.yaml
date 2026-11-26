@@ -1,0 +1,36 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+# Factorial space the successive-halving pipeline cuts. Offline tests
+# use the score fixture and do not invoke a model.
+experiment:
+  name: factorial-halving
+  application:
+    manifest: ./agent.yaml
+  scenarios:
+    - id: small-short
+    - id: small-long
+    - id: large-short
+    - id: large-long
+  design:
+    plugin: factorial
+    params:
+      factors:
+        size: [small, large]
+        style: [short, long]
+  schedule:
+    plugin: coverage
+    parallel_scenarios: 1
+  executor:
+    plugin: native
+  retry:
+    params:
+      max_attempts: 1
+  dataset:
+    path: ./dataset.yaml
+  run:
+    n_runs: 1
+    post:
+      - type: extract_trace_stats
+        mode: live
+      - type: eval_mce
+        mode: batch
