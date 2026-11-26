@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -293,6 +293,7 @@ def control_lists_for_agent(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, list[Any]]:
     """Matching Controls: observability and governance are set unions.
 
@@ -303,7 +304,9 @@ def control_lists_for_agent(
     it, so an absent key leaves the agent's leftover list in force.
     """
     named: dict[str, list[list[Any]]] = {OBSERVABILITY: [], GOVERNANCE: []}
-    for control in matching_controls(controls, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids):
+    for control in matching_controls(
+        controls, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids, groups=groups
+    ):
         spec = control.get("spec") or {}
         for key, lists in named.items():
             if key in spec:
@@ -322,6 +325,7 @@ def matching_controls(
     agent_id: str,
     entry_id: str = "",
     delegate_ids: Sequence[str] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Matching Control rows, each file once, in the order they attach."""
     out: list[dict[str, Any]] = []
@@ -332,6 +336,7 @@ def matching_controls(
             agent_id=agent_id,
             entry_id=entry_id,
             delegate_ids=delegate_ids,
+            groups=groups,
         ):
             continue
         file = control_file(control)

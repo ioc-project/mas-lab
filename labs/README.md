@@ -42,6 +42,7 @@ Quickstart: [lab/docs/labs-quickstart.md](../lab/docs/labs-quickstart.md). Paper
 | [design-space.lab](design-space.lab/README.md) | §5.1 | Design patterns + topologies |
 | [lifecycle-control.lab](lifecycle-control.lab/README.md) | §5.2 | Governance **overlays** across lifecycle |
 | [extensions.lab](extensions.lab/) | §5.3 | Memory **overlays** (see the [README](extensions.lab/README.md)) |
+| [agent-count.lab](agent-count.lab/README.md) | sample | Agreement and cost against the number of identical agents (`count`) |
 
 ## Run all
 

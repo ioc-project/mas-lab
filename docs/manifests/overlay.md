@@ -217,7 +217,7 @@ The keys compose in that order. Then a named id wins. These cases are errors:
 
 `$entry` lets a design-pattern overlay avoid naming the entry agent.
 
-`patch.agents.$op` also edits the participant list at `spec.agency.agents`. `add` and `replace` entries are `{id, ref}` agent references. `remove` is a list of agent ids. `clear: true` empties the list:
+`patch.agents.$op` also edits the participant list at `spec.agency.agents`. `add` and `replace` entries are `{id, ref}` agent references (optional `count`). `remove` is a list of agent ids. `clear: true` empties the list:
 
 ```yaml
 target:
@@ -232,6 +232,21 @@ patch:
 ```
 
 The former `agents_add` and `agents_remove` patch fields are not supported. Use `patch.agents.$op`.
+
+#### Setting `count` on agency entries
+
+`patch.agents.$op.count` maps an agency id to a count. It sets `count` on each named entry and leaves the other entries unchanged. An id that is not in `spec.agency.agents` is an error. The value must be an integer from 1 to 256.
+
+```yaml
+target:
+  kind: MAS
+patch:
+  agents:
+    $op:
+      count: {worker: 2}
+```
+
+An entry that had no count becomes a group. Its id changes from `worker` to `worker-1` and `worker-2`. Declare `count` in the base manifest for a sweep, so the ids stay the same. Per-agent overlay keys are the authored agency id (the group id). Expansion copies that patch onto every copy. A compiled copy id such as `worker-1` is not an overlay target. See [Groups of agents with `count`](mas.md#groups-of-agents-with-count).
 
 ### Agent overlays applied to a MAS
 

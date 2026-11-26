@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from mas.ctl.manifest.agency_groups import declared_group_ids
 from mas.runtime import hostenv
 
 REF_KEYS = frozenset(
@@ -99,15 +100,18 @@ def _check_mas_workflow_ids(spec: dict[str, Any]) -> list[str]:
         return violations
     nodes = workflow.get("nodes") or []
     node_ids = {n.get("id") for n in nodes if isinstance(n, dict) and n.get("id")}
+    # A count group (agency entry with `count`) is named by its group id; mas-ctl expands it to its copies.
+    group_ids = declared_group_ids(spec)
+    known = node_ids | group_ids
     entry = workflow.get("entry")
-    if entry and node_ids and entry not in node_ids:
-        violations.append(f"spec.workflow.entry = {entry!r} — unknown node id (known: {sorted(node_ids)})")
+    if entry and node_ids and entry not in known:
+        violations.append(f"spec.workflow.entry = {entry!r} — unknown node id (known: {sorted(known)})")
     for i, node in enumerate(nodes):
         if not isinstance(node, dict):
             continue
         node_id = node.get("id", f"[{i}]")
         for j, target in enumerate(node.get("delegates_to") or []):
-            if node_ids and target not in node_ids:
+            if known and target not in known:
                 violations.append(
                     f"spec.workflow.nodes[{i}] ({node_id!r}).delegates_to[{j}] = {target!r} — unknown node id"
                 )

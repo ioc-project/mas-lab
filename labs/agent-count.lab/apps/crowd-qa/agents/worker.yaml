@@ -1,0 +1,19 @@
+#  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
+#  SPDX-License-Identifier: Apache-2.0
+apiVersion: mas/v1
+kind: Agent
+metadata:
+  name: worker
+spec:
+  description: Answers one short question on its own.
+  models:
+    # "any" takes the model from the experiment (models.main), so the lab runs on any endpoint.
+    - model: any
+      temperature: 1.0
+      max_tokens: 1200
+  design_pattern:
+    type: single_pass
+  context:
+    role: |
+      Work the question out step by step in a few short lines, then end with one last line of the form
+      `Answer: <integer>`. The integer has no units and no thousands separators.

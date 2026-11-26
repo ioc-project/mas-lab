@@ -10,6 +10,8 @@ from functools import lru_cache
 from typing import Any
 
 import yaml
+from mas.ctl.infra.identities import agency_row_id
+from mas.ctl.manifest.agency_groups import AgencyGroupError, check_count, group_members, remove_from_groups
 from mas.ctl.validate.schemas import schema_root
 from mas.runtime.spec.plugin_binding import normalize_plugin_binding, plugin_binding_id
 
@@ -166,6 +168,42 @@ def _ops_dict(value: Any) -> dict[str, Any] | None:
     if not (set(value) & _PATCH_OPS):
         return None
     return value
+
+
+def _agency_ops(value: Any) -> dict[str, Any] | None:
+    """Ops on ``spec.agency.agents``: the usual ops, or a ``$op.count`` mapping on its own.
+
+    ``count`` is read only here. It is not a shared patch op, because a plain dict with a
+    ``count`` key elsewhere must not be read as an op.
+    """
+    if isinstance(value, dict) and isinstance(value.get(_OVERLAY_OP_KEY), dict):
+        if "count" in value[_OVERLAY_OP_KEY]:
+            return value[_OVERLAY_OP_KEY]
+    return _ops_dict(value)
+
+
+def _apply_agency_counts(rows: list[Any], counts: Any) -> list[Any]:
+    """Set ``count`` on the agency entries named by ``$op.count``; every other entry is left as it is."""
+    if not isinstance(counts, dict):
+        raise OverlayTargetError("$op.count must map agency ids to integers")
+    out = list(rows)
+    for agent_id, value in counts.items():
+        aid = str(agent_id)
+        try:
+            check_count(value, aid)
+        except AgencyGroupError as error:
+            raise OverlayTargetError(f"$op.count: {error}") from error
+        index = next(
+            (i for i, row in enumerate(out) if isinstance(row, dict) and agency_row_id(row) == aid),
+            None,
+        )
+        if index is None:
+            raise OverlayTargetError(
+                f"$op.count names {aid!r}, which is not in spec.agency.agents "
+                "(an expanded MAS has <id>-1 .. <id>-n; set the count on the authored manifest)"
+            )
+        out[index] = {**deepcopy(out[index]), "count": value}
+    return out
 
 
 def _merge_list_ops(
@@ -553,10 +591,7 @@ def _merge_plugin_binding(existing: Any, incoming: Any) -> Any:
 
 
 def _agency_entry_key(entry: dict[str, Any]) -> str | None:
-    key = entry.get("id") or entry.get("name")
-    if key is None:
-        return None
-    text = str(key).strip()
+    text = agency_row_id(entry)
     return text or None
 
 
@@ -657,10 +692,10 @@ class OverlayTargetError(ValueError):
     """Overlay target kind, name, or patch field does not match the base document."""
 
 
-# Form A agency rows are `{id, ref}` (optional `name`). Agent fields from a
+# Form A agency rows are `{id, ref}` (optional `name`, `count`). Agent fields from a
 # MAS overlay are extracted and merged onto loaded Agent YAML — they never
 # live on the MAS document.
-_FORM_A_ROW_KEYS = frozenset({"id", "ref", "name"})
+_FORM_A_ROW_KEYS = frozenset({"id", "ref", "name", "count", "group"})
 _MAS_KINDS = frozenset({"mas", "app", "workflow"})
 _LOADED_AGENT_OVERRIDES = "__mas_cli_overrides__"
 
@@ -708,17 +743,13 @@ def extract_mas_agent_patches(
     returned map is applied later with :func:`merge_agent_overlay`.
     """
     overlay_agents = _overlay_patch_body(overlay).get("agents")
-    if not isinstance(overlay_agents, dict) or _ops_dict(overlay_agents) is not None:
+    if not isinstance(overlay_agents, dict) or _agency_ops(overlay_agents) is not None:
         return {}
     had_entry_key = _AGENT_ALIAS_ENTRY in overlay_agents
     resolved = _resolve_mas_agent_patches(overlay_agents, mas_spec)
     agency = mas_spec.get("agency") if isinstance(mas_spec.get("agency"), dict) else {}
     agents_list = list(agency.get("agents") or [])
-    by_id = {
-        str(a.get("id") or a.get("name")): a
-        for a in agents_list
-        if isinstance(a, dict) and (a.get("id") or a.get("name"))
-    }
+    by_id = {agency_row_id(a): a for a in agents_list if isinstance(a, dict) and agency_row_id(a)}
     entry_id = _workflow_entry(mas_spec)
     out: dict[str, Any] = {}
     for agent_id, per_agent in resolved.items():
@@ -760,7 +791,7 @@ def extract_agent_overlay_fanout(overlay: dict[str, Any], mas: dict[str, Any]) -
         matched += 1
         if _is_inline_agent_row(row):
             continue
-        aid = str(row.get("id") or row.get("name") or "")
+        aid = agency_row_id(row)
         if aid and (raw_patch or inline_overrides):
             out[aid] = deepcopy(raw_patch)
             if inline_overrides:
@@ -817,6 +848,21 @@ def accumulate_agent_patches(
                 out[aid] = {}
             prior = out[aid].get(_LOADED_AGENT_OVERRIDES, [])
             out[aid][_LOADED_AGENT_OVERRIDES] = list(prior) + list(patch[_LOADED_AGENT_OVERRIDES])
+    return out
+
+
+def rekey_agent_patches(patches: dict[str, Any], mas: dict[str, Any]) -> dict[str, Any]:
+    """Per-agent patches keyed by a count group id, copied onto each member. A member's own patch wins."""
+    members = group_members(mas)
+    if not members or not patches:
+        return patches
+    out: dict[str, Any] = {}
+    for key, patch in patches.items():
+        for target in members.get(str(key), ()):
+            out = accumulate_agent_patches(out, {target: patch})
+    for key, patch in patches.items():
+        if str(key) not in members:
+            out = accumulate_agent_patches(out, {key: patch})
     return out
 
 
@@ -1104,16 +1150,18 @@ def merge_mas_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str
                 base_spec[key] = deepcopy(value)
 
     overlay_agents = patch.get("agents")
-    if isinstance(overlay_agents, dict) and _ops_dict(overlay_agents) is not None:
-        ops = _ops_dict(overlay_agents) or {}
+    if isinstance(overlay_agents, dict) and _agency_ops(overlay_agents) is not None:
+        ops = _agency_ops(overlay_agents) or {}
         agency = base_spec.setdefault("agency", {})
         existing_agents = list(agency.get("agents") or [])
         if ops.get("clear") is True:
             existing_agents = []
+            agency.pop("groups", None)
         if "replace" in ops:
             existing_agents = list(deepcopy(ops.get("replace") or []))
         if "remove" in ops:
-            rm = {str(x) for x in list(ops.get("remove") or [])}
+            named = {str(x) for x in list(ops.get("remove") or [])}
+            rm = remove_from_groups(agency, named)
             existing_agents = [a for a in existing_agents if not (isinstance(a, dict) and _agency_entry_key(a) in rm)]
         if "add" in ops:
             existing_keys = {
@@ -1128,6 +1176,8 @@ def merge_mas_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str
                 if key is not None and key not in existing_keys:
                     existing_agents.append(deepcopy(entry))
                     existing_keys.add(key)
+        if "count" in ops:
+            existing_agents = _apply_agency_counts(existing_agents, ops.get("count"))
         agency["agents"] = existing_agents
         base_spec["agency"] = agency
     elif isinstance(overlay_agents, dict):
@@ -1137,11 +1187,7 @@ def merge_mas_overlay(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str
         overlay_agents = _resolve_mas_agent_patches(overlay_agents, base_spec)
         agency = base_spec.setdefault("agency", {})
         agents_list = list(agency.get("agents") or [])
-        by_id = {
-            str(a.get("id") or a.get("name")): a
-            for a in agents_list
-            if isinstance(a, dict) and (a.get("id") or a.get("name"))
-        }
+        by_id = {agency_row_id(a): a for a in agents_list if isinstance(a, dict) and agency_row_id(a)}
         for agent_id, per_agent in overlay_agents.items():
             if not isinstance(per_agent, dict):
                 continue

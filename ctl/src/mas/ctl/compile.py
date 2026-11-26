@@ -21,8 +21,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from mas.ctl.infra.identities import agency_row_id, declared_entry_id, peers_of
+from mas.ctl.manifest.agency_groups import AgencyGroupError, expand_agency_groups, group_members
 from mas.ctl.manifest.mas_agent_merge import apply_loaded_agent_patch
-from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
+from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay, rekey_agent_patches
 from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.overrides import apply_root_overrides, overlay_for_session_agent
 from mas.ctl.session.flavour_control import (
@@ -241,6 +243,8 @@ def compile_manifest(
     if overrides:
         mas, cli_agent_patches = _apply_compile_overrides(mas, overrides, root="mas", validate=validate)
         agent_patches = accumulate_agent_patches(agent_patches, cli_agent_patches)
+    mas = _expand_groups(mas)
+    agent_patches = rekey_agent_patches(agent_patches, mas)
     if fill_defaults:
         mas = fill_mas_defaults(mas)
     if validate and overrides and validation_enabled():
@@ -252,7 +256,8 @@ def compile_manifest(
     for ov_path, overlay in classified.agent:
         target_name = _overlay_target_name(overlay)
         if target_name:
-            targets = [aid for aid, adoc in agents.items() if _agent_matches(adoc, aid, target_name)]
+            names = group_members(mas).get(target_name, [target_name])
+            targets = [aid for aid, adoc in agents.items() if any(_agent_matches(adoc, aid, n) for n in names)]
             if not targets:
                 raise CompileError(
                     f"overlay {ov_path.name} targets agent {target_name!r}, not in compiled MAS agents {agent_ids!r}"
@@ -264,10 +269,10 @@ def compile_manifest(
 
     if fill_defaults:
         agents = {aid: fill_agent_defaults(adoc, workspace=ws) for aid, adoc in agents.items()}
-    from mas.ctl.infra.identities import declared_entry_id, peers_of
 
     entry = declared_entry_id(mas)
     delegates = list(peers_of(mas, list(agent_ids)).get(entry) or [])
+    groups = group_members(mas)
     try:
         for aid in list(agent_ids):
             agents[aid] = _attach_controls(
@@ -277,6 +282,7 @@ def compile_manifest(
                 agent_id=aid,
                 entry_id=entry,
                 delegate_ids=delegates,
+                groups=groups,
             )
     except ControlError as exc:
         raise CompileError(str(exc)) from exc
@@ -462,6 +468,7 @@ def _attach_controls(
     agent_id: str,
     entry_id: str,
     delegate_ids: Sequence[str] = (),
+    groups: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     """Resolve matching Controls. Observability and governance stay on the Control."""
     agent = apply_resolved_controls(
@@ -470,6 +477,7 @@ def _attach_controls(
         agent_id=agent_id,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     if flavour_spec:
         agent = apply_flavour_controls(
@@ -478,6 +486,7 @@ def _attach_controls(
             agent_id=agent_id,
             entry_id=entry_id,
             delegate_ids=delegate_ids,
+            groups=groups,
         )
     return agent
 
@@ -547,7 +556,9 @@ def _looks_like_scheme_ref(ref: str) -> bool:
     return bool(sep and scheme and "/" not in scheme and "\\" not in scheme and rest)
 
 
-def _agent_relpath(entry: dict[str, Any], agent_id: str) -> str:
+def _agent_relpath(entry: dict[str, Any], agent_id: str, *, group_member: bool = False) -> str:
+    if group_member:  # the members of a group share one ref; each needs its own file
+        return f"agents/{agent_id}.yaml"
     ref = entry.get("ref")
     if isinstance(ref, str) and ref.strip():
         raw = ref.strip()
@@ -555,6 +566,13 @@ def _agent_relpath(entry: dict[str, Any], agent_id: str) -> str:
         if not path.is_absolute() and not _looks_like_scheme_ref(raw):
             return raw
     return f"agents/{agent_id}.yaml"
+
+
+def _expand_groups(mas: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return expand_agency_groups(mas)
+    except AgencyGroupError as exc:
+        raise CompileError(str(exc)) from exc
 
 
 def _agency_entries(mas: dict[str, Any]) -> list[dict[str, Any]]:
@@ -565,9 +583,7 @@ def _agency_entries(mas: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _entry_agent_id(entry: dict[str, Any], fallback: str) -> str:
-    if _is_inline_agent(entry):
-        return str(entry.get("metadata", {}).get("name") or entry.get("id") or fallback)
-    return str(entry.get("id") or entry.get("name") or fallback)
+    return agency_row_id(entry) or fallback
 
 
 def _load_mas_agents(
@@ -592,7 +608,7 @@ def _load_mas_agents(
             doc = load_checked_document(path)
         agents[aid] = doc
         agent_ids.append(aid)
-        relpaths[aid] = _agent_relpath(entry, aid)
+        relpaths[aid] = _agent_relpath(entry, aid, group_member=bool(entry.get("group")))
     return agents, agent_ids, relpaths
 
 

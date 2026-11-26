@@ -14,6 +14,8 @@ from mas.ctl.cli.bind_flags import control_option, middleware_option
 from mas.ctl.hardening import BY_ID, CHECKS, DEFAULT, PRODUCTION, HardeningError, Report
 from mas.ctl.hardening.collect import from_session
 from mas.ctl.hardening.posture import evaluate, posture_of
+from mas.ctl.infra.identities import agency_row_id
+from mas.ctl.manifest.agency_groups import AgencyGroupError, group_members, loaded_session_mas
 from mas.runtime.spec.yaml_errors import safe_yaml_load, yaml_error_text
 
 CHECK_EPILOG = """
@@ -58,11 +60,19 @@ def _agent_specs(document: dict[str, Any], manifest: Path) -> dict[str, dict[str
     out: dict[str, dict[str, Any]] = {}
     agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
     for row in agency.get("agents") or []:
-        if not isinstance(row, dict) or not row.get("ref"):
+        if not isinstance(row, dict):
+            continue
+        aid = agency_row_id(row)
+        if not aid:
+            continue
+        if str(row.get("kind") or "").lower() == "agent" and isinstance(row.get("spec"), dict):
+            out[aid] = dict(row.get("spec") or {})
+            continue
+        if not row.get("ref"):
             continue
         loaded = load_yaml_file(resolve_ref_with_search(str(row["ref"]), manifest.parent))
         if isinstance(loaded, dict):
-            out[str(row.get("id") or row.get("name"))] = dict(loaded.get("spec") or {})
+            out[aid] = dict(loaded.get("spec") or {})
     return out
 
 
@@ -88,6 +98,11 @@ def _session_report(
     loaded = safe_yaml_load(path.read_text(encoding="utf-8"), source=manifest)
     if not isinstance(loaded, dict):
         raise click.ClickException(f"{manifest}: expected a mapping")
+
+    try:
+        loaded = loaded_session_mas(loaded) or loaded
+    except AgencyGroupError as exc:
+        raise click.ClickException(str(exc)) from exc
     start = path.parent
     flavour_spec = resolve_session_flavour(
         flavour_argument(flavour), overrides=overrides, controls=controls, search_dirs=[start]
@@ -105,10 +120,11 @@ def _session_report(
         with_interceptors=True,
     )
     ids = document_agent_ids(loaded)
-    infra = bind_session(infra, flavour_spec, agent_ids=ids)
+    groups = group_members(loaded) if loaded else None
+    infra = bind_session(infra, flavour_spec, agent_ids=ids, groups=groups)
     posture, waivers = posture_of(flavour_spec)
     agents = {
-        agent_id: spec_with_control_lists(spec, flavour_spec, agent_id=agent_id)
+        agent_id: spec_with_control_lists(spec, flavour_spec, agent_id=agent_id, groups=groups)
         for agent_id, spec in _agent_specs(loaded, path).items()
     }
     return evaluate(from_session(agents, infra), profile or posture, waivers)

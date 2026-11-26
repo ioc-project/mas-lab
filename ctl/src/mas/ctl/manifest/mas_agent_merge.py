@@ -9,7 +9,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from mas.ctl.infra.identities import workflow_peers
+from mas.ctl.infra.identities import agency_row_id, workflow_peers
+from mas.ctl.manifest.agency_groups import name_group_member
 from mas.ctl.overlay.merge import (
     _ops_dict,
     _plugin_entry_key,
@@ -109,7 +110,7 @@ def _agency_entries_by_id(mas_config: dict[str, Any]) -> dict[str, dict[str, Any
         for entry in agents:
             if not isinstance(entry, dict):
                 continue
-            aid = str(entry.get("id") or entry.get("name") or "")
+            aid = agency_row_id(entry)
             if aid and aid not in by_id:
                 by_id[aid] = entry
     return by_id
@@ -230,6 +231,7 @@ def apply_loaded_agent_patch(
     mas_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply a compose/compile per-agent overlay patch onto loaded Agent YAML."""
+    agent_manifest = name_group_member(agent_manifest, agent_id=agent_id, mas_config=mas_config)
     patch = (agent_patches or {}).get(str(agent_id))
     if not isinstance(patch, dict) or not patch:
         return agent_manifest

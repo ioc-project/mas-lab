@@ -82,7 +82,10 @@ def _apply_overlay_agent_collection_ops(overlay_spec: dict, config: dict, mas_ya
         _append_entries(replace_entries, skip_existing=False)
 
     if "remove" in ops:
-        remove_ids = {str(agent_id) for agent_id in ops.get("remove") or []}
+        groups = config.get("groups") or {}
+        remove_ids = {
+            member for agent_id in ops.get("remove") or [] for member in groups.get(str(agent_id), [str(agent_id)])
+        }
         agents = [agent for agent in agents if str(agent.get("id") or agent.get("name")) not in remove_ids]
 
     if add_entries:
@@ -91,6 +94,10 @@ def _apply_overlay_agent_collection_ops(overlay_spec: dict, config: dict, mas_ya
         _append_entries(add_entries, skip_existing=True)
 
     config["agents"] = agents
+    if config.get("groups"):  # a group keeps only the agents that are still there
+        ids = {str(agent.get("id") or agent.get("name")) for agent in agents}
+        left = {g: [m for m in members if m in ids] for g, members in config["groups"].items()}
+        config["groups"] = {g: members for g, members in left.items() if members}
 
 
 def _apply_overlay_plugin_list(
@@ -187,6 +194,7 @@ def _rewrite_agent_control_lists(config: dict, flavour: dict) -> None:
             agent_id=aid,
             entry_id=entry,
             delegate_ids=delegates,
+            groups=config.get("groups") or {},
         )
         for key in (OBSERVABILITY, GOVERNANCE):
             if key in lists:

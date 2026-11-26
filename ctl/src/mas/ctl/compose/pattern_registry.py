@@ -7,6 +7,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from mas.ctl.infra.identities import agency_row_id
 from mas.runtime.agent_defaults import default_pattern_plugin_id
 from mas.runtime.spec.plugin_binding import plugin_binding_id
 
@@ -54,8 +55,7 @@ def pattern_for_agent(
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        name = entry.get("name", entry.get("id", ""))
-        if name != agent_id:
+        if agency_row_id(entry) != agent_id:
             continue
         dp = entry.get("design_pattern") or (entry.get("spec") or {}).get("design_pattern")
         if dp:

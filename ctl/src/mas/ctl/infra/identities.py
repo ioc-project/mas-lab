@@ -23,6 +23,16 @@ def declared_entry_id(mas_config: dict[str, Any] | None) -> str:
     return str(entry).strip() if entry else ""
 
 
+def agency_row_id(row: Any) -> str:
+    """Id of an agency row. An inline Agent is named by ``metadata.name``; any other row by ``id``, then ``name``."""
+    if not isinstance(row, dict):
+        return str(row or "").strip()
+    meta = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    inline = str(row.get("kind") or "").lower() == "agent" or "metadata" in row
+    order = (meta.get("name"), row.get("id"), row.get("name")) if inline else (row.get("id"), row.get("name"))
+    return str(next((v for v in order if v), "")).strip()
+
+
 def entry_agent_id(mas_config: dict[str, Any] | None) -> str:
     """Resolve the MAS entry agent id from mas config."""
     declared = declared_entry_id(mas_config)
@@ -32,7 +42,7 @@ def entry_agent_id(mas_config: dict[str, Any] | None) -> str:
     agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
     agents = agency.get("agents") or spec.get("agents") or []
     if agents and isinstance(agents[0], dict):
-        return str(agents[0].get("id") or agents[0].get("name") or "agent")
+        return agency_row_id(agents[0]) or "agent"
     return "agent"
 
 
@@ -42,7 +52,7 @@ def agency_ids(mas_config: dict[str, Any] | None) -> list[str]:
     agency = spec.get("agency") if isinstance(spec.get("agency"), dict) else {}
     out: list[str] = []
     for row in agency.get("agents") or []:
-        agent_id = str((row.get("id") or row.get("name")) if isinstance(row, dict) else row or "").strip()
+        agent_id = agency_row_id(row)
         if agent_id:
             out.append(agent_id)
     return out

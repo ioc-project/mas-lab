@@ -16,7 +16,7 @@ from mas.ctl.compose.pattern_registry import resolve_design_pattern_registry_id
 from mas.ctl.compose.placement_registry import get_placement_backend
 from mas.ctl.compose.runner import ComposeResult
 from mas.ctl.executor.stacks import ChainHandles, chain_links
-from mas.ctl.infra.identities import agency_ids, has_chain, peers_of
+from mas.ctl.infra.identities import agency_ids, agency_row_id, has_chain, peers_of
 from mas.ctl.infra.identities import entry_agent_id as entry_agent_id
 from mas.ctl.infra.resolve import application_endpoint_is_used
 from mas.ctl.manifest.mas_agent_merge import enrich_entry_agent_for_delegation, wire_entry_engine_delegation
@@ -471,7 +471,7 @@ def wire_peer_delegation(
     for peer in agency_agents:
         if not isinstance(peer, dict):
             continue
-        name = str(peer.get("name") or peer.get("id") or "").strip()
+        name = agency_row_id(peer)
         if not name:
             raise ValueError("spec.agency.agents entries require id")
         peer_names.append(name)

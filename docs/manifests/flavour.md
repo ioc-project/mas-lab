@@ -74,7 +74,7 @@ Its declared sections are:
 | `capabilities` | Feature flags and capability overrides. |
 | `telemetry` | Deprecated and ignored: basic telemetry sink configuration. Nothing reads it. |
 | `observability` | Deprecated and ignored. Observability is a Control entry or `--events*`. `bind.events` names sink rows. Native records unless a Control named the observability list (including `[]`) or leftover agent observability named plugins. |
-| `control` | Control manifests this Flavour attaches: a list of `{ref, agents}`. `agents` is `$all` (default), `$entry`, `$not-entry`, `$delegates`, one agent id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) — the same idea as `bind.agents.<id>` for one agent and the default `bind.agent_comm` chain for every agent. A leftover mapping is unread. |
+| `control` | Control manifests this Flavour attaches: a list of `{ref, agents}`. `agents` is `$all` (default), `$entry`, `$not-entry`, `$delegates`, one agent id, a list of ids, or the same agent path as `--override` (`.mas.agent[id]` / `.mas.agent[*]`) — the same idea as `bind.agents.<id>` for one agent and the default `bind.agent_comm` chain for every agent. A count group id names every copy. A leftover mapping is unread. |
 | `require_usage` | When true, every agent of the session must have a bind chain or an agent-keyed Application row. Bundled `prod` sets this. A file named `prod.yaml` does not. |
 | `hardening` | `profile: production` makes the session refuse to start when a named hardening check fails; `waive: [{check, reason}]` accepts a failure and records why. Omitted, nothing runs. Bundled `prod` sets `profile: production`; `local` sets nothing. See [hardening.md](../references/hardening.md). |
 | `tools` | Deprecated and ignored leftover tool-exposure block (not `bind.tools`). Tool exposure is infra; `bind.tools` picks a Stack. |
@@ -116,7 +116,7 @@ spec:
 | --- | --- |
 | `bind.agent_comm` | The default chain: row names, bottom first. The first row is the transport. |
 | `bind.usage` | This deployment's default for every agent that omits its own usage: `connect`, `listen`, or both. Default `connect`. |
-| `bind.agents.<id>.agent_comm` | That agent's own chain, instead of the default. |
+| `bind.agents.<id>.agent_comm` | That agent's own chain, instead of the default. A count group id names every copy; a copy-specific key wins. |
 | `bind.agents.<peer>` for a peer of a standalone agent | An agent run alone binds itself and the peers its own `spec.communication.peers` names, with no MAS. A peer entry is `usage: connect`: the agent dials it over that chain or endpoint row. A peer the Flavour names no chain or row for is warned about and not offered. |
 | `bind.agents.<id>.usage` | `connect` (this deployment reaches the agent over its chain), `listen` (this deployment hosts it), or both. Omitted, it is `bind.usage`, else `connect`. It must be within the `usage` of every row of the chain. |
 | `bind.agents.<id>.params` | Overrides of a row's params for that agent: row name to `{param: value}`. A string value may hold `{agent}`. |

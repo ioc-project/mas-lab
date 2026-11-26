@@ -19,7 +19,8 @@ from mas.ctl.compose.pipeline import (
 from mas.ctl.compose.placement_validate import validate_placement_strategy
 from mas.ctl.deployment.load import load_deployment, resolve_runtime_id
 from mas.ctl.infra.resolve import resolve_infra_refs
-from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay
+from mas.ctl.manifest.agency_groups import AgencyGroupError, expand_agency_groups
+from mas.ctl.overlay import accumulate_agent_patches, loaded_agent_patches, merge_overlay, rekey_agent_patches
 from mas.ctl.overrides import apply_cli_overrides, overlay_for_session_agent, overrides_for_root
 from mas.ctl.session.flavour_control import is_control_document
 from mas.ctl.validate import validate_file, validation_enabled
@@ -180,6 +181,11 @@ def compose_run(req: ComposeRequest) -> ComposeResult:
             overlay = overlay_for_session_agent(source)
             mas = merge_overlay(mas, overlay)
             agent_patches = accumulate_agent_patches(agent_patches, loaded_agent_patches(overlay, mas))
+    try:
+        mas = expand_agency_groups(mas)
+    except AgencyGroupError as exc:
+        raise ValueError(str(exc)) from exc
+    agent_patches = rekey_agent_patches(agent_patches, mas)
     if req.validate and validation_enabled():
         from mas.ctl.validate.deprecations import collect_workflow_deprecations
 

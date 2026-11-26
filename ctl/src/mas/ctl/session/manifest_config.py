@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from mas.ctl.adapters.obs.config import ObservabilityConfig
@@ -38,6 +39,7 @@ def spec_with_control_lists(
     agent_id: str = "",
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> dict[str, Any]:
     """Session view for parsers that read ``spec.governance``, and ``spec.observability``.
 
@@ -48,9 +50,11 @@ def spec_with_control_lists(
     if not flavour_spec:
         return out
     rows = resolve_controls(flavour_spec)
-    if not matching_controls(rows, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids):
+    if not matching_controls(rows, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids, groups=groups):
         return out
-    lists = control_lists_for_agent(rows, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids)
+    lists = control_lists_for_agent(
+        rows, agent_id=agent_id, entry_id=entry_id, delegate_ids=delegate_ids, groups=groups
+    )
     for key in (OBSERVABILITY, GOVERNANCE):
         if key in lists:
             if (spec or {}).get(key) and not lists[key]:
@@ -67,6 +71,7 @@ def kernel_config_from_manifest(
     agent_id: str = "",
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> KernelConfig:
     from mas.runtime.spec.gov import build_kernel_config
 
@@ -76,6 +81,7 @@ def kernel_config_from_manifest(
         agent_id=agent_id,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     gov = parse_governance(spec.get("governance"))
 
@@ -227,6 +233,7 @@ def observability_config_from_manifest(
     resolved_infra: ResolvedInfra | None = None,
     entry_id: str = "",
     delegate_ids: list[str] | tuple[str, ...] = (),
+    groups: Mapping[str, Sequence[str]] | None = None,
 ) -> ObservabilityConfig:
     """CLI replace-flags, then Control observability, then bind.events, then native.
 
@@ -248,6 +255,7 @@ def observability_config_from_manifest(
         agent_id=who,
         entry_id=entry_id,
         delegate_ids=delegate_ids,
+        groups=groups,
     )
     named_obs = False
     if flavour_spec:
@@ -256,6 +264,7 @@ def observability_config_from_manifest(
             agent_id=who,
             entry_id=entry_id,
             delegate_ids=delegate_ids,
+            groups=groups,
         )
         named_obs = OBSERVABILITY in lists
 

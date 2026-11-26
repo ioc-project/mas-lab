@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from mas.ctl.manifest.agency_groups import agency_group_findings
 from mas.ctl.overlay.normalize import normalize_overlay
 from mas.ctl.validate.providers import check_provider_tool_claims
 from mas.ctl.validate.refs import check_refs, resolve_refs_enabled
@@ -389,6 +390,10 @@ def validate_data(
         spec = data.get("spec") if isinstance(data.get("spec"), dict) else {}
         for where, message in [*duplicate_plugin_id_findings(spec), *priority_findings(spec)]:
             result.issues.append(ValidationIssue("error", message, path=where))
+
+    if resolved_kind == "mas":
+        for msg in agency_group_findings(data):
+            result.issues.append(ValidationIssue("error", msg, path="spec.agency.agents"))
 
     if resolved_kind in {"agent", "mas"}:
         from mas.ctl.validate.deprecations import collect_agent_control_keys_deprecation

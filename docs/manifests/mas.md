@@ -167,6 +167,7 @@ _Used by:_ `spec.agency`
 |-------|------|----------|-------------|
 | `id` | `string` | **yes** | Logical agent id used by workflow nodes and delegation targets. |
 | `ref` | `string` | no | Path to an Agent manifest relative to the MAS manifest. Omit for an external agent resolved through an infra Application endpoint. |
+| `count` | `integer` | no | Number of agents this entry stands for, 1 to 256. Omit for one agent. See [Groups of agents with `count`](#groups-of-agents-with-count). |
 
 #### Short-form entry (`spec.agents[]`)
 
@@ -177,7 +178,7 @@ _Used by:_ `spec.agency`
 
 #### Form B — inline agent definition
 
-Either list also accepts a full embedded `kind: Agent` manifest, with the same fields as a standalone `agent.yaml`. `kind`, `metadata`, and `spec` are required. `apiVersion` is optional.
+Either list also accepts a full embedded `kind: Agent` manifest, with the same fields as a standalone `agent.yaml`. `kind`, `metadata`, and `spec` are required. `apiVersion` is optional. The row id is `metadata.name`.
 
 **Example:**
 
@@ -195,6 +196,93 @@ agency:
 
 ---
 
+### Groups of agents with `count`
+
+An agency entry can set `count: n`. The entry creates a group named after its `id` and mas-ctl expands it into `n` agents, `<id>-1` to `<id>-n`. The group is implicit: nothing is written for it in the spec. Use this for a scaling study that varies the number of agents with one number.
+
+```yaml
+spec:
+  agency:
+    agents:
+      - id: moderator
+        ref: ./agents/moderator.yaml
+      - id: worker
+        ref: ./agents/worker.yaml
+        count: 4          # worker-1 .. worker-4
+  workflow:
+    entry: moderator
+    nodes:
+      - id: moderator
+        delegates_to: [worker]   # a group id expands to all its members
+```
+
+The rules:
+
+- `count` is an integer from 1 to 256. The ids are `<id>-1` to `<id>-<n>`. The suffix is always added. `count: 1` gives `worker-1`.
+- Expansion marks each copy row of a `ref` entry with `group: <id>`; mas-ctl writes it, do not author it. A marked copy is named after its id on load; members of an explicit group keep their own names.
+- Every copy uses the same `ref`, or the same inline definition. Compose, `run-mas`, and overlay `$all` identify an inline copy by `metadata.name`.
+- A group id in `delegates_to` expands to all its copies. A workflow node whose **id** is the group becomes one node per copy, with the same settings. A copy node that collides with a node you wrote (`worker-1`) is an error.
+- `workflow.entry`, `spec.entry_agent`, and a node's `agent` field name one agent. A group is allowed there only when `count` is 1 (rewritten to `<id>-1`). More than one copy is an error.
+- Overlay targets that name the group apply to every copy. Overlay patches use the group id; they do not target compiled copy ids such as `worker-1`. If a patch for a copy id reaches expansion, the copy's own patch wins over the group's, in any order.
+- Control `agents:` and Flavour `bind.agents.<id>` that name the group apply to every copy. A copy-specific key wins over the group key.
+
+#### Explicit groups
+
+`count` makes an implicit group of copies. To group agents that differ, name the group and its members in `spec.agency.groups`:
+
+```yaml
+spec:
+  agency:
+    agents:
+      - {id: critic, ref: ./agents/critic.yaml}
+      - {id: verifier, ref: ./agents/verifier.yaml}
+      - {id: worker, ref: ./agents/worker.yaml, count: 4}
+    groups:
+      reviewers: [critic, verifier]
+      everyone: [critic, worker]      # a count group stands for its copies
+```
+
+A member is an agency agent or a count group. Groups do not nest, a group id may not be an agent id or a count group id, and an unknown member is an error. Overlay `$op.remove` takes a group id (it removes the members and the group) or a member (it leaves its groups; an emptied group goes). A member can be in several groups. Patches and Control entries that reach a member through two groups are applied in key order, and a Flavour `bind.agents` that sets one member differently through two groups is an error; name the agent to decide. A group is used like a count group: in `delegates_to`, workflow nodes, overlay patches, Control `agents:` and Flavour `bind.agents`. The expanded manifest lists every group, count groups included, under `spec.agency.groups`.
+- Each copy's Agent manifest is named after its id (`metadata.name: worker-2`).
+- A generated id that equals another agent's id is an error. For example, `worker-2` written by hand next to `worker` with `count: 3`.
+- `count` needs a `ref` or an inline definition. An external agent with no `ref` cannot have a count.
+- `count` is not valid on the short-form `spec.agents`.
+- An inline Agent entry is named by `metadata.name`; any other entry by `id`, then `name`. The copies of an inline entry are named `<name>-<index>`.
+
+An overlay can set the count. Expansion runs after the overlays are applied:
+
+```yaml
+target:
+  kind: MAS
+patch:
+  agents:
+    $op:
+      replace:
+        - id: worker
+          ref: ./agents/worker.yaml
+          count: 6
+```
+
+A count-only overlay sets `count` by agency id and leaves the other entries alone. Use it for a sweep:
+
+```yaml
+target:
+  kind: MAS
+patch:
+  agents:
+    $op:
+      count: {worker: 2}
+```
+
+Each id must match an entry in `spec.agency.agents`, or the overlay fails. The value follows the same rule as `count`: an integer from 1 to 256. The op runs before expansion, so it needs the authored manifest, not an expanded one (`worker-1`, `worker-2`).
+
+Adding `count` to an entry that had none changes its id. `worker` becomes `worker-1` and `worker-2`. Declare `count` in the base manifest for a sweep, so the ids stay the same across the variants.
+
+Not provided:
+
+- Text templating in prompts. There is no `{index}` substitution. A copy differs from its group only by its id.
+- Overlay patches for one copy by index. Every copy of a group gets the same overlay patch. Control selectors and Flavour `bind.agents` may still name one copy.
+
 ### Adding or removing MAS agents with overlays
 
 In an overlay that targets a MAS, `spec.patch.agents.$op` edits `spec.agency.agents`:
@@ -211,7 +299,7 @@ patch:
           ref: ./agents/generalist.yaml
 ```
 
-`add` and `replace` entries require both `id` and `ref`. `remove` takes agent ids. `clear: true` empties the participant list. These operations are valid only in an Overlay patch. `agents_add` and `agents_remove` are not schema fields.
+`add` and `replace` entries require both `id` and `ref`. `remove` takes agent ids. `clear: true` empties the participant list. `count` maps agency ids to counts (see [Groups of agents with `count`](#groups-of-agents-with-count)). These operations are valid only in an Overlay patch. `agents_add` and `agents_remove` are not schema fields.
 
 ---
 

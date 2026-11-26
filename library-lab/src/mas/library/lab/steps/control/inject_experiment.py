@@ -19,6 +19,7 @@ from mas.library.lab.steps.control._util import (
     upstream_prompts,
     upstream_runs,
 )
+from mas.runtime.secrets import load_checked_document
 
 
 class InjectExperimentStep(PipelineStep):
@@ -80,9 +81,7 @@ class InjectExperimentStep(PipelineStep):
             "metadata": {"name": "injected-prompts"},
             "spec": {"items": items},
         }
-        loaded = yaml.safe_load(template.read_text(encoding="utf-8")) or {}
-        if not isinstance(loaded, dict):
-            raise ValueError(f"step {self.name!r}: template is not a YAML object")
+        loaded = load_checked_document(template, name=f"step {self.name!r} template")
         wrapped = "experiment" in loaded
         body = _absolutize(dict(loaded.get("experiment") or loaded), template.parent)
         try:
