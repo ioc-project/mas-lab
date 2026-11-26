@@ -2,12 +2,15 @@
 #  SPDX-License-Identifier: Apache-2.0
 """The host environment keys MAS Lab names, each written once. None of them is a credential.
 
-This module imports nothing. :mod:`mas.runtime.hostenv` keeps ``MAS_*`` (not ``MAS_SECRET_*``) and
-:data:`DECLARED_KEYS`; :func:`mas.runtime.secrets.child_env` hands every child :data:`CHILD_KEYS`, and
-a lab or ctl child (``lab=True``) :data:`LAB_KEYS` and :data:`PROCESS_KEEP` as well.
+This module imports nothing but the standard library. :mod:`mas.runtime.hostenv` keeps ``MAS_*``
+(not ``MAS_SECRET_*``) and :data:`DECLARED_KEYS`; :func:`mas.runtime.secrets.child_env` hands every child
+:data:`CHILD_KEYS`, and a lab or ctl child (``lab=True``) :data:`LAB_KEYS`, :data:`PROCESS_KEEP` and the keys
+a library declared with :func:`declare_lab_keys` as well.
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterable
 
 # What a program needs to run at all.
 BASE_KEYS = frozenset(
@@ -35,16 +38,16 @@ LAB_KEYS = frozenset(
     "MAS_CONTROLLER_VERSION_CHECK".split()
 )
 
-# The LLM scheduler and cache keys: a controller compares them with its client's, a ``.env`` may set them.
-LLM_SCHEDULER_KEYS = frozenset(
-    "MAS_CTL_MODEL MAS_LLM_CACHE MAS_LLM_HTTP_RETRIES MAS_LLM_HTTP_RETRY_BACKOFF MAS_LLM_MAX_IN_FLIGHT "
-    "MAS_LLM_MODEL MAS_LLM_RPM MAS_LLM_SCHEDULER_MODEL MAS_LLM_SCHEDULER_PROVIDER MAS_LLM_SCHEDULER_STATE "
-    "MAS_LLM_SCHEDULER_USER".split()
+# The LLM model, cache and HTTP retry keys: a controller compares them with its client's, a ``.env`` may set them.
+# The pacing keys (``MAS_LLM_RPM`` and the rest) belong to the pacing middleware's library, which declares them
+# with :func:`declare_lab_keys`.
+LLM_KEYS = frozenset(
+    "MAS_CTL_MODEL MAS_LLM_CACHE MAS_LLM_HTTP_RETRIES MAS_LLM_HTTP_RETRY_BACKOFF MAS_LLM_MODEL".split()
 )
 
 # What the scrubbed ``os.environ`` keeps for third-party code that reads it (the OpenTelemetry, observe and
 # A2A SDKs). ``OTEL_EXPORTER_OTLP_*HEADERS`` carry credentials and are not among them.
-PROCESS_KEEP = LLM_SCHEDULER_KEYS | frozenset(
+PROCESS_KEEP = LLM_KEYS | frozenset(
     "OBSERVE_REALTIME_OBSERVABILITY_ENABLED OTEL_SDK_DISABLED OTEL_SERVICE_NAME OTEL_RESOURCE_ATTRIBUTES "
     "OTEL_PROPAGATORS OTEL_TRACES_EXPORTER OTEL_METRICS_EXPORTER OTEL_LOGS_EXPORTER OTEL_TRACES_SAMPLER "
     "OTEL_TRACES_SAMPLER_ARG OTEL_LOG_LEVEL OTEL_INSTRUMENTATION_A2A_SDK_ENABLED OTEL_TRACES_PATH "
@@ -57,6 +60,25 @@ PROCESS_KEEP = LLM_SCHEDULER_KEYS | frozenset(
 )
 
 DECLARED_KEYS = CHILD_KEYS | LAB_KEYS | PROCESS_KEEP
+
+# Keys a library names for itself, added to what a lab child receives. Empty until an entry point declares some.
+_DECLARED_BY_LIBRARIES: set[str] = set()
+
+
+def declare_lab_keys(keys: Iterable[str]) -> None:
+    """Forward *keys* from the host to every lab child, as :data:`LAB_KEYS` are.
+
+    For a library that owns host variables (the pacing middleware's ``MAS_LLM_*``). They must not be
+    credentials: a credential goes through the secret store. Call it from an entry point or from the code the
+    entry point runs, once; declaring a key twice is harmless.
+    """
+    _DECLARED_BY_LIBRARIES.update(str(key) for key in keys)
+
+
+def declared_lab_keys() -> frozenset[str]:
+    """The keys libraries declared with :func:`declare_lab_keys`."""
+    return frozenset(_DECLARED_BY_LIBRARIES)
+
 
 # URL-valued keys every process hands on (proxies, OTLP endpoints, the lab's Neo4j, the OpenAI-compatible
 # address): one with credentials is refused.

@@ -12,9 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
-from mas.library.standard.plugins.infra.llm_scheduler import LlmSchedulerMiddleware
-from mas.runtime.engine.llm_scheduler import (
+from mas.library.standard.lib.llm_scheduler import (
     SchedulerPolicy,
     current_policy,
     install_overrides,
@@ -22,6 +20,8 @@ from mas.runtime.engine.llm_scheduler import (
     llm_slot,
     reset_policy,
 )
+from mas.library.standard.plugins.infra.llm_cache import LlmCacheMiddleware
+from mas.library.standard.plugins.infra.llm_scheduler import LlmSchedulerMiddleware
 from mas.runtime.schema.egress import InvokeEngineIo
 from mas.runtime.schema.ingress import EngineIoReturn
 
@@ -179,7 +179,7 @@ def test_policy_keys_shard_by_model(tmp_path: Path) -> None:
 _MP_HOLD = """
 import json, sys, time
 from pathlib import Path
-from mas.runtime.engine.llm_scheduler import SchedulerPolicy, install_policy, llm_slot
+from mas.library.standard.lib.llm_scheduler import SchedulerPolicy, install_policy, llm_slot
 state, out, delay = sys.argv[1], sys.argv[2], float(sys.argv[3])
 policy = SchedulerPolicy.from_params({
     "max_in_flight": 1,
@@ -197,7 +197,7 @@ Path(out).write_text(json.dumps(held), encoding="utf-8")
 
 
 def test_acquire_times_out_when_slot_held(tmp_path: Path) -> None:
-    from mas.runtime.engine.llm_scheduler import acquire
+    from mas.library.standard.lib.llm_scheduler import acquire
 
     policy = SchedulerPolicy.from_params(
         {
@@ -241,7 +241,7 @@ def test_dead_pid_lease_does_not_block(tmp_path: Path) -> None:
 
 
 def test_install_policy_from_pipeline(tmp_path: Path) -> None:
-    from mas.runtime.engine.llm_scheduler import current_policy, install_policy_from_pipeline
+    from mas.library.standard.lib.llm_scheduler import current_policy, install_policy_from_pipeline
 
     policy = install_policy_from_pipeline(
         [
@@ -303,7 +303,7 @@ def test_overrides_win_over_params_and_clear() -> None:
 
 
 def test_default_user_never_replaces_an_override() -> None:
-    from mas.runtime.engine.llm_scheduler import default_user
+    from mas.library.standard.lib.llm_scheduler import default_user
 
     with default_user("experiment-a"):
         assert SchedulerPolicy.from_params({}).user == "experiment-a"

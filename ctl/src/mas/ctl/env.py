@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 from mas.runtime import hostenv
-from mas.runtime.envkeys import LLM_SCHEDULER_KEYS
+from mas.runtime.envkeys import LLM_KEYS
 
 logger = logging.getLogger(__name__)
 
@@ -129,10 +129,11 @@ def load_dotenv(
 def _overlay_non_secret_dotenv(path: Path) -> None:
     from dotenv import dotenv_values
     from mas.ctl.session.llm_scheduler_env import refresh_env_overrides
+    from mas.library.standard.lib.llm_scheduler import ENV_KEYS
 
     parsed = dotenv_values(path)
-    # Only the non-secret LLM scheduler keys; the shell wins over the file, as with any dotenv loader.
-    overlay = {k: v for k, v in parsed.items() if k in LLM_SCHEDULER_KEYS and v and hostenv.get(k) is None}
+    # Only the non-secret LLM model, cache and pacing keys; the shell wins over the file, as with any dotenv loader.
+    overlay = {k: v for k, v in parsed.items() if k in LLM_KEYS | ENV_KEYS and v and hostenv.get(k) is None}
     if not overlay:
         return
     hostenv.set_overlay(overlay)

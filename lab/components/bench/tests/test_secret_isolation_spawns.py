@@ -54,12 +54,14 @@ p = ctx.Process(target=os.system, args=('printf %s "$OPENAI_API_KEY" > {out_mp}'
 p.start(); p.join(60)
 subprocess.run(["/bin/sh", "-c", 'printf %s "$OPENAI_API_KEY" > {out_sp}'])
 print(json.dumps({{"host": hostenv.get("OPENAI_API_KEY"), "rpm": os.environ.get("MAS_LLM_RPM"),
-                  "env": os.environ.get("OPENAI_API_KEY")}}))
+                  "host_rpm": hostenv.get("MAS_LLM_RPM"), "env": os.environ.get("OPENAI_API_KEY")}}))
 """
     seen = _python(code, _host(tmp_path))
     assert out_mp.read_text() == ""
     assert out_sp.read_text() == ""
-    assert seen == {"host": None, "rpm": "30", "env": None}  # hostenv keeps declared keys only
+    # hostenv keeps the MAS_* names and the declared keys; os.environ keeps declared keys only, and no library
+    # has declared the pacing variables in this bare process
+    assert seen == {"host": None, "rpm": None, "host_rpm": "30", "env": None}
 
 
 # --------------------------------------------------------------------------- spawn run workers

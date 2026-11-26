@@ -10,6 +10,10 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ## Unreleased
 
+### Changed
+
+- The live-LLM slot scheduler (`llm_scheduler` infra middleware) now lives entirely in `library-standard`: its store and policy moved from `mas.runtime.engine.llm_scheduler` to `mas.library.standard.lib.llm_scheduler`, next to the plugin. The runtime holds no pacing code and no pacing names: the `MAS_LLM_RPM` family of variables is declared by the scheduler's library through `mas.runtime.envkeys.declare_lab_keys`, which `mas-ctl` and `mas-lab` call at start, and a stack without the middleware paces nothing. `mas.runtime.envkeys.LLM_SCHEDULER_KEYS` is now `LLM_KEYS` (model, cache and HTTP retry variables only). Update any import of the old module.
+
 ### Added
 
 - A run is complete only when the executor says so. An error, a timeout, a lost worker, or a hidden-in-output failure is incomplete, marked `error`, and scheduled again (auth, TLS, and a malformed spec are not). `Retry-After` lengthens the wait. A batch pipeline stage does not start on an incomplete run; a resumed batch re-runs the ones left in error. Live stages still receive whatever arrives. See `docs/manifests/completeness.md`.

@@ -141,7 +141,7 @@ async def _run_mas_benchmark(
 
     from contextlib import ExitStack
 
-    from mas.runtime.engine.llm_scheduler import default_user
+    from mas.library.standard.lib.llm_scheduler import default_user
 
     run_scope = ExitStack()  # the scheduler's fairness key for this run only
     run_scope.enter_context(default_user(getattr(loaded.exp, "name", "") or "experiment"))

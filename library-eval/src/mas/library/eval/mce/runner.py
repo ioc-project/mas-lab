@@ -230,7 +230,7 @@ def install_openai_llm_service(
         return service.model
 
     try:
-        from mas.runtime.engine.llm_scheduler import install_policy_from_pipeline
+        from mas.library.standard.lib.llm_scheduler import install_policy_from_pipeline
 
         proxy, _ws, leaves = _resolve_infra_proxy()
         install_policy_from_pipeline(_pipeline_for_routed_model(effective_model, proxy, leaves))
@@ -474,7 +474,7 @@ def _call_with_mce_retry(fn, *, model: str):
 
 def paced_live_call(fn, *, model: str):
     """Run a live judge HTTP call under the shared llm_scheduler slot."""
-    from mas.runtime.engine.llm_scheduler import llm_slot
+    from mas.library.standard.lib.llm_scheduler import llm_slot
 
     base_url = _service.base_url if _service is not None else ""
     provider = ""

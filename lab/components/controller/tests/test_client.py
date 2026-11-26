@@ -289,11 +289,14 @@ def test_env_fingerprint_is_the_declared_scheduler_keys_only():
 def test_a_daemon_started_by_the_client_matches_its_fingerprint(monkeypatch):
     """The keys the fingerprint compares travel to the daemon, so an idle daemon is not restarted for ever."""
     from mas.lab.controller import config as cfg
+    from mas.library.standard.lib.llm_scheduler import ENV_KEYS
     from mas.runtime import hostenv
+    from mas.runtime.envkeys import declare_lab_keys
     from mas.runtime.secrets.process import child_env
 
     host = {"PATH": "/bin", "MAS_LLM_RPM": "30", "MAS_LLM_SCHEDULER_MODEL": "m", "OPENAI_API_KEY": "sk-CANARY"}
     hostenv.install(host)
+    declare_lab_keys(ENV_KEYS)  # what the entry point does before it starts a daemon
     daemon_env = child_env(lab=True)
     assert cfg.env_fingerprint(daemon_env) == cfg.env_fingerprint(host)
     assert "OPENAI_API_KEY" not in daemon_env

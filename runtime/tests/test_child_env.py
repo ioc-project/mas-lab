@@ -30,3 +30,16 @@ def test_lab_child_env_declares_xdg(monkeypatch) -> None:
     assert env["MAS_WORKSPACE_ROOT"] == "/tmp/mas-ws"
     assert env["MAS_CONTROLLER_PORT"] == "9"
     assert "OPENAI_API_KEY" not in env
+
+
+def test_a_library_declares_its_own_host_keys_for_lab_children(monkeypatch) -> None:
+    """A key no runtime list names reaches a lab child only after its owner declares it, and never a plain child."""
+    from mas.runtime import envkeys
+
+    monkeypatch.setattr(envkeys, "_DECLARED_BY_LIBRARIES", set())
+    monkeypatch.setenv("MAS_LLM_RPM", "30")
+    assert "MAS_LLM_RPM" not in child_env(lab=True)
+    envkeys.declare_lab_keys(["MAS_LLM_RPM"])
+    assert envkeys.declared_lab_keys() == {"MAS_LLM_RPM"}
+    assert child_env(lab=True)["MAS_LLM_RPM"] == "30"
+    assert "MAS_LLM_RPM" not in child_env()

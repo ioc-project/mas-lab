@@ -3,8 +3,10 @@
 """Shared live-LLM slot scheduler (token bucket + in-flight cap).
 
 Sits *after* routing and *after* ``llm_cache``: cache hits never acquire a
-slot. Runtime engines and pipeline judge calls share one file-backed store so
-multiprocess / multithreaded evaluations cannot DDoS the provider.
+slot. Every pacing middleware and every judge call on a machine shares one
+file-backed store, so multiprocess and multithreaded evaluations do not flood
+the provider. The ``llm_scheduler`` infra middleware wraps it; the runtime has
+no part in it.
 """
 
 from __future__ import annotations
@@ -28,6 +30,19 @@ _LOCK = threading.Lock()
 _POLICY: "SchedulerPolicy | None" = None
 
 _VALID_KEYS = frozenset({"provider", "model", "user"})
+
+# The environment variables a host may read for the scheduler, and the override each one sets. The host
+# (``mas-ctl``, ``mas-lab``) reads them once; this module never reads the environment. Each value is not a
+# secret, so a host may forward the names to a child (see ``mas.runtime.envkeys.declare_lab_keys``).
+ENV_OVERRIDES: dict[str, tuple[str, type]] = {
+    "MAS_LLM_RPM": ("requests_per_minute", float),
+    "MAS_LLM_MAX_IN_FLIGHT": ("max_in_flight", int),
+    "MAS_LLM_SCHEDULER_USER": ("user", str),
+    "MAS_LLM_SCHEDULER_PROVIDER": ("provider", str),
+    "MAS_LLM_SCHEDULER_MODEL": ("model", str),
+    "MAS_LLM_SCHEDULER_STATE": ("state_path", str),
+}
+ENV_KEYS = frozenset(ENV_OVERRIDES)
 
 # Explicit overrides a host (``mas-ctl``, ``mas-lab``) installs for this process.
 # The runtime never reads the environment: the CLI reads its variables once and

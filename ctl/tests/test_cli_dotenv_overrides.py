@@ -14,7 +14,8 @@ _PROBE = """
 import importlib, json, os, sys
 m = importlib.import_module("mas.ctl.cli.main")
 from mas.runtime import hostenv
-from mas.runtime.engine import llm_cache, llm_scheduler
+from mas.runtime.engine import llm_cache
+from mas.library.standard.lib import llm_scheduler
 
 @m.app.command("probe")
 def probe():
