@@ -178,6 +178,16 @@ do:
     config: {method: POST, url: "http://127.0.0.1:9000/revoke", json: {run: "${run.key}"}, expect_status: 200}
 ```
 
+### In infra files
+
+A scenario's infra files (`infra_refs`, see [experiment.md](experiment.md)) may use the same `${...}` names in any
+string value, for example a tool server `url: ${fixture.payments.url}/mcp` or an identity parameter
+`${run.key}`. They are filled in once per run, after the run's fixtures are up and before the tool servers connect, so
+a `scope: run` fixture with `port: auto` is reached by its own run only. The run gets a rendered copy under its
+`.environment/infra/` folder; the source file is not rewritten and its cache identity does not change with a port.
+A file without `${` is used as it is. A name that is not set (a fixture that is not declared, or not up) fails the run
+with the file's name. This applies to runs that bind an `environment:`.
+
 `run.key` contains `/` and `#`, so send it in a JSON body, not in a URL.
 
 ## Environment steps

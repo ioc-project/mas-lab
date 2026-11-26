@@ -20,6 +20,7 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Added
 
+- A scenario's infra files can name the run's own fixtures and the run variables (`${fixture.<name>.url}`, `${run.key}`), filled in per run after its fixtures are up, so a tool server or an identity row reaches the instance of its own run. See `docs/manifests/environment.md`.
 - Scenarios can declare `infra_refs`: the infra files their runs load instead of the workspace ones, so scenarios that differ in tool-server or identity rows run in one experiment. See `docs/manifests/experiment.md`.
 - World events: a trigger's action can use `${experiment.id}`, `${scenario.id}`, `${item.id}`, `${run.id}`, `${run.attempt}` and `${run.key}`, so one action can name the run it fires for when runs share a service. See `docs/manifests/environment.md`.
 - A run is complete only when the executor says so. An error, a timeout, a lost worker, or a hidden-in-output failure is incomplete, marked `error`, and scheduled again (auth, TLS, and a malformed spec are not). `Retry-After` lengthens the wait. A batch pipeline stage does not start on an incomplete run; a resumed batch re-runs the ones left in error. Live stages still receive whatever arrives. See `docs/manifests/completeness.md`.
