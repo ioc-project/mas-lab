@@ -42,5 +42,6 @@ force-include = {"src/mas/runtime/aliases.yaml" = "mas/runtime/aliases.yaml", "s
 # deepeval ships a pytest plugin that imports the whole library (about 7s per pytest process); nothing here uses it
 addopts = "-p no:deepeval"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 norecursedirs = [".git", "node_modules", "pending_port"]
 pythonpath = ["../tests/support"]  # secret_fakes, shared with the other test trees
