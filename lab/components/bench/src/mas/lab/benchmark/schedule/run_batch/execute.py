@@ -576,6 +576,7 @@ async def _execute_batch(
             blocks_for_run,
             control_refs_for_run,
             digest_for_run,
+            render_infra_refs,
             replay_cached_environment,
             start_run_fixtures,
             stop_run_fixtures,
@@ -962,6 +963,10 @@ async def _execute_batch(
                         )
 
                     if _bound is not None:
+                        # The run's fixtures are up: infra files may name them (`${fixture.<name>.url}`).
+                        _infra_refs = render_infra_refs(
+                            _infra_refs, _bound.env.vars, run_output_dir / ".environment" / "infra"
+                        )
                         # The control this environment generated is part of the flavour the runner sees.
                         _runner_id = infer_runner_id(
                             execution_runner=_executor.runner,

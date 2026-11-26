@@ -342,6 +342,34 @@ def control_refs_for_run(*, loaded: Sequence[str], control_path: Path | None) ->
 FIXTURE_LLM_SECRET = "lab"
 
 
+def render_infra_refs(refs: list[str], variables: Variables, out_dir: Path) -> list[str]:
+    """Infra files of a run with their ``${...}`` templates filled in: the run's fixtures and the run variables.
+
+    A file without a template is used as it is. A file with one is parsed, each string value is interpolated once
+    (a substituted value is never scanned again), and the result is written under ``out_dir``, one copy per run.
+    The source file is never rewritten, so the run's cache identity does not change with a fixture's port.
+    """
+    import yaml
+
+    out: list[str] = []
+    for index, ref in enumerate(refs):
+        path = Path(ref)
+        if not path.is_file() or "${" not in (text := path.read_text(encoding="utf-8")):
+            out.append(ref)
+            continue
+        try:
+            docs = [variables.interpolate_any(doc) for doc in yaml.safe_load_all(text)]
+        except ValueError as exc:
+            raise ValueError(
+                f"infra file {path.name}: {exc} (is the fixture declared in `environment:` and up?)"
+            ) from exc
+        target = out_dir / f"{index}-{path.name}"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(yaml.safe_dump_all(docs, sort_keys=False), encoding="utf-8")
+        out.append(str(target))
+    return out
+
+
 def write_fixture_llm_infra(path: Path, url: str, *, name: str = "openai-direct") -> Path:
     """Point the session LLM at a loopback OpenAI-compatible fixture.
 

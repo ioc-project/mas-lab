@@ -289,3 +289,52 @@ def test_kill_switch_cancels_a_decode_that_is_in_flight(tmp_path: Path, monkeypa
     assert "cancel" in row["output"].lower()  # the turn ended on the cancel; it never reached a tool call
     events = (next((tmp_path / "traces").glob("*/traces/events.jsonl"))).read_text(encoding="utf-8")
     assert '"tool_call_start"' not in events
+
+
+@pytest.mark.timeout(120)
+def test_an_infra_file_names_the_runs_own_fixture(tmp_path: Path, monkeypatch) -> None:
+    """``${fixture.<name>.url}`` in a scenario's infra file is filled in per run, after the run's fixtures are up."""
+    import yaml
+    from mas.runtime import registry as plugin_registry
+
+    monkeypatch.setattr(plugin_registry, "_instance", None)
+    lab = tmp_path / "revocation.lab"
+    shutil.copytree(LAB, lab)
+    (lab / "llm.infra.yaml").write_text(
+        "apiVersion: infra/v1\nkind: LLMProxy\nmetadata: {name: extra-leaf}\nspec:\n  protocol: openai\n"
+        '  proxy: {api_base: "${fixture.payments.url}/v1", api_key: {secret: {name: lab, optional: true}}}\n'
+        "  models: {allowed: [never-called], mappings: {never-called: never-called}}\n",
+        encoding="utf-8",
+    )
+    config = yaml.safe_load((lab / "experiment.yaml").read_text(encoding="utf-8"))
+    config["experiment"]["scenarios"][0]["infra_refs"] = ["llm.infra.yaml"]
+    (lab / "experiment.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
+    monkeypatch.chdir(lab)
+    trace_cache = tmp_path / "traces"
+    ok = asyncio.run(
+        asyncio.wait_for(
+            run_mas_benchmark(
+                lab / "experiment.yaml",
+                force=True,
+                fixture_env=dict(os.environ),
+                progress=False,
+                trace_cache_dir=trace_cache,
+                output_dir=tmp_path / "out",
+            ),
+            100,
+        )
+    )
+    assert ok is True, _errors(tmp_path / "out")
+    rendered = sorted((tmp_path / "out").rglob(".environment/infra/*llm.infra.yaml"))
+    assert rendered  # one copy per run
+    for path in rendered:
+        assert "${" not in path.read_text(encoding="utf-8")
+    ports = {
+        str(rec["payload"]["port"])
+        for run in _records(trace_cache)
+        for rec in run
+        if rec["name"] == "fixture.ready" and rec["source"]["id"] == "payments"
+    }
+    urls = [yaml.safe_load(path.read_text(encoding="utf-8"))["spec"]["proxy"]["api_base"] for path in rendered]
+    assert {url.split(":")[-1].removesuffix("/v1") for url in urls} == ports  # each run reached its own instance
+    assert len(set(urls)) == len(urls) == len(rendered)
