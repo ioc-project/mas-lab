@@ -210,3 +210,26 @@ def test_an_auth_refusal_body_is_not_copied_into_the_failure(status: int) -> Non
     assert canary not in str(failure)
     assert canary not in repr(failure.args)
     assert f"HTTP {status}" in str(failure)
+
+
+@pytest.mark.parametrize("status", [400, 403])
+def test_an_http_failure_names_the_model_and_host_it_was_sent_to(status: int) -> None:
+    """The model name and host come from the request, so a refused alias is visible; the body is still not copied."""
+    canary = "sk-CANARY-77aa"
+    request = httpx.Request(
+        "POST",
+        "https://llm.example/v1/chat/completions?key=Q-CANARY",
+        json={"model": "sealqa-model", "messages": []},
+    )
+    response = httpx.Response(status, json={"error": {"message": f"echo {canary}"}}, request=request)
+    exc = httpx.HTTPStatusError("refused", request=request, response=response)
+    text = str(classify_llm_failure(exc))
+    assert f"HTTP {status} (model 'sealqa-model' at llm.example)" in text
+    assert canary not in text and "Q-CANARY" not in text
+
+
+def test_an_unsafe_model_value_is_not_shown() -> None:
+    request = httpx.Request("POST", "https://llm.example/v1", json={"model": "x y\nsk-secret"})
+    response = httpx.Response(403, json={}, request=request)
+    text = str(classify_llm_failure(httpx.HTTPStatusError("refused", request=request, response=response)))
+    assert "sk-secret" not in text and "(at llm.example)" in text

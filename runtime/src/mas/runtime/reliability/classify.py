@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import email.utils
+import json
 import math
 import re
 import ssl
@@ -369,6 +370,23 @@ def _extract_api_error_message(response: Any) -> str:
     return ""
 
 
+_SAFE_MODEL = re.compile(r"[\w.:/@+-]{1,100}")
+
+
+def _request_target(exc: BaseException) -> str:
+    """`` (model 'x' at host)`` from the request we sent, never from the response. Empty when unknown."""
+    request = getattr(exc, "request", None)
+    parts: list[str] = []
+    with __import__("contextlib").suppress(Exception):
+        model = json.loads(request.content).get("model")
+        if isinstance(model, str) and _SAFE_MODEL.fullmatch(model):
+            parts.append(f"model '{model}'")
+    with __import__("contextlib").suppress(Exception):
+        if request.url.host:
+            parts.append(f"at {request.url.host}")
+    return f" ({' '.join(parts)})" if parts else ""
+
+
 def classify_llm_http_error(exc: BaseException) -> str:
     """Map transport/HTTP failures to a short, actionable operator message."""
     import httpx
@@ -391,14 +409,16 @@ def classify_llm_http_error(exc: BaseException) -> str:
                 "Set context_window to the model's real limit so history is trimmed, "
                 "or use a model with a larger window."
             )
+        target = _request_target(exc)
         if status in (401, 403):
             return (
-                f"LLM request failed: {shown}. "
-                "Check the SecretRef on api_key in your infra manifest. "
+                f"LLM request failed: {shown}{target}. "
+                "Check the SecretRef on api_key in your infra manifest, "
+                "and that the endpoint serves this model name (map it under models.mappings of the infra). "
                 "Ensure config.yaml infra_refs selects the correct bundle "
                 "(e.g. standard:llm-proxy vs standard:production)."
             )
-        return f"LLM request failed: {shown}."
+        return f"LLM request failed: {shown}{target}."
 
     if isinstance(exc, ssl.SSLError) or any(marker in str(exc) for marker in _TRANSIENT_MARKERS):
         return (
