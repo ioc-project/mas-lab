@@ -20,6 +20,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 - A run-wide `.infra` model-mapping override now reaches the LLM the agents use, and any run-wide `.infra` override is part of the trace-cache key. Before, `--override '.infra.spec.models.mappings.m=azure/gpt-4o'` changed the merged view only, so the model name went out as written (an HTTP 403 from a gateway), and changing the override skipped every run as cached and reported the old results. A portable cache (`trace_cache_portable`) still ignores the infra, and overrides under `.mas` or `.agent` are unchanged.
 - The Rolling Packages workflow and the release tag step name packages the way `scripts/version_manager.py` keys them (`mas-lab-component-bench`, not `bench`; `mas-lab`, not `lab`), so the rolling build stops failing with `KeyError: 'lab'`. An unknown package name is an error instead of a silent fallback; a test keeps the workflows and the script in step.
+- A benchmark run ends its session: the tool connections its agents opened (an MCP session, a server process) are closed when the run's last turn is done, not when the process exits. Before, every run left its MCP clients open for the life of the lab process; a client of a fixture that had stopped went on retrying its event stream against a closed port. `ManifestToolProvider.close()` closes the providers it holds.
+
 - A failed model call (`LLM request failed:`) or a failed send to a peer (`[send] agent … failed` / `not available on bus`) anywhere in a run's output fails the run, not only when that text is the whole output. A 401 or 403 stays non-retryable. A send that failed on an `llm_cache miss` does not.
 
 ### Added

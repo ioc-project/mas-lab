@@ -192,6 +192,16 @@ class ToolProviderRegistry:
     def providers(self) -> List[ToolProvider]:
         return list(self._providers)
 
+    def close(self) -> None:
+        """Close each provider that holds a connection; a failure does not stop the others."""
+        for provider in self._providers:
+            closer = getattr(provider, "close", None)
+            if callable(closer):
+                try:
+                    closer()
+                except Exception:
+                    logger.warning("tool provider %r did not close", provider, exc_info=True)
+
     def advertised_names_by_provider(self) -> dict[str, tuple[str, ...]]:
         """Tool names each provider currently routes, grouped by provider name."""
         buckets: dict[str, list[str]] = {}
