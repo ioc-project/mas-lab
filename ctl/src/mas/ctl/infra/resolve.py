@@ -36,6 +36,25 @@ def _infra_rows(spec: dict[str, Any]) -> dict[str, Any]:
     return rows
 
 
+def _carry_mapping_overrides(before: dict[str, Any], after: dict[str, Any], merged: InfraManifest) -> None:
+    """Give every LLM leaf the ``models.mappings`` an override added or changed.
+
+    A leaf keeps its own copy of the mappings, taken before the overrides; the engine reads the leaf, so
+    without this an override such as ``.infra.spec.models.mappings.m=azure/gpt-4o`` changes the merged view
+    only and the model name goes out as written.
+    """
+
+    def mappings(document: dict[str, Any]) -> dict[str, Any]:
+        models = (document.get("spec") or {}).get("models") or {}
+        return dict(models.get("mappings") or {}) if isinstance(models, dict) else {}
+
+    old, new = mappings(before), mappings(after)
+    delta = {name: target for name, target in new.items() if old.get(name) != target}
+    if delta:
+        for leaf in merged.providers.values():
+            leaf["mappings"] = {**dict(leaf.get("mappings") or {}), **delta}
+
+
 def _refuse_override_retarget(before: dict[str, Any], after: dict[str, Any], overrides: Any) -> None:
     """A CLI ``--override`` that moves a row holding SecretRefs restates them among its own values."""
     from mas.ctl.overrides import parse_override
@@ -189,6 +208,7 @@ def resolve_infra_refs(
             merged = InfraManifest.from_document(prepare_manifest(merged_document))
         except ValueError as exc:
             raise InfraResolveError([*errors, ("CLI overrides", exc)]) from None
+        _carry_mapping_overrides(before_document, merged_document, merged)
         for entry in merged.pipeline:
             entry["params"] = _resolve_pipeline_param_paths(dict(entry.get("params") or {}), anchor=root)
         for leaf in merged.providers.values():

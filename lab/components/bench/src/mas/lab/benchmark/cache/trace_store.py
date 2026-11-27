@@ -278,6 +278,21 @@ def materialize_config(config: dict, base_path: "Path | None") -> dict:
     return mat
 
 
+def with_infra_overrides(infra_info: "dict | None", run_overrides: "tuple[str, ...] | list[str]") -> "dict | None":
+    """The infra identity of a run, with the run-wide ``.infra`` overrides that change it.
+
+    An override such as ``.infra.spec.models.mappings.m=azure/gpt-4o-mini`` changes what the run sends, so it
+    belongs in the key; without it a changed override replays the old traces. ``None`` (a portable cache) stays
+    ``None``: those runs are meant to hit whatever the infra is.
+    """
+    from mas.ctl.overrides import parse_override
+
+    infra = sorted(o for o in run_overrides if parse_override(o).path.root == "infra")
+    if infra_info is None or not infra:
+        return infra_info
+    return {**infra_info, "overrides": infra}
+
+
 def compute_run_hash(
     config: dict,
     run_input: dict,
