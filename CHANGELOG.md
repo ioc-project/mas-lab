@@ -12,6 +12,8 @@ reconciling the release notes with the code and docs currently on that branch.
 
 ### Changed
 
+- A run's fixtures start together and stop together, not one after the other. A fixture starts after the earlier fixtures its command or `env` names (`${fixture.<name>.url}`, `${fixture.<name>.port}`) and in the same wave as the ones that name nothing in common; the run waits for the slowest start and the slowest stop, not for the sum. The health probe polls every 10 ms (it was 50 ms) and a stop checks for the process group's end every 5 ms (it was 20 ms). A lab whose runs each start four fixtures spends about half as long starting them.
+
 - The live-LLM slot scheduler (`llm_scheduler` infra middleware) now lives entirely in `library-standard`: its store and policy moved from `mas.runtime.engine.llm_scheduler` to `mas.library.standard.lib.llm_scheduler`, next to the plugin. The runtime holds no pacing code and no pacing names: the `MAS_LLM_RPM` family of variables is declared by the scheduler's library through `mas.runtime.envkeys.declare_lab_keys`, which `mas-ctl` and `mas-lab` call at start, and a stack without the middleware paces nothing. `mas.runtime.envkeys.LLM_SCHEDULER_KEYS` is now `LLM_KEYS` (model, cache and HTTP retry variables only). Update any import of the old module.
 
 ### Fixed

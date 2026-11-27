@@ -390,7 +390,7 @@ class FixtureRegistry:
                 status = 0
             if status == health.expect_status:
                 return
-            time.sleep(0.05)
+            time.sleep(0.01)
         raise TimeoutError(f"fixture {spec.name!r} health check timed out at {url}: {last}")
 
     def _raise_if_exited(self, handle: FixtureHandle) -> None:
@@ -640,7 +640,7 @@ def _stop_group(pgid: int | None, grace_s: float, *, proc: subprocess.Popen[byte
             return False
         except PermissionError:
             break
-        time.sleep(0.02)
+        time.sleep(0.005)
     try:
         os.killpg(pgid, signal.SIGKILL)
     except (ProcessLookupError, PermissionError, OSError):
