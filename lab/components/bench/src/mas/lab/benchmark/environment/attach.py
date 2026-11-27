@@ -4,9 +4,11 @@
 
 from __future__ import annotations
 
+import contextvars
 import hashlib
 import json
 import logging
+import re
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Mapping
@@ -26,6 +28,7 @@ from mas.lab.benchmark.environment.variables import Variables
 from mas.lab.benchmark.pipeline.channel import get_channel, get_stream_id
 from mas.lab.benchmark.pipeline.keys import RunKey
 from mas.library.standard.lib.environment_port import reset_environment_port, set_environment_port
+from mas.runtime.aio import new_thread
 from mas.runtime.boundary.obs.event_stream import get_event_stream
 
 logger = logging.getLogger(__name__)
@@ -399,6 +402,51 @@ def write_fixture_llm_infra(path: Path, url: str, *, name: str = "openai-direct"
     return path
 
 
+_FIXTURE_REF = re.compile(r"\$\{fixtures?\.([^.}]+)\.")
+
+
+def _fixture_waves(fixtures: Sequence[Any]) -> list[list[Any]]:
+    """The fixtures of a run in waves. A fixture starts after the earlier fixtures its command or environment names
+    (``${fixture.<name>.url}``) and together with the ones that name nothing in common. A name no earlier fixture
+    carries is no dependency: it fails when the command is rendered, as it always did."""
+    depth: dict[str, int] = {}
+    waves: list[list[Any]] = []
+    for item in fixtures:
+        text = " ".join([*item.command, *(v for v in dict(item.env or {}).values() if isinstance(v, str))])
+        at = 1 + max((depth[name] for name in _FIXTURE_REF.findall(text) if name in depth), default=-1)
+        depth[item.name] = at
+        while len(waves) <= at:
+            waves.append([])
+        waves[at].append(item)
+    return waves
+
+
+def _in_parallel(calls: Sequence[Any]) -> None:
+    """Run ``calls`` at once and wait for all; the first exception, in call order, is raised once every call ended."""
+    if len(calls) == 1:
+        calls[0]()
+        return
+    errors: list[BaseException | None] = [None] * len(calls)
+
+    def worker(i: int) -> None:
+        try:
+            calls[i]()
+        except BaseException as exc:  # noqa: BLE001 - re-raised below, in the caller's thread
+            errors[i] = exc
+
+    # a start reads the run's context (its secrets are answered for the run's stream): each call gets a copy of it
+    threads = [
+        new_thread(contextvars.copy_context().run, args=(worker, i), name="run-fixture") for i in range(len(calls))
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    for exc in errors:
+        if exc is not None:
+            raise exc
+
+
 def start_run_fixtures(
     spec: EnvironmentSpec,
     fixtures: FixtureRegistry,
@@ -409,6 +457,8 @@ def start_run_fixtures(
     env: Any = None,
 ) -> None:
     keys: list[str] = []
+    scoped: dict[str, tuple[Any, str]] = {}
+    emit = getattr(getattr(env, "events", None), "emit", None)
     for item in spec.fixtures:
         key = fixture_scope_key(
             scope=item.scope,
@@ -417,32 +467,41 @@ def start_run_fixtures(
             scenario_key=scenario_key,
         )
         keys.append(key)
-        emit = getattr(getattr(env, "events", None), "emit", None)
+        scoped[item.name] = (item, key)
         if callable(emit):
             fixtures.bind_emit(key, emit)
-        if item.scope == "run":
-            fixtures.start(item, scope_key=key)
-        else:
-            fixtures.start_once(item, scope_key=key)
-        if env is None:
-            continue
-        try:
-            url = fixtures.url(item.name, scope_key=key)
-        except KeyError:
-            continue
-        env.vars[f"fixture.{item.name}.url"] = url
-        env.vars[f"fixtures.{item.name}.url"] = url
-        try:
-            port = str(fixtures.port(item.name, scope_key=key))
-            host = fixtures.host(item.name, scope_key=key)
-        except KeyError:
-            continue
-        env.vars[f"fixture.{item.name}.port"] = port
-        env.vars[f"fixture.{item.name}.host"] = host
-        env.vars[f"fixtures.{item.name}.port"] = port
-        env.vars[f"fixtures.{item.name}.host"] = host
     if env is not None:
         env.fixture_keys = tuple(dict.fromkeys(keys))
+
+    def starter(item: Any, key: str) -> Any:
+        start = fixtures.start if item.scope == "run" else fixtures.start_once
+        return lambda: start(item, scope_key=key)
+
+    for wave in _fixture_waves(spec.fixtures):
+        _in_parallel([starter(item, scoped[item.name][1]) for item in wave])
+        for item in wave:
+            _publish_fixture_vars(env, fixtures, item, scoped[item.name][1])
+
+
+def _publish_fixture_vars(env: Any, fixtures: FixtureRegistry, item: Any, key: str) -> None:
+    """The started fixture's address as run variables, for the infra files and the fixtures that name it."""
+    if env is None:
+        return
+    try:
+        url = fixtures.url(item.name, scope_key=key)
+    except KeyError:
+        return
+    env.vars[f"fixture.{item.name}.url"] = url
+    env.vars[f"fixtures.{item.name}.url"] = url
+    try:
+        port = str(fixtures.port(item.name, scope_key=key))
+        host = fixtures.host(item.name, scope_key=key)
+    except KeyError:
+        return
+    env.vars[f"fixture.{item.name}.port"] = port
+    env.vars[f"fixture.{item.name}.host"] = host
+    env.vars[f"fixtures.{item.name}.port"] = port
+    env.vars[f"fixtures.{item.name}.host"] = host
 
 
 def stop_run_fixtures(
@@ -453,16 +512,15 @@ def stop_run_fixtures(
     item_key: str = "",
     scenario_key: str = "",
 ) -> None:
-    for item in spec.fixtures:
-        if item.scope != "run":
-            continue
-        key = fixture_scope_key(
-            scope=item.scope,
-            run_key=run_key,
-            item_key=item_key,
-            scenario_key=scenario_key,
-        )
-        fixtures.release(item.name, force=False, scope_key=key)
+    """Stop the run's fixtures together: the run waits for the slowest, not for the sum."""
+
+    def releaser(item: Any) -> Any:
+        key = fixture_scope_key(scope=item.scope, run_key=run_key, item_key=item_key, scenario_key=scenario_key)
+        return lambda: fixtures.release(item.name, force=False, scope_key=key)
+
+    calls = [releaser(item) for item in spec.fixtures if item.scope == "run"]
+    if calls:
+        _in_parallel(calls)
 
 
 def run_with_cleanups(body: Any) -> Any:
