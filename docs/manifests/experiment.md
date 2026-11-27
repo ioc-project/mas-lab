@@ -121,7 +121,7 @@ experiment:
     - .infra.spec.models.defaults.llm=qwen2.5:7b-instruct
 ```
 
-The same strings work on the command line: `mas-lab benchmark run experiment.yaml --override '.infra.spec.models.defaults.llm=gemma4'`. A bad path fails before any run starts. Overrides apply to runs of a MAS; a standalone agent run ignores `.mas` and `.infra` paths.
+The same strings work on the command line: `mas-lab benchmark run experiment.yaml --override '.infra.spec.models.defaults.llm=gemma4'`. A `.infra` override is part of the trace-cache key: a changed value runs again instead of replaying the old traces (unless `trace_cache_portable` is set). A bad path fails before any run starts. Overrides apply to runs of a MAS; a standalone agent run ignores `.mas` and `.infra` paths.
 
 ### Scenarios
 

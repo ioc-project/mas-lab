@@ -18,6 +18,7 @@ from mas.lab.benchmark.cache.trace_store import (
     extract_flavour_info,
     get_trace_cache_dir,
     link_trace_to_cache_entry,
+    with_infra_overrides,
     write_cache_inputs,
     write_run_info,
     write_run_result,
@@ -473,6 +474,7 @@ async def _execute_batch(
                 cli_refs=list(prepared.infra_refs),
             )
         )
+        _infra_info = with_infra_overrides(_infra_info, loaded.run_overrides or ())
 
     from mas.lab.benchmark.schedule.run_batch.pre_hooks import LevelPreHooks
 

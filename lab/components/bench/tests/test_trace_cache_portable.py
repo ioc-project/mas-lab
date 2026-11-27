@@ -29,3 +29,18 @@ def test_key_with_infra_depends_on_the_endpoint() -> None:
 
 def test_flag_defaults_to_off() -> None:
     assert MASRunBase.__dataclass_fields__["trace_cache_portable"].default is False
+
+
+def test_an_infra_override_changes_the_key_and_a_portable_cache_ignores_it() -> None:
+    # Kills: a changed `--override .infra...` replaying the traces of the old mapping.
+    from mas.lab.benchmark.cache.trace_store import with_infra_overrides
+
+    config = {"agents": [{"id": "a", "llm_model": "m"}]}
+    run_input = {"inputs": {"user": "hello"}}
+    infra = {"llm_proxy": {"api_base": "http://a"}}
+    gpt4o = with_infra_overrides(infra, [".infra.spec.models.mappings.m=azure/gpt-4o"])
+    mini = with_infra_overrides(infra, [".infra.spec.models.mappings.m=azure/gpt-4o-mini"])
+    plain = with_infra_overrides(infra, [".mas.agent[a].spec.models[0].id=x"])
+    key = lambda i: compute_run_hash(config, run_input, "i", 0, {}, infra_info=i)  # noqa: E731
+    assert key(gpt4o) != key(mini) and key(plain) == key(infra)  # only `.infra` overrides count
+    assert with_infra_overrides(None, [".infra.spec.models.mappings.m=x"]) is None  # portable stays portable
