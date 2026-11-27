@@ -99,6 +99,28 @@ async def test_failing_before_attempt_is_final() -> None:
     assert out.status == "error" and out.attempts == 1 and "pre step failed" in out.error
 
 
+@pytest.mark.asyncio
+async def test_a_hanging_run_times_out_each_attempt() -> None:
+    import time
+
+    from mas.library.lab.plugins.executors.native import NativeExecutor
+
+    calls = {"n": 0}
+    plugin = NativeExecutor()
+    plugin.timeout_s = 0.05
+
+    def hang() -> dict:
+        calls["n"] += 1
+        time.sleep(0.4)
+        return {"status": "ok", "content": "late"}
+
+    out = await run_with_retrier(plugin, _retrier(max_attempts=2, backoff_s=0), hang)
+    assert out.status == "error"
+    assert "timed out" in out.error
+    assert out.attempts == 2
+    assert calls["n"] == 2
+
+
 def test_write_run_result_replaces_error_cache_and_records_attempts(tmp_path) -> None:
     from mas.lab.benchmark.cache.trace_store import write_run_result
 

@@ -612,7 +612,7 @@ experiment:
 | --- | --- | --- |
 | `plugin` | `native` | Registered executor id. |
 | `params` | `{}` | Executor attributes, validated at config load. `native` accepts none. |
-| `timeout` | `300` | Per-run timeout, seconds (worker pool). |
+| `timeout` | `300` | Per-run timeout, seconds (each in-process attempt and the worker pool). |
 | `runner` | `native` | Lab runner (adapter) id from the `mas.lab.runners` entry point group. When omitted, inferred from the application's `spec.framework.default_adapter` (MAS) or `spec.framework_adapter` (agent). |
 | `reset_state` | `false` | Reset emulation and runtime state between runs. |
 | `worker_processes` | `1` | Process workers for MAS runs. `1` keeps today's threads. The batch refuses a count above the machine's cores when it starts (the file itself parses anywhere). With more than 1, every pipeline step must declare `worker_safe` (shipped library steps declare it; a test reads their sources for process patches). Workers start with `spawn` and rebuild their own run context from a plain job. |

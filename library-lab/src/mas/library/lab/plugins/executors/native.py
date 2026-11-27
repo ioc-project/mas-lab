@@ -14,6 +14,8 @@ from mas.lab.benchmark.execution.roles import AttemptResult, NoParams
 
 class NativeExecutor(NoParams):
     plugin_id = "native"
+    timeout_s: float = 300.0
+    """Per-attempt bound, seconds. The host sets this from ``executor.timeout``."""
 
     def is_complete(self, result_dict: dict, *, status: str, error: str = "") -> bool:
         return invoke_is_complete(status=status, error=error)
@@ -30,8 +32,15 @@ class NativeExecutor(NoParams):
             except Exception as exc:
                 # The MAS never starts on unprepared state, and a retry would not repair it.
                 return AttemptResult({}, "error", str(exc), "", fatal=True)
+        limit = float(self.timeout_s)
         try:
-            result = await asyncio.to_thread(do_run)
+            result = await asyncio.wait_for(asyncio.to_thread(do_run), timeout=limit)
+        except TimeoutError:
+            return AttemptResult(
+                {},
+                "error",
+                f"run timed out after {limit:g}s (executor.timeout)",
+            )
         except Exception as exc:
             return AttemptResult({}, "error", str(exc))
         status, error, output = runner_outcome(result)
