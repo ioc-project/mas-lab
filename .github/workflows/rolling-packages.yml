@@ -21,30 +21,39 @@ jobs:
       matrix:
         include:
           - name: runtime
+            package: mas-lab-runtime
             path: runtime
             pyproject: runtime/pyproject.toml
           - name: library
+            package: mas-lab-library-standard
             path: library-standard
             pyproject: library-standard/pyproject.toml
           - name: ctl
+            package: mas-lab-ctl
             path: ctl
             pyproject: ctl/pyproject.toml
           - name: core
+            package: mas-lab-component-core
             path: lab/components/core
             pyproject: lab/components/core/pyproject.toml
           - name: bench
+            package: mas-lab-component-bench
             path: lab/components/bench
             pyproject: lab/components/bench/pyproject.toml
           - name: controller
+            package: mas-lab-component-controller
             path: lab/components/controller
             pyproject: lab/components/controller/pyproject.toml
           - name: telemetry
+            package: mas-lab-library-telemetry
             path: library-telemetry
             pyproject: library-telemetry/pyproject.toml
           - name: kg
+            package: mas-lab-library-kg
             path: library-kg
             pyproject: library-kg/pyproject.toml
           - name: lab
+            package: mas-lab
             path: .
             pyproject: pyproject.toml
 
@@ -65,7 +74,7 @@ jobs:
       - name: Compute rolling version
         id: rolling
         run: |
-          BASE=$(python3 scripts/version_manager.py get ${{ matrix.name }})
+          BASE=$(python3 scripts/version_manager.py get ${{ matrix.package }})
           SHORT_SHA=$(git rev-parse --short=7 HEAD)
           ROLLING="${BASE}+g${SHORT_SHA}"
           echo "base=${BASE}" >> "$GITHUB_OUTPUT"
