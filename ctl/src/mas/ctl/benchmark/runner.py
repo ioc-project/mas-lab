@@ -855,22 +855,27 @@ class MasBenchRunner:
         if len(contents) < len(queries):
             contents.extend(queries[len(contents) :])
         try:
-            results = [
-                controller.run_turn(q, content=content if content != q else None)
-                for q, content in zip(queries, contents, strict=False)
-            ]
-        finally:
-            close_observability(controller)
-            for recorder in scoped_recorders:
-                recorder.close()
-            if obs_pipeline is not None:
-                obs_pipeline.close()
-            ensure_live_otel_span_files(events_path, obs_cfg)
+            try:
+                results = [
+                    controller.run_turn(q, content=content if content != q else None)
+                    for q, content in zip(queries, contents, strict=False)
+                ]
+            finally:
+                close_observability(controller)
+                for recorder in scoped_recorders:
+                    recorder.close()
+                if obs_pipeline is not None:
+                    obs_pipeline.close()
+                ensure_live_otel_span_files(events_path, obs_cfg)
 
-        if checkpoint_save and store is not None:
-            label = checkpoint_save if isinstance(checkpoint_save, str) else "final"
-            final_path = session_manager.checkpoint(managed_session.session_id, label=label)
-            logger.info("Saved final checkpoint: %s", final_path)
+            if checkpoint_save and store is not None:
+                label = checkpoint_save if isinstance(checkpoint_save, str) else "final"
+                final_path = session_manager.checkpoint(managed_session.session_id, label=label)
+                logger.info("Saved final checkpoint: %s", final_path)
+        finally:
+            # The run is over: its tool connections end with it, not with the process. A fixture the run reached stops
+            # next, and a connection left open would retry against a server that is gone.
+            instance.stop()
 
         text = results[-1].text if results else ""
 

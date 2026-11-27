@@ -753,3 +753,40 @@ def test_a_mapping_that_is_not_a_dict_still_lists():
     from mas.runtime.registry.tool_provider_registry import _as_spec_list
 
     assert _as_spec_list([MappingProxyType({"name": "a"})]) == [{"name": "a"}]
+
+
+class _Holder:
+    """A provider that holds a connection."""
+
+    def __init__(self, fail: bool = False) -> None:
+        self.closed = 0
+        self.fail = fail
+
+    def list_tools(self, **_: object) -> list:
+        return []
+
+    def call_tool(self, *_: object, **__: object) -> None:
+        return None
+
+    def close(self) -> None:
+        self.closed += 1
+        if self.fail:
+            raise RuntimeError("already gone")
+
+
+def test_closing_the_registry_closes_every_provider_even_after_one_fails():
+    first, second = _Holder(fail=True), _Holder()
+    registry = ToolProviderRegistry()
+    registry.register_provider(first)
+    registry.register_provider(second)
+    registry.close()
+    assert (first.closed, second.closed) == (1, 1)
+
+
+def test_a_manifest_tool_provider_closes_the_providers_it_holds():
+    from mas.runtime.engine.manifest_tool_provider import ManifestToolProvider
+
+    holder = _Holder()
+    provider = ManifestToolProvider(overlay_providers=[holder])
+    provider.close()
+    assert holder.closed == 1

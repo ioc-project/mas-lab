@@ -67,6 +67,10 @@ class ManifestToolProvider:
     def has_tools(self) -> bool:
         return self._registry.has_tools()
 
+    def close(self) -> None:
+        """End the connections the providers hold: the engine calls this when its session stops."""
+        self._registry.close()
+
     def advertised_names_by_provider(self) -> dict[str, tuple[str, ...]]:
         return self._registry.advertised_names_by_provider()
 
