@@ -270,6 +270,7 @@ async def _execute_batch(
     _schedule = exp.schedule
     _executor = exp.executor
     _executor_plugin = resolve_executor(_executor.plugin)
+    _executor_plugin.timeout_s = float(_executor.timeout or 300)
     _retrier = validated_plugin("retrier", exp.retry.plugin, dict(exp.retry.params))
     _plan_kw = plan_kwargs(exp, plugin_override=scheduler)
     _effective_scheduler = _plan_kw["schedule"].get("plugin")

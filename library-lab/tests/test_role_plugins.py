@@ -135,6 +135,17 @@ def test_executor_runs_once_and_reports_each_way_a_run_ends() -> None:
     pre = asyncio.run(plugin.attempt(lambda: {"status": "ok"}, before_attempt=broken))
     assert pre.fatal and "pre failed" in pre.error
 
+    import time
+
+    plugin.timeout_s = 0.05
+
+    def hang() -> dict:
+        time.sleep(0.4)
+        return {"status": "ok", "content": "late"}
+
+    timed_out = asyncio.run(plugin.attempt(hang))
+    assert timed_out.status == "error" and "timed out" in timed_out.error
+
 
 # -- retrier --------------------------------------------------------------------------------------
 

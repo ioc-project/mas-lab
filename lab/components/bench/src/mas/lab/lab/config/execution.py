@@ -359,7 +359,7 @@ class ExperimentExecutorSpec:
     """Plugin attributes (validated by the executor)."""
 
     timeout: int = 300
-    """Per-run timeout in seconds (worker pool)."""
+    """Per-run timeout in seconds (in-process attempt and worker pool)."""
 
     runner: str = DEFAULT_LAB_RUNNER_ID
     """Application runner registry id. Not the executor plugin id."""
