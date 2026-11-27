@@ -541,7 +541,7 @@ tasks:
   version:
     desc: Get current lab version
     cmds:
-      - python3 scripts/version_manager.py get lab
+      - python3 scripts/version_manager.py get mas-lab
 
   version-all:
     desc: Get all package versions
@@ -583,7 +583,7 @@ tasks:
     desc: Create annotated release tag from VERSION
     cmds:
       - |
-        VERSION=$(python3 scripts/version_manager.py get lab)
+        VERSION=$(python3 scripts/version_manager.py get mas-lab)
         git tag -a "v${VERSION}" -m "Release v${VERSION}"
         echo "Created tag v${VERSION}"
 
@@ -599,7 +599,7 @@ tasks:
       - python3 scripts/version_manager.py check
       - python3 scripts/version_manager.py bump minor all
       - |
-        VERSION=$(python3 scripts/version_manager.py get lab)
+        VERSION=$(python3 scripts/version_manager.py get mas-lab)
         git add VERSION
         git add pyproject.toml */pyproject.toml lab/components/*/pyproject.toml
         if git diff --cached --quiet; then
@@ -750,7 +750,7 @@ tasks:
   version:
     desc: Get current lab version
     cmds:
-      - python3 scripts/version_manager.py get lab
+      - python3 scripts/version_manager.py get mas-lab
 
   version-all:
     desc: Get all package versions
@@ -792,7 +792,7 @@ tasks:
     desc: Create annotated release tag from VERSION
     cmds:
       - |
-        VERSION=$(python3 scripts/version_manager.py get lab)
+        VERSION=$(python3 scripts/version_manager.py get mas-lab)
         git tag -a "v${VERSION}" -m "Release v${VERSION}"
         echo "Created tag v${VERSION}"
 
@@ -808,7 +808,7 @@ tasks:
       - python3 scripts/version_manager.py check
       - python3 scripts/version_manager.py bump minor all
       - |
-        VERSION=$(python3 scripts/version_manager.py get lab)
+        VERSION=$(python3 scripts/version_manager.py get mas-lab)
         git add VERSION
         git add pyproject.toml */pyproject.toml lab/components/*/pyproject.toml
         if git diff --cached --quiet; then

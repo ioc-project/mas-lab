@@ -52,6 +52,25 @@ PACKAGES: dict[str, Path] = {
     "mas-lab-component-controller": ROOT / "lab" / "components" / "controller" / "pyproject.toml",
 }
 
+# Short names that workflows and Taskfile.yml still pass → PACKAGES key
+ALIASES: dict[str, str] = {
+    "runtime": "mas-lab-runtime",
+    "ctl": "mas-lab-ctl",
+    "library": "mas-lab-library-standard",
+    "samples": "mas-lab-library-samples",
+    "skills": "mas-lab-library-skills",
+    "eval": "mas-lab-library-eval",
+    "lab-library": "mas-lab-library-lab",
+    "ioa": "mas-lab-library-ioa",
+    "kg": "mas-lab-library-kg",
+    "telemetry": "mas-lab-library-telemetry",
+    "lab": "mas-lab",
+    "core": "mas-lab-component-core",
+    "bench": "mas-lab-component-bench",
+    "controller": "mas-lab-component-controller",
+}
+DEFAULT_PACKAGE = "mas-lab"
+
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)(?:-(rc\d+))?$")
 
 
@@ -80,8 +99,13 @@ def read_root_version() -> str:
     return VERSION_FILE.read_text().strip()
 
 
+def resolve_package(pkg: str) -> str:
+    """Map a short name (``lab``, ``runtime``...) to its PACKAGES key; other names pass through."""
+    return ALIASES.get(pkg, pkg)
+
+
 def read_pyproject_version(pkg: str) -> str:
-    path = PACKAGES[pkg]
+    path = PACKAGES[resolve_package(pkg)]
     for line in path.read_text().splitlines():
         m = re.match(r'^version\s*=\s*"([^"]+)"', line)
         if m:
@@ -90,7 +114,7 @@ def read_pyproject_version(pkg: str) -> str:
 
 
 def write_pyproject_version(pkg: str, version: str) -> None:
-    path = PACKAGES[pkg]
+    path = PACKAGES[resolve_package(pkg)]
     content = path.read_text()
     updated = re.sub(r'version = "[^"]+"', f'version = "{version}"', content, count=1)
     path.write_text(updated)
@@ -100,6 +124,7 @@ def write_pyproject_version(pkg: str, version: str) -> None:
 def _targets(pkg: str) -> list[str]:
     if pkg == "all":
         return list(PACKAGES)
+    pkg = resolve_package(pkg)
     if pkg not in PACKAGES:
         raise ValueError(f"Unknown package {pkg!r}. Valid: {', '.join(PACKAGES)} | all")
     return [pkg]
@@ -135,7 +160,7 @@ def bump_version(bump_type: str, pkg: str = "all") -> None:
         new_v = format_version(c)
         write_pyproject_version(p, new_v)
     # Update root VERSION with the lab version
-    root_v = read_pyproject_version("mas-lab")
+    root_v = read_pyproject_version(DEFAULT_PACKAGE)
     VERSION_FILE.write_text(root_v + "\n")
     print(f"  ✅ VERSION: {root_v}")
 
@@ -150,7 +175,7 @@ def set_version(version: str, pkg: str = "all") -> None:
     print(f"  ✅ VERSION: {version}")
 
 
-def get_full(pkg: str = "mas-lab") -> str:
+def get_full(pkg: str = DEFAULT_PACKAGE) -> str:
     v = read_pyproject_version(pkg)
     c = parse_version(v)
     if c["prerelease"]:
@@ -160,7 +185,7 @@ def get_full(pkg: str = "mas-lab") -> str:
     return v
 
 
-def get_rolling(pkg: str = "mas-lab") -> str:
+def get_rolling(pkg: str = DEFAULT_PACKAGE) -> str:
     """Return rolling version for main snapshots: X.Y.Z+g<sha>."""
     v = read_pyproject_version(pkg)
     sha = get_git_sha()
@@ -188,7 +213,7 @@ def main() -> None:
         print(__doc__)
         sys.exit(1)
 
-    cmd, pkg = args[0], args[1] if len(args) > 1 else "mas-lab"
+    cmd, pkg = args[0], args[1] if len(args) > 1 else DEFAULT_PACKAGE
 
     try:
         if cmd == "get":
@@ -220,7 +245,7 @@ def main() -> None:
         else:
             print(f"Error: Unknown command {cmd!r}", file=sys.stderr)
             sys.exit(1)
-    except (ValueError, FileNotFoundError) as e:
+    except (ValueError, FileNotFoundError, KeyError) as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
