@@ -1,6 +1,6 @@
 #  Copyright (c) 2026 Cisco Systems, Inc. and its affiliates
 #  SPDX-License-Identifier: Apache-2.0
-"""``scripts/version_manager.py``: every package name the workflows pass must be one it knows."""
+"""``scripts/version_manager.py``: every package name the workflows and Taskfile pass must be one it knows."""
 
 from __future__ import annotations
 
@@ -70,5 +70,13 @@ def test_get_without_package_reads_the_lab_version() -> None:
 
 
 def test_every_alias_points_at_a_real_package() -> None:
-    for short, wheel in manager.ALIASES.items():
+    for _, wheel in manager.ALIASES.items():
         assert wheel in manager.PACKAGES
+
+
+def test_taskfile_asks_for_known_packages() -> None:
+    text = (REPO_ROOT / "Taskfile.yml").read_text(encoding="utf-8")
+    asked = re.findall(r"version_manager\.py get ([^\s)]+)", text)
+    assert asked
+    allowed = set(manager.PACKAGES) | {"all"}
+    assert set(asked) <= allowed
